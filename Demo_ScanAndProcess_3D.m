@@ -26,11 +26,11 @@ zToScan_mm = ([-100 (-30:scanZJump_um:400)])*1e-3; %[mm]
 focusSigma = 20; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 20 or 1
 
 % Other scanning parameters
-tissueRefractiveIndex = 1.4; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
+tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 % dispersionQuadraticTerm is OBJECTIVE_DEPENDENT
 %dispersionQuadraticTerm=6.539e07; % 10x
 %dispersionQuadraticTerm=9.56e7;   % 40x
-dispersionQuadraticTerm=-2.059e8;  % 10x, OCTP900
+dispersionQuadraticTerm=-1.454e+08;  % 10x, OCTP900
 
 % Where to save scan files
 output_folder = '\';
@@ -39,7 +39,7 @@ output_folder = '\';
 skipScanning = false;
 
 % If depth of focus position is known, write it here. If you would like the script to help you keep empty
-focusPositionInImageZpix = [];
+focusPositionInImageZpix = [491];
 
 %% Compute scanning parameters
 
@@ -48,10 +48,20 @@ if (min(zToScan_mm)) > -100e-3
     warning('Because we use gel above tissue to find focus position. It is important to have at least one of the z-stacks in the gel. Consider having the minimum zToScan_mm to be -100e-3[mm]')
 end
 
+% Quick pre-scan to identify tissue surface and verify it is at OCT focus
+if ~skipScanning
+    [surfacePosition_mm, x_mm, y_mm, isSurfaceFocused] = yOCTScanAndFindTissueSurface(... 
+            'xRange_mm', xOverall_mm,...
+            'yRange_mm', yOverall_mm,...
+            'pixel_size_um', 10,...
+            'focusPositionInImageZpix', focusPositionInImageZpix,...
+            'dispersionQuadraticTerm', dispersionQuadraticTerm);
+    assert(isSurfaceFocused, 'Adjust the stage as needed and rerun the script.');
+    disp('Continuing...');
+end
+
 %% Perform the scan
 volumeOutputFolder = [output_folder '/OCTVolume/'];
-disp('Please adjust sample such that the sample-gel interface is at OCT focus')
-
 fprintf('%s Scanning Volume\n',datestr(datetime));
 scanParameters = yOCTScanTile (...
     volumeOutputFolder, ...

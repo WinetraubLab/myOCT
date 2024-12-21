@@ -29,7 +29,6 @@ logMeanAbs = in.logMeanAbs;
 dim = in.dimensions;
 isVisualize = in.isVisualize;
 
-
 %% Identify tissue surface
 % Retrieve the Dimensions
 [z_size, x_size, y_size] = size(logMeanAbs);
@@ -102,7 +101,13 @@ z = dim.z.values(:); x = dim.x.values(:); y = dim.y.values(:);
 
 % Convert Depth found from Pixels to Units in dim.z.units like microns or mm
 surface_depth_pixels = smoothed_surface_depth.'; % Transpose for consistent global orientation system
-surfacePosition = z(surface_depth_pixels); % Get Surface Depth in Units
+surfacePosition = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
+for i = 1:numel(surfacePosition) % Populate surfacePosition using valid indices
+    index = surface_depth_pixels(i);
+    if ~isnan(index) && index >= 1 && index <= length(z) % Check for valid index
+        surfacePosition(i) = z(index); % Assign corresponding value from z
+    end
+end
 
 %% Generate Heatmap of Surface Height for user visualization
 if isVisualize
