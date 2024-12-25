@@ -233,8 +233,8 @@ parfor yI=1:length(dimOutput.y.values)
                 % Filter around the focus
                 zI = 1:length(dimFrame.z.values); zI = zI(:);
                 if ~isnan(focusPositionInImageZpix(zzI))
-                    factorZ = exp(-(zI-focusPositionInImageZpix(zzI)).^2/(2*focusSigma)^2) + ...
-                        (zI>focusPositionInImageZpix(zzI))*exp(-3^2/2);%Under the focus, its possible to not reduce factor as much 
+                    factorZ = yOCTProcessTiledScan_factorZ( ...
+                        zI, focusPositionInImageZpix(zzI), focusSigma);
                     factor = repmat(factorZ, [1 size(scan1,2)]);
                 else
                     factor = ones(length(dimFrame.z.values),length(dimFrame.x.values)); %No focus gating
