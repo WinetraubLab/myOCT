@@ -61,7 +61,7 @@ volumePath_Step1 = [yOCTScanTileOutputFolderPath '/' scanInfo.octFolders{volumeI
 % Find volume in the gel
 % If we have multiple volumes in the gel, don't pick the top most, pick one
 % below
-volumeIndex_Step2 = max(2,volumeIndex_Step1-1); 
+volumeIndex_Step2 = max(1, min(volumeIndex_Step1 - 1, length(scanInfo.octFolders)));
 volumePath_Step2 = [yOCTScanTileOutputFolderPath '/' scanInfo.octFolders{volumeIndex_Step2}];
 
 %% Step #1, find the position with maximum intensity

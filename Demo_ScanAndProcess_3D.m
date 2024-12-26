@@ -26,11 +26,11 @@ zToScan_mm = ([-100 (-30:scanZJump_um:400)])*1e-3; %[mm]
 focusSigma = 20; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 20 or 1
 
 % Other scanning parameters
-tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
+tissueRefractiveIndex = 1.4; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 % dispersionQuadraticTerm is OBJECTIVE_DEPENDENT
 %dispersionQuadraticTerm=6.539e07; % 10x
 %dispersionQuadraticTerm=9.56e7;   % 40x
-dispersionQuadraticTerm=-1.454e+08;  % 10x, OCTP900
+dispersionQuadraticTerm=-2.059e8;  % 10x, OCTP900
 
 % Where to save scan files
 output_folder = '\';
@@ -39,7 +39,7 @@ output_folder = '\';
 skipScanning = false;
 
 % If depth of focus position is known, write it here. If you would like the script to help you keep empty
-focusPositionInImageZpix = [491];
+focusPositionInImageZpix = [];
 
 %% Compute scanning parameters
 
@@ -50,14 +50,14 @@ end
 
 % Quick pre-scan to identify tissue surface and verify it is at OCT focus
 if ~skipScanning
-    [surfacePosition_mm, x_mm, y_mm, isSurfaceFocused] = yOCTScanAndFindTissueSurface(... 
+    [surfacePosition_mm, x_mm, y_mm, isSurfaceInFocus] = yOCTScanAndFindTissueSurface(... 
             'xRange_mm', xOverall_mm,...
             'yRange_mm', yOverall_mm,...
+            'octProbePath', octProbePath, ...
             'pixel_size_um', 10,...
             'focusPositionInImageZpix', focusPositionInImageZpix,...
             'dispersionQuadraticTerm', dispersionQuadraticTerm);
-    assert(isSurfaceFocused, 'Adjust the stage as needed and rerun the script.');
-    disp('Continuing...');
+    assert(isSurfaceInFocus, 'Adjust the stage as needed and rerun the script.');
 end
 
 %% Perform the scan
