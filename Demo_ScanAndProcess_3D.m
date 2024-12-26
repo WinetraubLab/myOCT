@@ -51,7 +51,7 @@ end
 
 %% Perform the scan
 volumeOutputFolder = [output_folder '/OCTVolume/'];
-disp('Please adjust sample such that the sample-gel interface is at OCT focus')
+fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
 
 fprintf('%s Scanning Volume\n',datestr(datetime));
 scanParameters = yOCTScanTile (...
