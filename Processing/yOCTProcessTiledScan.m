@@ -20,7 +20,8 @@ function yOCTProcessTiledScan(varargin)
 %   Parameter           Default Value   Notes
 %Z position stitching:
 %   focusSigma                  20      If stitching along Z axis (multiple focus points), what is the size of each focus in z [pixel]
-%   focusPositionInImageZpix    NaN     Z position [pix] of focus in each scan (one number)
+%   focusPositionInImageZpix    NaN     For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at. 
+%                                       See yOCTFindFocusTilledScan for more details.
 %   cropZAroundFocusArea        true    When set to true, will crop output processed scan around the area of z focus. 
 %Save some Y planes in a debug folder:
 %   yPlanesOutputFolder         ''      If set will save some y planes for debug purpose in that folder
