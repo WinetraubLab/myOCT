@@ -59,9 +59,15 @@ scanInfo = awsReadJSON([yOCTScanTileOutputFolderPath '/ScanInfo.json']);
 volumePath_Step1 = [yOCTScanTileOutputFolderPath '/' scanInfo.octFolders{volumeIndex_Step1}];
 
 % Find volume in the gel
-% If we have multiple volumes in the gel, don't pick the top most, pick one
-% below
-volumeIndex_Step2 = max(2,volumeIndex_Step1-1); 
+% Strategy to find the volume in the gel is
+% 1. Go to the volume before z interface (volumeIndex_Step1), which is one above
+% 2. Alternatively just take the second volume (2nd from the top)
+% 3. If that fails, take the last volume scanned.
+volumeIndex_Step2 = min( ...
+    max(2, ... % Not the first (top most) scan, but one below it
+        volumeIndex_Step1-1) ... % One volume above the z interface (volumeIndex_Step1)
+        , ... 
+    length(scanInfo.zDepths)); % In the edge case that only one z-depth was scanned, use it
 volumePath_Step2 = [yOCTScanTileOutputFolderPath '/' scanInfo.octFolders{volumeIndex_Step2}];
 
 %% Step #1, find the position with maximum intensity
