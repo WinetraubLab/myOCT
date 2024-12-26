@@ -6,15 +6,14 @@ function [surfacePosition_mm, x_mm, y_mm, isSurfaceInFocus] = yOCTScanAndFindTis
 %   pixel_size_um - Pixel resolution for this analysis, default: 15 um.
 %   isVisualize - set to true to generate image heatmap visualization
 %       figure. Default is false
-%   octProbePath - OCT probe path, defaults to OCTP900 40x path. Adjust
-%       as necessary for OBJECTIVE_DEPENDENT sizes ('10x', '40x') and 
-%       scanning system dependent ('OCTP900' or '').
+%   octProbePath - Where is the probe.ini is saved to be used. Default 'probe.ini'.
 %   output_folder - Directory for temporary files, default './Surface_Analysis_Temp'. 
 %       These files will be deleted after analysis is completed.
 %   dispersionQuadraticTerm - Dispersion compensation parameter.
-%   focusPositionInImageZpix - Z position pixel distance from the top where 
-%       the OCT focus is located. If not provided, the yOCTFindFocusTilledScan 
-%       function is used to determine the focus position.
+%   focusPositionInImageZpix - For all B-Scans, this parameter defines the 
+%       depth (Z, pixels) that the focus is located at. 
+%       If set to NaN (default), yOCTFindFocusTilledScan will be executed 
+%       to request user to select focus position.
 %   acceptableRange_mm - Defines the range (in millimeters) within which the 
 %       average detected tissue surface position is considered to be in focus.
 %       Used to determine the output isSurfaceInFocus. Default is 25 microns.
@@ -34,7 +33,7 @@ p = inputParser;
 addParameter(p,'isVisualize',false);
 addParameter(p,'xRange_mm',[-1 1]);
 addParameter(p,'yRange_mm',[-1 1]);
-addParameter(p,'pixel_size_um',10);
+addParameter(p,'pixel_size_um',15);
 addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'output_folder','./Surface_Analysis_Temp');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
@@ -57,8 +56,10 @@ v = in.v;
 %% Scan
 totalStartTime = datetime;  % Capture the starting time
 volumeOutputFolder = [output_folder '/OCTVolume/'];
-disp('Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.')
-fprintf('%s Scanning Volume...\n', datestr(datetime));
+if (v)
+    fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
+    fprintf('%s Scanning Volume...\n', datestr(datetime));
+end
 scanParameters = yOCTScanTile (...
     volumeOutputFolder, ...
     xRange_mm, ...
@@ -69,16 +70,20 @@ scanParameters = yOCTScanTile (...
     );
 
 %% Check if focusPositionInImageZpix is provided, if not use yOCTFindFocusTilledScan
-if isempty(in.focusPositionInImageZpix) || isnan(in.focusPositionInImageZpix)
-    fprintf('%s Find focus position volume\n', datestr(datetime));
+if isempty(in.focusPositionInImageZpix)
+    if (v)
+        fprintf('%s Find focus position volume\n', datestr(datetime));
+    end
     focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
-        'reconstructConfig', {'dispersionQuadraticTerm', dispersionQuadraticTerm}, 'verbose', true);
+        'reconstructConfig', {'dispersionQuadraticTerm', dispersionQuadraticTerm}, 'verbose', v);
 else
     focusPositionInImageZpix = in.focusPositionInImageZpix;
 end
 
 %% Reconstruct OCT Image for Subsequent Surface Analysis
-fprintf('Generating image...\n');
+if (v)
+    fprintf('Generating image...\n');
+end
 outputTiffFile = [output_folder '\surface_analysis.tiff'];
 yOCTProcessTiledScan(...
     volumeOutputFolder, ... Input
@@ -89,7 +94,7 @@ yOCTProcessTiledScan(...
     'v',v);
 [logMeanAbs, dimensions, ~] = yOCTFromTif(outputTiffFile);
 if (v)
-    disp([newline, '-- Data loaded successfully.']);
+    fprintf('%s -- Data loaded successfully.\n', datestr(datetime));
 end
 
 %% Estimate tissue surface
@@ -101,9 +106,9 @@ dimensions = yOCTChangeDimensionsStructureUnits(dimensions,'millimeters'); % Mak
 surfacePosition_mm = yOCTFindTissueSurface(logMeanAbs, dimensions, 'isVisualize', isVisualize);
 x_mm=dimensions.x.values;
 y_mm=dimensions.y.values;
-elapsedTimeSurfaceDetection = toc;
+elapsedTimeSurfaceDetection_sec = toc;
 if (v)
-    fprintf('%s Surface identification completed in %.2f seconds.\n', datestr(datetime), elapsedTimeSurfaceDetection);
+    fprintf('%s Surface identification completed in %.2f seconds.\n', datestr(datetime), elapsedTimeSurfaceDetection_sec);
 end
 
 %% Clean up
@@ -113,31 +118,32 @@ end
 totalEndTime = datetime;  % Capture the ending time
 totalDuration = totalEndTime - totalStartTime;
 if (v)
-    fprintf('Total surface analysis process completed in %s.\n', datestr(totalDuration, 'HH:MM:SS'));
+    fprintf('%s yOCTScanAndFindTissueSurface function evaluation completed in %s.\n', ...
+        datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
 end
 
 %% Check if the average surface distance is within the acceptable range
-average_surface_distance = nanmean(surfacePosition_mm(:)); % Calculate the average surface distance
-if isnan(average_surface_distance)
+average_surface_distance_mm = nanmean(surfacePosition_mm(:)); % Calculate the average surface distance
+if isnan(average_surface_distance_mm)
     warning(['No tissue identification possible. Likely the tissue is out of focus below the detection range. ' ...
         'Please manually increase the stage Z position to bring the tissue into focus.']);
     isSurfaceInFocus = false; % Unable to verify if tissue surface is at focus
-elseif abs(average_surface_distance) > acceptableRange_mm
-    if average_surface_distance > 0 % Determine direction of adjustment
+elseif abs(average_surface_distance_mm) > acceptableRange_mm
+    if average_surface_distance_mm > 0 % Determine direction of adjustment
         direction = 'increase';
     else
         direction = 'decrease';
     end
     warning('off', 'backtrace'); % Temporarily turn off backtrace for clear message formatting
-    warning(sprintf(['The average distance of the surface (%.4f mm) is out of range.\n\n', ...
-    'Please %s the stage Z position by %.2f mm to bring the tissue surface into focus. \n'], ...
-    average_surface_distance, direction, abs(round(average_surface_distance, 2))));
+    warning(sprintf(['The average distance of the surface (%.3fmm) is out of range.\n\n', ...
+    'Please %s the stage Z position by %.3fmm to bring the tissue surface into focus. \n'], ...
+    average_surface_distance_mm, direction, abs(round(average_surface_distance_mm, 3))));
     warning('on', 'backtrace'); % Turn backtrace back on
     isSurfaceInFocus = false; % Tissue surface is not at focus
 else
     if (v)
-        disp(['The average distance of the surface (', num2str(average_surface_distance, '%.4f'), ' mm) is within the acceptable range.']);
-        disp('Tissue surface is precisely positioned at the OCT focus.');
+        fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', datestr(datetime), average_surface_distance_mm);
+        fprintf('%s Tissue surface is precisely positioned at the OCT focus.\n', datestr(datetime));
     end
     isSurfaceInFocus = true; % Tissue surface is at focus
 end
