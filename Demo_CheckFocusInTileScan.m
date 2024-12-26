@@ -10,8 +10,11 @@ tiledScanInputFolder = './';
 % Processing parameters
 dispersionQuadraticTerm=-2.059e8;
 focusSigma = 20; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 20 or 1
-focusPositionInImageZpix = 380;
 applyPathLengthCorrection = true;
+
+% For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
+% If set to NaN, yOCTFindFocusTilledScan will be executed to request user to select focus position.
+focusPositionInImageZpix = NaN;
 
 % Output
 numberOfZScansToOutput = 20; % Set to 1e5 to output all scans
@@ -21,6 +24,13 @@ output_figure = 'out.tif';
 %% Preprocess
 if exist(output_figure,'file')
     delete(output_figure);
+end
+
+% Find focus in the scan
+if isnan(focusPositionInImageZpix)
+    fprintf('%s Find focus position volume\n',datestr(datetime));
+    focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
+        'reconstructConfig',{'dispersionQuadraticTerm',dispersionQuadraticTerm},'verbose',true);
 end
 
 % Get a gird of depths
