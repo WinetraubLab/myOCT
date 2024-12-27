@@ -1,7 +1,6 @@
 function [surfacePosition_mm, x_mm, y_mm, isSurfaceInFocus] = yOCTScanAndFindTissueSurface(varargin)
 % This function uses the OCT to scan and then identify tissue surface from 
 % the OCT image.
-% INPUTS (all inputs are parameters):
 %   xRange_mm, yRange_mm - what range to scan, default [-1 1] mm.
 %   pixel_size_um - Pixel resolution for this analysis, default: 15 um.
 %   isVisualize - set to true to generate image heatmap visualization
@@ -82,7 +81,7 @@ end
 
 %% Reconstruct OCT Image for Subsequent Surface Analysis
 if (v)
-    fprintf('Generating image...\n');
+    fprintf('%s Loading and processing the OCT scan...\n', datestr(datetime));
 end
 outputTiffFile = [output_folder '\surface_analysis.tiff'];
 yOCTProcessTiledScan(...
@@ -94,7 +93,7 @@ yOCTProcessTiledScan(...
     'v',v);
 [logMeanAbs, dimensions, ~] = yOCTFromTif(outputTiffFile);
 if (v)
-    fprintf('%s -- Data loaded successfully.\n', datestr(datetime));
+    fprintf('%s -- Data loaded and processed successfully.\n', datestr(datetime));
 end
 
 %% Estimate tissue surface
