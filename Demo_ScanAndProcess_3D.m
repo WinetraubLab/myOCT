@@ -38,8 +38,9 @@ output_folder = '\';
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
 
-% If depth of focus position is known, write it here. If you would like the script to help you keep empty
-focusPositionInImageZpix = [];
+% For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
+% If set to NaN, yOCTFindFocusTilledScan will be executed to request user to select focus position.
+focusPositionInImageZpix = NaN;
 
 %% Compute scanning parameters
 
@@ -63,6 +64,7 @@ end
 %% Perform the scan
 volumeOutputFolder = [output_folder '/OCTVolume/'];
 fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
+
 fprintf('%s Scanning Volume\n',datestr(datetime));
 scanParameters = yOCTScanTile (...
     volumeOutputFolder, ...
@@ -81,7 +83,7 @@ scanParameters = yOCTScanTile (...
     );
 
 %% Find focus in the scan
-if isempty(focusPositionInImageZpix)
+if isnan(focusPositionInImageZpix)
     fprintf('%s Find focus position volume\n',datestr(datetime));
     focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
         'reconstructConfig',{'dispersionQuadraticTerm',dispersionQuadraticTerm},'verbose',true);
