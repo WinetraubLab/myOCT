@@ -2,7 +2,7 @@ function [surfacePosition_mm, x_mm, y_mm, isSurfaceInFocus] = yOCTScanAndFindTis
 % This function uses the OCT to scan and then identify tissue surface from 
 % the OCT image.
 %   xRange_mm, yRange_mm - what range to scan, default [-1 1] mm.
-%   pixel_size_um - Pixel resolution for this analysis, default: 15 um.
+%   pixel_size_um - Pixel resolution for this analysis, default: 25 um.
 %   isVisualize - set to true to generate image heatmap visualization
 %       figure. Default is false
 %   octProbePath - Where is the probe.ini is saved to be used. Default 'probe.ini'.
@@ -32,7 +32,7 @@ p = inputParser;
 addParameter(p,'isVisualize',false);
 addParameter(p,'xRange_mm',[-1 1]);
 addParameter(p,'yRange_mm',[-1 1]);
-addParameter(p,'pixel_size_um',15);
+addParameter(p,'pixel_size_um',25);
 addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'output_folder','./Surface_Analysis_Temp');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
