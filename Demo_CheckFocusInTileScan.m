@@ -5,7 +5,7 @@
 %% Inputs
 
 % Input folder
-tiledScanInputFolder = './';
+tiledScanInputFolder = './'; % Make sure folder path ends with "/" to signal this is a folder
 
 % Processing parameters
 dispersionQuadraticTerm=-2.059e8;
