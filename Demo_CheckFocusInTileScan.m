@@ -102,6 +102,6 @@ for volumeIi = 1:length(volumeIs)
         % Capture frame and save it
         frame = getframe(gcf); % Capture the frame of the figure
         im = frame2im(frame); % Convert the frame to image data
-        imwrite(im, output_figure, 'WriteMode', 'append');
+        imwrite(im, output_figure, 'tiff', 'WriteMode', 'append');
     end
 end % End volumeI loop
