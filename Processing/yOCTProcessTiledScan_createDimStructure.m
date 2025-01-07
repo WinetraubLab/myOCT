@@ -1,14 +1,13 @@
 function [dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(tiledScanInputFolder, focusPositionInImageZpix)
 % This is an auxilary function of yOCTProcessTiledScan designed to retun a
-% dim structure for both a single tile and the entier tiledScan
+% dim structure for both a single tile and the entier tiledScan.
+% The z direction of both dimOneTile and dimOutput is offset such that z=0 around the focus. Meaning
+%     dimOutput.z == 0 when the focus is at the estimated tissue surface
+%     dimOneTile.z == 0 when at the focus position (approximatly)
+% If focusPositionInImageZpix is not provided, we won't make the correction
 
 %% Search and Load JSON file from  the tiledScanInputFolder
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
-
-%% Inform error if focusPositionInImageZpix is not provided
-if nargin < 2
-    error('focusPositionInImageZpix is required but was not passed to yOCTProcessTiledScan_createDimStructure.');
-end
 
 %% Pretend processing the first scan to get the dimension structure of one tile
 firstDataFolder = [tiledScanInputFolder json.octFolders{1}];
@@ -26,7 +25,6 @@ dimOneTile = yOCTChangeDimensionsStructureUnits(dimOneTile, 'mm');
 %% Update X&Y positions as they might not be reliable from scan
 
 % Dimensions of one tile
-dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(json.zDepths == 0));
 if ~isfield(json,'xRange_mm')
     % Backward compatibility
     warning('Note, that "%s" contains an old version scan, this will be depricated by Jan 1st, 2025',tiledScanInputFolder)
@@ -38,6 +36,17 @@ else
 end
 dimOneTile.x.values(end) = [];
 dimOneTile.y.values(end) = [];
+
+%% Correct dimOneTile.z to adjsut for focus position
+if ~exist('focusPositionInImageZpix','var') || isnan(focusPositionInImageZpix)
+    % No adjustment
+elseif length(focusPositionInImageZpix) == 1
+    % One value
+    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
+else
+    % One value for each depth
+    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(json.zDepths == 0));
+end
 
 %% Compute pixel size
 dx = diff(dimOneTile.x.values(1:2));
@@ -65,7 +74,11 @@ end
 xAll_mm = (min(xCenters_mm)+dimOneTile.x.values(1)):dx:(max(xCenters_mm)+dimOneTile.x.values(end)+dx/2);xAll_mm = xAll_mm(:);
 yAll_mm = (min(yCenters_mm)+dimOneTile.y.values(1)):dy:(max(yCenters_mm)+dimOneTile.y.values(end)+dy/2);yAll_mm = yAll_mm(:);
 zAll_mm = (min(zDepths_mm )+dimOneTile.z.values(1)):dz:(max(zDepths_mm) +dimOneTile.z.values(end)+dz/2);zAll_mm = zAll_mm(:);
-[~, zeroIndex] = min(abs(zAll_mm)); zAll_mm = dz * ((1:length(zAll_mm)) - zeroIndex); % Shift to set start origin exactly at 0
+
+% Correct zAll_mm by removing the position where the tissue is at focus
+[~, zeroIndex] = min(abs(zAll_mm)); 
+zAll_mm = dz * ((1:length(zAll_mm)) - zeroIndex); % Shift to set start origin exactly at 0
+zAll_mm = zAll_mm(:);
 
 % Correct for the case of only one scan
 if (length(xCenters_mm) == 1) %#ok<ISCL>
