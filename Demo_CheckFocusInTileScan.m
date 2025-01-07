@@ -52,11 +52,12 @@ else
 end
 
 %% Loop over all volumes
+dimensions = yOCTProcessTiledScan_createDimStructure(tiledScanInputFolder, focusPositionInImageZpix);
 for volumeIi = 1:length(volumeIs)
     volumeI = volumeIs(volumeIi);
     %% Load volume
     filePath = [tiledScanInputFolder json.octFolders{volumeI}];
-    [meanAbs,dimensions] = yOCTProcessScan(filePath, ...
+    [meanAbs] = yOCTProcessScan(filePath, ...
         {'meanAbs'}, ... Which functions would you like to process. Option exist for function hendel
         'dispersionQuadraticTerm', dispersionQuadraticTerm, ...
         'interpMethod', 'sinc5');
@@ -72,18 +73,19 @@ for volumeIi = 1:length(volumeIs)
     for zToPlot = focusPositionInImageZpix + ...
             unique(round(linspace(-focusSigma*2,focusSigma*2,15)))
         % OCT XY view 
+        planeToPlot = squeeze(logMeanAbs(zToPlot,:,:))';
         figure(1);
         subplot(1,5,1:4)
-        imagesc( ...
+        imagesc(...
             dimensions.x.values, ...
             dimensions.y.values, ...
-            squeeze(logMeanAbs(zToPlot,:,:))');
+            planeToPlot);
         clim([-5 +6]);
         colormap gray;
         xlabel(['X [' dimensions.x.units ']']);
         ylabel(['Y [' dimensions.y.units ']']);
-        title(sprintf('Scan Depth %.3f [mm]', ...
-            json.gridZcc(volumeI)));
+        title(sprintf('Scan Depth %.3f [mm], Log Intensity: %.2f', ...
+            json.gridZcc(volumeI), mean(planeToPlot(:))));
         axis equal;
         
         % Factor map
@@ -96,6 +98,7 @@ for volumeIi = 1:length(volumeIs)
         ylabel(sprintf('Within Scan Depth [pix] (%s)',...
             opticalPathCorrectionTxt))
         ylim(focusPositionInImageZpix+focusSigma*[-3 3]);
+        title(sprintf('%d pix',zToPlot));
         axis ij
         grid on;
         
