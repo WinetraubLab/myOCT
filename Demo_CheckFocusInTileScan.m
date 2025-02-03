@@ -17,7 +17,7 @@ applyPathLengthCorrection = true;
 focusPositionInImageZpix = NaN;
 
 % Output
-numberOfZScansToOutput = 20; % Set to 1e5 to output all scans
+numberOfZScansToOutput = 10; % Set to 1e5 to output all scans
 output_figure = 'out.tif';
 
 
@@ -29,14 +29,22 @@ end
 % Find focus in the scan
 if isnan(focusPositionInImageZpix)
     fprintf('%s Find focus position volume\n',datestr(datetime));
-    focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
+    focusPositionInImageZpix = yOCTFindFocusTilledScan(tiledScanInputFolder,...
         'reconstructConfig',{'dispersionQuadraticTerm',dispersionQuadraticTerm},'verbose',true);
 end
 
-% Get a gird of depths
+% Load meta data
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
-scanZs = unique(json.gridZcc);
-scanZs = scanZs(unique(round(linspace(1,length(scanZs),numberOfZScansToOutput))));
+
+% Get a gird of depths to plot
+numberOfZScansToOutput = round(numberOfZScansToOutput/2)*2;
+scanZs = unique(json.gridZcc); scanZs = scanZs(:);
+nearScanZs = scanZs(scanZs<0.1);
+farScanZs = scanZs(scanZs>=0.1);
+scanZs = [...
+    nearScanZs(unique(round(linspace(1,length(nearScanZs),numberOfZScansToOutput/2)))); ...
+    farScanZs(unique(round(linspace(1,length(farScanZs),numberOfZScansToOutput/2)))); ...
+    ];
 
 volumeIs = zeros(size(scanZs));
 for i=1:length(volumeIs)
