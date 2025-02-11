@@ -38,7 +38,7 @@ dimOneTile.x.values(end) = [];
 dimOneTile.y.values(end) = [];
 
 %% Correct dimOneTile.z to adjsut for focus position
-if ~exist('focusPositionInImageZpix','var') || isnan(focusPositionInImageZpix)
+if ~exist('focusPositionInImageZpix','var') || any(isnan(focusPositionInImageZpix))
     % No adjustment
 elseif length(focusPositionInImageZpix) == 1
     % One value
