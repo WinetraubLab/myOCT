@@ -1,8 +1,8 @@
 function [json] = yOCTScanTile(varargin)
-%This function preforms an OCT Scan of a volume, and them tile around to
-%stitch together multiple scans. Tiling will be done by 3D translation
-%stage.
-%INPUTS:
+% This function preforms an OCT Scan of a volume, and them tile around to
+% stitch together multiple scans. Tiling will be done by 3D translation
+% stage.
+% INPUTS:
 %   octFolder - folder to save all output information
 %   xRange_mm - Area to scan [start, finish]. If area is larger than
 %       lens's FOV, then tiling will automatically be used.
@@ -10,7 +10,7 @@ function [json] = yOCTScanTile(varargin)
 %       lens's FOV, then tiling will automatically be used. 
 %       Set to a single value to scan a B-scan instead of 3D
 %
-%NAME VALUE PARAMETERS:
+% NAME VALUE PARAMETERS:
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used.
 %   octProbeFOV_mm          []              Keep empty to use FOV frome probe, or set to override probe's value.
@@ -23,14 +23,14 @@ function [json] = yOCTScanTile(varargin)
 %   nBScanAvg               1               How many B Scan Averaging to scan
 %   zDepths                 0               Scan depths to scan. Positive value is deeper). Units: mm
 %	unzipOCTFile			true			Scan will scan .OCT file, if you would like to automatically unzip it set this to true.
-%Debug parameters:
+% Debug parameters:
 %   v                       true            verbose mode      
 %   skipHardware            false           Set to true to skip hardware operation.
-%OUTPUT:
+% OUTPUT:
 %   json - config file
 %
-%How Tiling works. The assumption is that the OCT is stationary, and the
-%sample is mounted on 3D translation stage that moves around to tile
+% How Tiling works. The assumption is that the OCT is stationary, and the
+% sample is mounted on 3D translation stage that moves around to tile
 
 %% Input Parameters
 p = inputParser;
@@ -57,7 +57,7 @@ addParameter(p,'tissueRefractiveIndex',1.4,@isnumeric);
 addParameter(p,'nBScanAvg',1,@isnumeric);
 addParameter(p,'unzipOCTFile',true);
 
-%Debugging
+% Debugging
 addParameter(p,'v',true,@islogical);
 addParameter(p,'skipHardware',false,@islogical);
 
@@ -68,8 +68,8 @@ octFolder = in.octFolder;
 v = in.v;
 in = rmfield(in,'octFolder');
 in = rmfield(in,'v');
-in.units = 'mm'; %All units are mm
-in.version = 1.1; %Version of this file
+in.units = 'mm'; % All units are mm
+in.version = 1.1; % Version of this file
 
 if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
@@ -119,8 +119,8 @@ if ( ...
     error('Tring to scan outside lens range');
 end
 
-%Create scan center list
-%Scan order, z changes fastest, x after, y latest
+% Create scan center list
+% Scan order, z changes fastest, x after, y latest
 [in.gridXcc, in.gridZcc,in.gridYcc] = meshgrid(in.xCenters_mm,in.zDepths,in.yCenters_mm); 
 in.gridXcc = in.gridXcc(:);
 in.gridYcc = in.gridYcc(:);
@@ -144,8 +144,8 @@ if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
  
-ThorlabsImagerNETLoadLib(); %Init library
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); %Init OCT
+ThorlabsImagerNETLoadLib(); % Init library
+ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); % Init OCT
 
 if (v)
     fprintf('%s Initialzing Hardware Completed\n',datestr(datetime));
@@ -153,7 +153,7 @@ end
 
 % Make sure depths are ok for working distance's sake 
 if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
-        - 0.5) %Buffer
+        - 0.5) % Buffer
     error('zDepths requested are from %.1mm to %.1mm, which is too close to lens working distance of %.1fmm. Aborting', ...
         min(in.zDepths), max(in.zDepths), objectiveWorkingDistance);
 end
@@ -184,26 +184,17 @@ for scanI=1:length(in.scanOrder)
         fprintf('%s Scanning Volume %02d of %d\n',datestr(datetime),scanI,length(in.scanOrder));
     end
         
-    %Move to position
+    % Move to position
     yOCTStageMoveTo(x0+in.gridXcc(scanI),y0+in.gridYcc(scanI),z0+in.gridZcc(scanI));
-    
-    %Make a folder
+
+    % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
-    
-    ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
-        in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-        in.yOffset, ... centerY [mm]
-        in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-        in.tileRangeY_mm,  ... rangeY [mm]
-        0,       ... rotationAngle [deg]
-        in.nXPixels,in.nYPixels, ... SizeX,sizeY [# of pixels]
-        in.nBScanAvg,       ... B Scan Average
-        s ... Output directory, make sure this folder doesn't exist when starting the scan
-        );
+
+    octScan(in,s);
     
 	if in.unzipOCTFile
-		yOCTUnzipOCTFolder(strcat(s, 'VolumeGanymedeOCTFile.oct'),s,true);
+		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
     
     if(scanI==1)
@@ -216,19 +207,65 @@ end
 %% Finalize
 
 if (v)
-    fprintf('%s Homing...\n',datestr(datetime));
+    fprintf('%s Homing...\n', datestr(datetime));
 end
 
-%Home 
+% Home 
 pause(0.5);
 yOCTStageMoveTo(x0,y0,z0);
 pause(0.5);
 
 if (v)
-    fprintf('%s Finalizing\n',datestr(datetime));
+    fprintf('%s Finalizing\n', datestr(datetime));
 end
 ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
 
-%Save scan configuration parameters
+% Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
 json = in;
+
+end
+
+%% Scan Using Thorlabs
+function octScan(in,s)
+
+% Define the number of retries
+numRetries = 3;
+pauseDuration = 1; % Duration to pause (in seconds) between retries
+
+for attempt = 1:numRetries
+    try
+        % Rmove folder if it exists
+        if exist(s,'dir')
+            rmdir(s, 's');
+        end
+
+        % Scan
+        ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
+            in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
+            in.yOffset, ... centerY [mm]
+            in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
+            in.tileRangeY_mm,  ... rangeY [mm]
+            0,       ... rotationAngle [deg]
+            in.nXPixels,in.nYPixels, ... SizeX,sizeY [# of pixels]
+            in.nBScanAvg,       ... B Scan Average
+            s ... Output directory, make sure this folder doesn't exist when starting the scan
+            );
+        
+        % If the function call is successful, break out of the loop
+        break;
+    catch ME
+        % Notify the user that an exception has occurred
+        fprintf('Attempt %d failed: %s\n Try ThorlabsImagerNET again', attempt, ME.message);
+
+        % If this is the last attempt, rethrow the error
+        if attempt == numRetries
+            rethrow(ME);
+        else
+            % Pause before the next retry attempt
+            pause(pauseDuration);
+        end
+    end
+end
+
+end
