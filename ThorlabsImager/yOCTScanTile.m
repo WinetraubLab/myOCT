@@ -256,7 +256,7 @@ for attempt = 1:numRetries
         break;
     catch ME
         % Notify the user that an exception has occurred
-        fprintf('Attempt %d failed: %s\n Try ThorlabsImagerNET again', attempt, ME.message);
+        fprintf('Attempt %d failed: %s\n', attempt, ME.message);
 
         % If this is the last attempt, rethrow the error
         if attempt == numRetries
