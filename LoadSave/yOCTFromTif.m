@@ -100,10 +100,12 @@ if (isInputFile)
     info = imfinfo(filepath);
 
     % Get meta data
-    if isfield(info(1),'ImageDescription')
-        description = info(1).ImageDescription;
-    else
-        description = '';
+    if isfield(info(1), 'Software') && strncmp(info(1).Software, '{', 1)
+        description = info(1).Software; % Use TIFF Tag "Software" so ImageJ/Fiji can read ImageDescription properly
+    elseif isfield(info(1), 'ImageDescription') && strncmp(info(1).ImageDescription, '{', 1)
+        description = info(1).ImageDescription;  % If 'Software' is not useful, check 'ImageDescription'
+    else    
+        description = '';  % No MetaData available
     end
     [c, metadata, maxbit] = intrpertDescription(description,filepath);
     
