@@ -178,20 +178,44 @@ if mode == 0
     % encode meta data
     metaJson = GenerateMetaData(metadata,c);
     
+    if isOutputFile
+        t = Tiff(outputFilePaths{1}, 'w');  % Open Tiff file
+    end
+
     for yI=1:size(data,3)
         bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
         
         % Save file
         if isOutputFile
-            if (yI==1)
-                imwrite(bits,outputFilePaths{1},...
-                    'Description',jsonencode(metaJson) ... Description contains min & max values
-                    );
-            else
-                imwrite(bits,outputFilePaths{1},...
-                    'writeMode','append');     
+            if yI > 1
+                t.writeDirectory();
             end
+
+            % Set resolution pixel sizes (in microns)
+            meta_um = yOCTChangeDimensionsStructureUnits(metadata,'microns');
+            pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
+            pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
+            
+            % Build and set the tag struct
+            tagstruct.ImageLength         = size(bits, 1);
+            tagstruct.ImageWidth          = size(bits, 2);
+            tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
+            tagstruct.BitsPerSample       = 16;                            
+            tagstruct.ResolutionUnit      = Tiff.ResolutionUnit.Centimeter; % Inch also possible
+            tagstruct.XResolution         = 1/(pixelSizeX_um*1e-4); % Resolution in microns
+            tagstruct.YResolution         = 1/(pixelSizeZ_um*1e-4); % Z is Y in ImageJ/Fiji
+            tagstruct.Compression         = Tiff.Compression.PackBits;
+            tagstruct.SamplesPerPixel     = 1;
+            tagstruct.RowsPerStrip        = size(bits, 1);
+            tagstruct.Orientation         = Tiff.Orientation.TopLeft;
+            % Sets ImageDescription for ImageJ compatibility, specifying units in microns
+            tagstruct.ImageDescription    = sprintf('ImageJ=1.53\nunit=um\nspacing=1.00\nimages=%d\n', size(data,3));
+            tagstruct.Software            = jsonencode(metaJson);  % Saves our metadata in the TIFF 'Software' Tag
+
+            t.setTag(tagstruct);
+            t.write(bits);
         end
+
         if isOutputFolder
             if (yI==1)
                 awsWriteJSON(metaJson, ...
@@ -200,6 +224,10 @@ if mode == 0
             p = yScanPath(outputFilePaths{2},yI);
             imwrite(bits,p);
         end
+    end
+
+    if isOutputFile
+        t.close();  % Close Tiff file
     end
     
     % At the end of the loop, upload to AWS if needed
