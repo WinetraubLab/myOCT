@@ -37,14 +37,22 @@ isVisualize = in.isVisualize;
 surface_depth = zeros(x_size, y_size);
 
 % Define Detection Parameters
-z_size_threshold = 800;    % Threshold to determine the starting depth based on image height
-high_z_start = 350;        % Starting depth for images with a large Z dimension
-low_z_start = 1;           % Starting pixel for images with a small Z dimension
 base_confirmations_required = 12;  % Initial consecutive pixels required to confirm surface
-intensity_threshold = 2;   % Threshold for pixel intensity to consider as potential surface
+percentile_threshold = 92;  % Threshold for pixel intensity to consider as potential surface
+z_size_threshold = 800;    % Threshold to determine the starting depth based on image height
+low_z_start = 1;           % Starting pixel for images with a small Z dimension
 
-% Adjust the start depth based on z_size
-if z_size > z_size_threshold
+% Starting depth for images with a large Z dimension
+z_column = logMeanAbs(:, floor(x_size/2), floor(y_size/2)); % vertical cross-section at the image midpoints
+vi = find(~isnan(z_column)); % Indices of valid (non-NaN) entries
+[~, ix] = sort(z_column(vi), 'descend', 'MissingPlacement','last'); % Sort descending and take top 20 to get tI
+tI = vi(ix(1:round(0.02 * z_size)));
+lz = min(tI); % Lowest (likely upper coverslip) of those top indices
+hz = max(tI); % Highest (likely down coverslip) of those top indices
+md = round((lz+hz)/2); % Midpoint to use
+% If coverslip thickness (hz−lz) is over 110, use md; otherwise use md - 60
+high_z_start = ((hz - lz) > 100) .* md + ((hz - lz) <= 100) .* (md - 60); 
+if z_size > z_size_threshold % Adjust the start depth based on z_size_threshold
     start_depth = high_z_start;
 else
     start_depth = low_z_start;
@@ -52,13 +60,18 @@ end
 
 % Main Loop - For each Y slice, analyze the data to find the surface height
 for y = 1:y_size
-    current_slice = logMeanAbs(:, :, y);
+    % Dynamically calculate the intensity_threshold
+    roi_data = logMeanAbs(:, max(1, floor(x_size/2) - 5):min(x_size, floor(x_size/2) + 5), y);
+    roi_data = roi_data(~isnan(roi_data)); % Region of interest (10 centered columns)
+    intensity_threshold = prctile(roi_data, percentile_threshold); % Intensity for specified percentile
+    
     surface_column = NaN(x_size, 1); % Initialize column for storing surface data
+    current_slice = logMeanAbs(:, :, y); % Current Y slice to be used for surface detection
 
     for x = 1:x_size % Iterate over each X position within the slice
         found = false;  % Initialize flag to track if surface is found
-        % Option to decrease confirmations needed if surface is not found
         
+        % Option to decrease confirmations needed if surface is not found
         for confirmations_required = base_confirmations_required:-1:11 % Adjustable decrease
             if found
                 break;  % Exit early if surface is found
@@ -68,7 +81,7 @@ for y = 1:y_size
                 if current_slice(z, x) >= intensity_threshold % Check if pixel intensity is above threshold
 
                     % Confirm surface if a sufficient number of consecutive pixels meet the criteria
-                    if (z + confirmations_required <= z_size) && all(current_slice(z+1:z+confirmations_required, x) > 0)
+                    if (z + confirmations_required <= z_size) && all(current_slice(z+1:z+confirmations_required, x) > (intensity_threshold - 2))
                         surface_column(x) = z;  % Record the surface depth
                         found = true;  % Update flag
                         break; % Stop scanning as surface is confirmed
@@ -120,3 +133,4 @@ if isVisualize
     xlabel(['X-axis (', dim.x.units, ')']); 
     ylabel(['Y-axis (', dim.y.units, ')']); 
 end
+
