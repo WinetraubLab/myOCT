@@ -17,11 +17,11 @@ octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Select lens magnification
 % Pattern to photobleach. System will photobleach n lines from 
 % (x_start(i), y_start(i)) to (x_end(i), y_end(i))
 scale = 0.25; % Length of each side of the square in mm
-bias = 0.01; % Use small bias [mm] to make sure lines are not too close to the edge of FOV
-x_start_mm = [-1, +1, +1, -1, -1.2, -1.2]*scale/2+bias;
-y_start_mm = [-1, -1, +1, +1, +1.2, +1.2]*scale/2+bias;
-x_end_mm   = [+1, +1, -1, -1, -1.2, +0  ]*scale/2+bias;
-y_end_mm   = [-1, +1, +1, -1, -1.2, +1.2]*scale/2+bias;
+bias = 0.0; % Use small bias [mm] to make sure lines are not too close to the edge of FOV
+x_start_mm = [-1, +1, +1, -1]*scale/2+bias;
+y_start_mm = [-1, -1, +1, +1]*scale/2+bias;
+x_end_mm   = [+1, +1, -1, -1]*scale/2+bias;
+y_end_mm   = [-1, +1, +1, -1]*scale/2+bias;
 
 % Photobleach configurations
 exposure_mm_sec = 20; % mm/sec
