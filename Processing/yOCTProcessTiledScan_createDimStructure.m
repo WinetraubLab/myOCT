@@ -45,7 +45,11 @@ elseif length(focusPositionInImageZpix) == 1
     dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
 else
     % One value for each depth
-    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(json.zDepths == 0));
+    if isempty(json.zDepths) || ~isnumeric(json.zDepths)
+        error('No correct zDepths scans found. Check your OCTVolume folder.');
+    end
+    [~, idx] = min(abs(json.zDepths));
+    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(idx));
 end
 
 %% Compute pixel size
