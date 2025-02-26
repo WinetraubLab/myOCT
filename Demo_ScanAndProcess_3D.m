@@ -9,7 +9,7 @@
 %% Inputs
 
 % Define the 3D Volume
-pixel_size_um = 1; % x-y Pixel size in microns
+pixel_size_um = 20; % x-y Pixel size in microns
 xOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
 yOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
 % Uncomment below to scan one B-Scan.
