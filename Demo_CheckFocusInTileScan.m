@@ -5,20 +5,30 @@
 %% Inputs
 
 % Input folder
-tiledScanInputFolder = './'; % Make sure folder path ends with "/" to signal this is a folder
+sampleFolder = ''; % Input your main sample folder here. This folder should contain a folder called 'OCTVolume' with your OCT data. This is where your output file will be saved.
+tiledScanInputFolder = fullfile(sampleFolder, 'OCTVolume', filesep); % filesep should automatically set the appropriate file separator
 
 % Processing parameters
-dispersionQuadraticTerm=-2.059e8;
-focusSigma = 20; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 20 or 1
+dispersionQuadraticTerm=-1.482e8;
+focusSigma = 6; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 20 or 1
 applyPathLengthCorrection = true;
 
 % For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
 % If set to NaN, yOCTFindFocusTilledScan will be executed to request user to select focus position.
 focusPositionInImageZpix = NaN;
 
-% Output
-numberOfZScansToOutput = 10; % Set to 1e5 to output all scans
-output_figure = 'out.tif';
+%% Output
+numberOfZScansToOutput = 2; % Set to 1e5 to output all scans
+
+% Extract only the last folder name from the sampleFolder path
+sampleName = regexp(sampleFolder, '[^\\/]+$', 'match', 'once');
+
+% Format the output figure name using the required inputs
+output_figure = sprintf('CheckFocusInTileScan__%s__dQ%.3e_fS%d_f%d.tif', ...
+    sampleName, dispersionQuadraticTerm, focusSigma, focusPositionInImageZpix);
+
+% Set the output path inside sampleFolder
+output_figure = fullfile(sampleFolder, output_figure);
 
 
 %% Preprocess
