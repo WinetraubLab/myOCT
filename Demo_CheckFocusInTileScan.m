@@ -5,12 +5,11 @@
 %% Inputs
 
 % Input folder
-sampleFolder = ''; % Input your main sample folder here. This folder should contain a folder called 'OCTVolume' with your OCT data. This is where your output file will be saved.
-tiledScanInputFolder = fullfile(sampleFolder, 'OCTVolume', filesep); % filesep should automatically set the appropriate file separator
+tiledScanInputFolder = './OCTVolume/' % Replace the . with your sample folder. Keep the /OCTVolume/ extension to 1) point to the correct folder within your sample folder and 2) to signal this is a folder. 
 
 % Processing parameters
-dispersionQuadraticTerm=-1.482e8;
-focusSigma = 6; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 20 or 1
+dispersionQuadraticTerm=-1.482e8; % 40x, OCTP900 
+focusSigma = 6; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 6.
 applyPathLengthCorrection = true;
 
 % For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
@@ -18,8 +17,10 @@ applyPathLengthCorrection = true;
 focusPositionInImageZpix = NaN;
 
 %% Output
-numberOfZScansToOutput = 2; % Set to 1e5 to output all scans
+numberOfZScansToOutput = 10; % Set to 1e5 to output all scans
 
+
+%% Output Calculations
 % Extract only the last folder name from the sampleFolder path
 sampleName = regexp(sampleFolder, '[^\\/]+$', 'match', 'once');
 
