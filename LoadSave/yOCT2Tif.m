@@ -178,20 +178,66 @@ if mode == 0
     % encode meta data
     metaJson = GenerateMetaData(metadata,c);
     
+    if isOutputFile
+        t = Tiff(outputFilePaths{1}, 'w');  % Open Tiff file
+    end
+
     for yI=1:size(data,3)
         bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
         
         % Save file
         if isOutputFile
-            if (yI==1)
-                imwrite(bits,outputFilePaths{1},...
-                    'Description',jsonencode(metaJson) ... Description contains min & max values
-                    );
-            else
-                imwrite(bits,outputFilePaths{1},...
-                    'writeMode','append');     
+            if yI > 1
+                t.writeDirectory();
             end
+
+            % Build and set TIFF tags
+            tagstruct.ImageLength         = size(bits, 1);
+            tagstruct.ImageWidth          = size(bits, 2);
+            tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
+            tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
+            tagstruct.SampleFormat        = Tiff.SampleFormat.UInt;
+            tagstruct.BitsPerSample       = 16;                            
+            tagstruct.Compression         = Tiff.Compression.PackBits;
+            tagstruct.SamplesPerPixel     = 1;
+            tagstruct.RowsPerStrip        = size(bits, 1);
+            tagstruct.Orientation         = Tiff.Orientation.TopLeft;
+
+            % Store our yOCT metadata in the 'Software' tag as JSON. This field 
+            % is not parsed by ImageJ, and allows yOCTFromTif to safely retrieve 
+            % it later without interfering with standard image-reading Software
+            tagstruct.Software            = jsonencode(metaJson);  % Saves our metadata in the TIFF 'Software' Tag
+            
+            % Check for valid metadata to set resolution accordingly in ImageJ
+            if ~isempty(metadata) && ...
+                isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
+                isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
+                numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
+
+                % Convert dimension structure to microns for accurate pixel spacing in ImageJ
+                meta_um = yOCTChangeDimensionsStructureUnits(metadata,'microns');
+                pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
+                pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
+
+                % ImageJ uses 'XResolution', 'YResolution', 'ResolutionUnit', and reads 
+                % 'ImageDescription' (e.g., "unit=um") to handle units and scaling display
+                tagstruct.XResolution         = 1/(pixelSizeX_um*1e-4); % Resolution in microns
+                tagstruct.YResolution         = 1/(pixelSizeZ_um*1e-4); % Z is Y in ImageJ/Fiji
+                tagstruct.ResolutionUnit      = Tiff.ResolutionUnit.Centimeter; % Inch also possible
+                tagstruct.ImageDescription    = sprintf('ImageJ=1.53\nunit=um\nspacing=1.00\nimages=%d\n', size(data,3));
+            else
+                % Default to 1 px if metadata is invalid or absent
+                warning('No valid metadata provided. Using default resolution = 1 pixel (no real-world scaling).');
+                tagstruct.XResolution      = 1;   % 1 pixel
+                tagstruct.YResolution      = 1;   % 1 pixel
+                tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None; 
+                tagstruct.ImageDescription = sprintf('ImageJ=1.53\nimages=%d\n', size(data,3));
+            end
+
+            t.setTag(tagstruct);
+            t.write(bits);
         end
+
         if isOutputFolder
             if (yI==1)
                 awsWriteJSON(metaJson, ...
@@ -200,6 +246,10 @@ if mode == 0
             p = yScanPath(outputFilePaths{2},yI);
             imwrite(bits,p);
         end
+    end
+
+    if isOutputFile
+        t.close();  % Close Tiff file
     end
     
     % At the end of the loop, upload to AWS if needed
