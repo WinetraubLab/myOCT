@@ -29,8 +29,9 @@ focusSigma = 20; % When stitching along Z axis (multiple focus points), what is 
 tissueRefractiveIndex = 1.4; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 % dispersionQuadraticTerm is OBJECTIVE_DEPENDENT
 %dispersionQuadraticTerm=6.539e07; % 10x
-%dispersionQuadraticTerm=9.56e7;   % 40x
-dispersionQuadraticTerm=-2.059e8;  % 10x, OCTP900
+%dispersionQuadraticTerm=9.56e07;   % 40x
+%dispersionQuadraticTerm=-2.059e08;  % 10x, OCTP900
+dispersionQuadraticTerm=-1.549e08;  % 40x, OCTP900
 
 % Where to save scan files
 output_folder = '\';
