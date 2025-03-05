@@ -98,12 +98,20 @@ function [data, metadata, c] = yOCTFromTif_MainFunction(filepath,isInputFile,xI,
 if (isInputFile)
     % Read meta from file
     info = imfinfo(filepath);
-
-    % Get meta data
-    if isfield(info(1),'ImageDescription')
-        description = info(1).ImageDescription;
-    else
-        description = '';
+    
+    % Get metadata. For ImageJ compatibility, we store information in 'ImageDescription' TIFF tag
+    % (e.g., "ImageJ=..., unit=um, spacing=..., images=..."), which ImageJ parses.
+    % The bulk of the yOCT metadata (data, dimension structures, clim) is actually saved 
+    % in the 'Software' tag as a JSON string so that it doesn't interfere with ImageJ or other 
+    % standard TIFF readers. yOCTFromTif first checks whether 'Software' contains a JSON object 
+    % (if it starts with '{'). If not found, we fall back to 'ImageDescription' in case older 
+    % versions still stored JSON there. If neither is valid JSON, we assume there's no metadata
+    if isfield(info(1), 'Software') && strncmp(info(1).Software, '{', 1)
+        description = info(1).Software; % Use TIFF Tag "Software" so ImageJ/Fiji can read ImageDescription properly
+    elseif isfield(info(1), 'ImageDescription') && strncmp(info(1).ImageDescription, '{', 1)
+        description = info(1).ImageDescription;  % If 'Software' is not useful, check 'ImageDescription'
+    else    
+        description = '';  % No MetaData available
     end
     [c, metadata, maxbit] = intrpertDescription(description,filepath);
     
