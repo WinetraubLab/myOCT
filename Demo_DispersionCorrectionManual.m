@@ -5,7 +5,7 @@ close all;
 
 %% Inputs
 %Ganymede
-filePath = [''];
+filePath = ['.\'];
 
 %% Pre-Process
 %Load Intef From file

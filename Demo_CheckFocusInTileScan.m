@@ -16,11 +16,11 @@ applyPathLengthCorrection = true;
 % If set to NaN, yOCTFindFocusTilledScan will be executed to request user to select focus position.
 focusPositionInImageZpix = NaN;
 
-%% Output
+% Output
 numberOfZScansToOutput = 10; % Set to 1e5 to output all scans
 
-
-%% Output Calculations
+%% Preprocess
+% Output File Name
 % Extract only the last folder name from the sampleFolder path
 sampleName = regexp(sampleFolder, '[^\\/]+$', 'match', 'once');
 
@@ -31,11 +31,10 @@ output_figure = sprintf('CheckFocusInTileScan__%s__dQ%.3e_fS%d_f%d.tif', ...
 % Set the output path inside sampleFolder
 output_figure = fullfile(sampleFolder, output_figure);
 
-
-%% Preprocess
 if exist(output_figure,'file')
     delete(output_figure);
 end
+
 
 % Find focus in the scan
 if isnan(focusPositionInImageZpix)

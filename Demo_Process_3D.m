@@ -4,7 +4,7 @@
 
 %% Iputs
 %Wasatch
-filePath = [''];
+filePath = ['.\'];
 dispersionQuadraticTerm = -1.514e08; %Use Demo_DispersionCorrection to find the term
 
 yFramesPerBatch = 1; %How many Y frames to load in a single batch, optimzie this parameter to save computational time
