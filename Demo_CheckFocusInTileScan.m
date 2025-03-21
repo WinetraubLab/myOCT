@@ -9,7 +9,7 @@ tiledScanInputFolder = './'; % Make sure folder path ends with "/" to signal thi
 
 % Processing parameters
 dispersionQuadraticTerm=-2.059e8;
-focusSigma = 20; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 20 or 1
+focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 1
 applyPathLengthCorrection = true;
 
 % For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
@@ -17,9 +17,8 @@ applyPathLengthCorrection = true;
 focusPositionInImageZpix = NaN;
 
 % Output
-numberOfZScansToOutput = 10; % Set to 1e5 to output all scans
+numberOfZScansToOutput = 12; % Set to 1e5 to output all z stack planes
 output_figure = 'out.tif';
-
 
 %% Preprocess
 if exist(output_figure,'file')
@@ -37,13 +36,13 @@ end
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
 
 % Get a gird of depths to plot
-numberOfZScansToOutput = round(numberOfZScansToOutput/2)*2;
+numberOfZScansToOutput = round(numberOfZScansToOutput/4)*4;
 scanZs = unique(json.gridZcc); scanZs = scanZs(:);
 nearScanZs = scanZs(scanZs<0.1);
 farScanZs = scanZs(scanZs>=0.1);
 scanZs = [...
-    nearScanZs(unique(round(linspace(1,length(nearScanZs),numberOfZScansToOutput/2)))); ...
-    farScanZs(unique(round(linspace(1,length(farScanZs),numberOfZScansToOutput/2)))); ...
+    nearScanZs(unique(round(linspace(1,length(nearScanZs),3*numberOfZScansToOutput/4)))); ...
+    farScanZs(unique(round(linspace(1,length(farScanZs),1*numberOfZScansToOutput/4)))); ...
     ];
 
 volumeIs = zeros(size(scanZs));
@@ -79,7 +78,7 @@ for volumeIi = 1:length(volumeIs)
     factorZ = yOCTProcessTiledScan_factorZ(zI, focusPositionInImageZpix, focusSigma);
     
     for zToPlot = focusPositionInImageZpix + ...
-            unique(round(linspace(-focusSigma*2,focusSigma*2,15)))
+            unique(round(linspace(-focusSigma*2,focusSigma*2,25)))
         % OCT XY view 
         planeToPlot = squeeze(logMeanAbs(zToPlot,:,:))';
         figure(1);
