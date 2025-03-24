@@ -22,17 +22,17 @@ numberOfZScansToOutput = 10; % Set to 1e5 to output all scans
 %% Preprocess
 % Output File Name
 % Extract only the last folder name from the sampleFolder path
-sampleName = regexp(sampleFolder, '[^\\/]+$', 'match', 'once');
+outputFigureFileName = regexp(sampleFolder, '[^\\/]+$', 'match', 'once');
 
 % Format the output figure name using the required inputs
-output_figure = sprintf('CheckFocusInTileScan__%s__dQ%.3e_fS%d_f%d.tif', ...
-    sampleName, dispersionQuadraticTerm, focusSigma, focusPositionInImageZpix);
+outputFigurePath = sprintf('CheckFocusInTileScan__%s__dQ%.3e_fS%d_f%d.tif', ...
+    outputFigureFileName, dispersionQuadraticTerm, focusSigma, focusPositionInImageZpix);
 
 % Set the output path inside sampleFolder
-output_figure = fullfile(sampleFolder, output_figure);
+outputFigurePath = fullfile(sampleFolder, outputFigurePath);
 
-if exist(output_figure,'file')
-    delete(output_figure);
+if exist(outputFigurePath,'file')
+    delete(outputFigurePath);
 end
 
 
@@ -123,6 +123,6 @@ for volumeIi = 1:length(volumeIs)
         % Capture frame and save it
         frame = getframe(gcf); % Capture the frame of the figure
         im = frame2im(frame); % Convert the frame to image data
-        imwrite(im, output_figure, 'tiff', 'WriteMode', 'append');
+        imwrite(im, outputFigurePath, 'tiff', 'WriteMode', 'append');
     end
 end % End volumeI loop
