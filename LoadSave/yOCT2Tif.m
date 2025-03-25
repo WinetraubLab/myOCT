@@ -179,7 +179,7 @@ if mode == 0
     metaJson = GenerateMetaData(metadata,c);
     
     if isOutputFile
-        t = Tiff(outputFilePaths{1}, 'w');  % Open Tiff file
+        t = Tiff(outputFilePaths{1}, 'w8');  % Open Tiff file as BigTIFF
     end
 
     for yI=1:size(data,3)
