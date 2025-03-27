@@ -4,9 +4,8 @@
 
 %% Iputs
 %Wasatch
-filePath = ['\\171.65.17.174\MATLAB_Share\Jenkins\myOCT Build\TestVectors\' ...
-    'Wasatch_3D\'];
-dispersionQuadraticTerm = 100; %Use Demo_DispersionCorrection to find the term
+filePath = ['.\'];
+dispersionQuadraticTerm = -1.514e08; %Use Demo_DispersionCorrection to find the term
 
 yFramesPerBatch = 1; %How many Y frames to load in a single batch, optimzie this parameter to save computational time
 

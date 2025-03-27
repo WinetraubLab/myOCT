@@ -5,11 +5,11 @@
 %% Inputs
 
 % Input folder
-tiledScanInputFolder = './'; % Make sure folder path ends with "/" to signal this is a folder
+tiledScanInputFolder = './OCTVolume/' % Replace the . with your sample folder. Keep the /OCTVolume/ extension to 1) point to the correct folder within your sample folder and 2) to signal this is a folder. 
 
 % Processing parameters
-dispersionQuadraticTerm=-2.059e8;
-focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 1
+dispersionQuadraticTerm=-1.482e8; % 40x, OCTP900 
+focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 6.
 applyPathLengthCorrection = true;
 
 % For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
@@ -17,12 +17,22 @@ applyPathLengthCorrection = true;
 focusPositionInImageZpix = NaN;
 
 % Output
-numberOfZScansToOutput = 12; % Set to 1e5 to output all z stack planes
-output_figure = 'out.tif';
+numberOfZScansToOutput = 12; % Set to 1e5 to output all scans
 
 %% Preprocess
-if exist(output_figure,'file')
-    delete(output_figure);
+% Output File Name
+% Extract only the last folder name from the sampleFolder path
+outputFigureFileName = regexp(sampleFolder, '[^\\/]+$', 'match', 'once');
+
+% Format the output figure name using the required inputs
+outputFigurePath = sprintf('CheckFocusInTileScan__%s__dQ%.3e_fS%d_f%d.tif', ...
+    outputFigureFileName, dispersionQuadraticTerm, focusSigma, focusPositionInImageZpix);
+
+% Set the output path inside sampleFolder
+outputFigurePath = fullfile(sampleFolder, outputFigurePath);
+
+if exist(outputFigurePath,'file')
+    delete(outputFigurePath);
 end
 
 % Find focus in the scan
@@ -112,6 +122,6 @@ for volumeIi = 1:length(volumeIs)
         % Capture frame and save it
         frame = getframe(gcf); % Capture the frame of the figure
         im = frame2im(frame); % Convert the frame to image data
-        imwrite(im, output_figure, 'tiff', 'WriteMode', 'append');
+        imwrite(im, outputFigurePath, 'tiff', 'WriteMode', 'append');
     end
 end % End volumeI loop

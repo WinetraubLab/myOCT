@@ -5,8 +5,7 @@ close all;
 
 %% Inputs
 %Ganymede
-filePath = ['\\171.65.17.174\MATLAB_Share\Jenkins\myOCT Build\TestVectors\' ...
-    'Wasatch_3D'];
+filePath = ['.\'];
 
 %% Pre-Process
 %Load Intef From file
