@@ -9,7 +9,7 @@ tiledScanInputFolder = './OCTVolume/' % Replace the . with your sample folder. K
 
 % Processing parameters
 dispersionQuadraticTerm=-1.482e8; % 40x, OCTP900 
-focusSigma = 12; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 6.
+focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 6.
 applyPathLengthCorrection = true;
 
 % For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
@@ -17,7 +17,7 @@ applyPathLengthCorrection = true;
 focusPositionInImageZpix = NaN;
 
 % Output
-numberOfZScansToOutput = 10; % Set to 1e5 to output all scans
+numberOfZScansToOutput = 12; % Set to 1e5 to output all scans
 
 %% Preprocess
 % Output File Name
