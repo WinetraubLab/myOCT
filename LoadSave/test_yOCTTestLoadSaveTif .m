@@ -1,6 +1,6 @@
 classdef test_yOCTTestLoadSaveTif < matlab.unittest.TestCase
     %======================================================================%
-    %  test_yOCT2FromTif class tests yOCT2Tif / yOCTFromTif
+    %  test_yOCTTestLoadSaveTif class tests yOCT2Tif / yOCTFromTif
     %======================================================================%
     %
     %  This script tests loading and saving of TIF files. It does:
