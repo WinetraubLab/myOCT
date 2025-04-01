@@ -1,4 +1,4 @@
-classdef test_yOCT2FromTif < matlab.unittest.TestCase
+classdef test_yOCTTestLoadSaveTif < matlab.unittest.TestCase
     %======================================================================%
     %  test_yOCT2FromTif class tests yOCT2Tif / yOCTFromTif
     %======================================================================%
