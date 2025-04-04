@@ -37,15 +37,19 @@ end
 dimOneTile.x.values(end) = [];
 dimOneTile.y.values(end) = [];
 
-%% Correct dimOneTile.z to adjsut for focus position
+%% Correct dimOneTile.z to adjust for focus position
 if ~exist('focusPositionInImageZpix','var') || any(isnan(focusPositionInImageZpix))
-    % No adjustment
+    % No adjustment because no focus info is provided
 elseif length(focusPositionInImageZpix) == 1
-    % One value
+    % One single focus value; shift z-dimensions with this value
     dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
 else
     % One value for each depth
-    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(json.zDepths == 0));
+    if isempty(json.zDepths) || ~isnumeric(json.zDepths) % Validate presence of z-depths data
+        error('Missing or invalid zDepth scans found. Check JSON file or OCTVolume folder.');
+    end
+    [~, idx] = min(abs(json.zDepths)); % Adjust z-dimensions using the focus index at zDepth 0
+    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(idx));
 end
 
 %% Compute pixel size
