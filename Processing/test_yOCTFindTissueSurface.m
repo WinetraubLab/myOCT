@@ -11,12 +11,22 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
     methods(TestMethodSetup) % Setup for each test
 
         function createDummyDataset(testCase)
-            % Create a dummy dataset with a scattering interface
             testCase.simulatedSurfacePositionZ_pix = 500;
             speckleField = zeros(1024,100,200)+10; %z,x,y
             rng(1);
             speckleField(testCase.simulatedSurfacePositionZ_pix:end, :, :) = ...
                 10 + 990 * abs(randn(1024 - testCase.simulatedSurfacePositionZ_pix + 1, 100, 200));
+            
+            % Add upperside of coverslip
+            coverslipZ_start = testCase.simulatedSurfacePositionZ_pix - 105;   % top of coverslip
+            coverslipThickness = 7;   % coverslip is 7 pixels thick
+            coverslipZ_end = coverslipZ_start + coverslipThickness - 1;  % inclusive
+
+            coverslipX_start = 10;    % some central region in x
+            coverslipX_end   = 90;    % leaving 10 px on each side as "air"
+
+            speckleField(coverslipZ_start:coverslipZ_end, coverslipX_start:coverslipX_end, :) = ...
+            200 + 50 * abs(randn(coverslipThickness, coverslipX_end - coverslipX_start + 1, 200));
         
             [interf, dim] = yOCTSimulateInterferogram(speckleField);
             [cpx, dim] = yOCTInterfToScanCpx(interf, dim);
