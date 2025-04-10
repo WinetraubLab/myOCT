@@ -5,7 +5,7 @@
 %% Inputs
 
 % Input folder
-tiledScanInputFolder = './OCTVolume/' % Replace the . with your sample folder. Keep the /OCTVolume/ extension to 1) point to the correct folder within your sample folder and 2) to signal this is a folder. 
+tiledScanInputFolder = './OCTVolume/' % Replace the . with your input folder. Keep the /OCTVolume/ extension to 1) point to the correct folder within your input folder and 2) to signal this is a folder. 
 
 % Processing parameters
 dispersionQuadraticTerm=-1.482e8; % 40x, OCTP900 
@@ -21,15 +21,15 @@ numberOfZScansToOutput = 12; % Set to 1e5 to output all scans
 
 %% Preprocess
 % Output File Name
-% Extract only the last folder name from the sampleFolder path
-outputFigureFileName = regexp(sampleFolder, '[^\\/]+$', 'match', 'once');
+% Extract only the last folder name from the tiledScanInputFolder path
+outputFigureFileName = regexp(tiledScanInputFolder, '[^\\/]+$', 'match', 'once');
 
 % Format the output figure name using the required inputs
 outputFigurePath = sprintf('CheckFocusInTileScan__%s__dQ%.3e_fS%d_f%d.tif', ...
     outputFigureFileName, dispersionQuadraticTerm, focusSigma, focusPositionInImageZpix);
 
-% Set the output path inside sampleFolder
-outputFigurePath = fullfile(sampleFolder, outputFigurePath);
+% Set the output path inside tiledScanInputFolder
+outputFigurePath = fullfile(tiledScanInputFolder, outputFigurePath);
 
 if exist(outputFigurePath,'file')
     delete(outputFigurePath);
