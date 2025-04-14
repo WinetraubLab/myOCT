@@ -46,7 +46,7 @@ elseif length(focusPositionInImageZpix) == 1
 else
     % One value for each depth
     if isempty(json.zDepths) || ~isnumeric(json.zDepths) % Validate presence of z-depths data
-        error('Missing or invalid zDepth scans found. Check JSON file or OCTVolume folder.');
+        error('ScanInfo.json reports zero scans (empty zDepths). This volume appears to be empty or failed.');
     end
     [~, idx] = min(abs(json.zDepths)); % Adjust z-dimensions using the focus index at zDepth 0
     dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(idx));
