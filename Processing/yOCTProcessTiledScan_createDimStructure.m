@@ -49,17 +49,30 @@ dimOneTile.y.values(end) = [];
 %% Correct dimOneTile.z to adjust for focus position
 if ~exist('focusPositionInImageZpix','var') || any(isnan(focusPositionInImageZpix))
     % No adjustment because no focus info is provided
-elseif length(focusPositionInImageZpix) == 1
-    % One single focus value; shift z-dimensions with this value
-    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
 else
-    % One value for each depth
-    [~, idx] = min(abs(json.zDepths)); 
-    end
-    % Adjust z-dimensions using the focus index at zDepth 0
-    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(idx)); 
-end
+    % Use value focusPositionInImageZpix provided by user to pinpoint focus.
+    % Adust dimOneTile.z == 0 when at the focus position (approximatly)
 
+    if length(focusPositionInImageZpix) == 1 %#ok<ISCL>
+        % Focus position is the same for all scans
+        dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
+    else
+        % Each scan has a different focus position
+        if std(focusPositionInImageZpix) ~= 0
+            % The situation where each focusPositionInImageZpix has a
+            % differnt zDepth is not implemented yet. The problem is that
+            % for each dimOneTile, z.values are different as they have
+            % different focus correction. This is a problem. 
+            % To solve this, we could return an array of dimOneTile instead
+            % of one dimOneTile, where each dimOneTile corresponds to one
+            % zDepth. But this is a big refactor for yOCTProcessTiledScan.
+            % We are not ready to do that yet.
+            error('This is not implemented yet. See comment above');
+        end
+        
+        dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(1));
+    end
+end
 
 %% Compute pixel size
 dx = diff(dimOneTile.x.values(1:2));
