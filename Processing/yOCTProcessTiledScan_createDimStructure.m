@@ -5,6 +5,15 @@ function [dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(tiled
 %     dimOutput.z == 0 when the focus is at the estimated tissue surface
 %     dimOneTile.z == 0 when at the focus position (approximatly)
 % If focusPositionInImageZpix is not provided, we won't make the correction
+%
+% INPUTS:
+%   tiledScanInputFolder: data input folder
+%   focusPositionInImageZpix: focus position for each zDepths (or one
+%       number if focusPositionInImageZpix is the same for all depths).
+%
+% OUTPUTS:
+%   dimOneTile: dim structure for both a single tile.
+%   dimOutput: one overall dimensions structure for the entire stack.
 
 %% Search and Load JSON file from  the tiledScanInputFolder
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
