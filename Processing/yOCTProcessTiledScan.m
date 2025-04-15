@@ -135,7 +135,8 @@ OCTSystem = json.OCTSystem; %Provide OCT system to prevent unesscecary polling o
 % was called, zDepths list included "0". 
 % The meaning of this constraint is that exists a scan in the stack in
 % which the focus is at the tissue interface (according to the user's best
-% guess). This constraint helps us do something (not sure what, but it's good practice).
+% guess). This constraint helps us align coordinate such that z=0 is at the
+% surface of the tissue.
 %
 % In this section  we check that zDepths structure exists and that zdepth 0
 % is included in the stack.

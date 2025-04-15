@@ -72,6 +72,8 @@ else
         
         dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(1));
     end
+
+    dimOneTile.z.origin = 'z=0 is focus position';
 end
 
 %% Compute pixel size
@@ -118,7 +120,7 @@ end
 dimOutput.lambda = dimOneTile.lambda;
 dimOutput.z = dimOneTile.z; % Template, we will update it soon
 dimOutput.z.values = zAll_mm(:)';
-dimOutput.z.origin = 'z=0 is “user specified tissue interface”';
+dimOutput.z.origin = 'z=0 is tissue interface as specified by user';
 dimOutput.x = dimOneTile.x;
 dimOutput.x.origin = 'x=0 is OCT scanner origin when xCenters=0 scan was taken';
 dimOutput.x.values = xAll_mm(:)';
