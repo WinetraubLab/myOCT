@@ -21,7 +21,7 @@ function [json] = yOCTScanTile(varargin)
 %   xOffset,yOffset         0               (0,0) means that the center of the tile scaned is at the center of the galvo range aka lens optical axis. 
 %                                           By appling offset, the center of the tile will be positioned differently.Units: mm
 %   nBScanAvg               1               How many B Scan Averaging to scan
-%   zDepths                 0               Scan depths to scan. Positive value is deeper). Units: mm
+%   zDepths                 0               Scan depths to scan. Positive value is deeper. Units: mm
 %	unzipOCTFile			true			Scan will scan .OCT file, if you would like to automatically unzip it set this to true.
 % Debug parameters:
 %   v                       true            verbose mode      
