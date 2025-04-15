@@ -56,7 +56,6 @@ else
     dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(idx)); 
 end
 
-end
 
 %% Compute pixel size
 dx = diff(dimOneTile.x.values(1:2));
