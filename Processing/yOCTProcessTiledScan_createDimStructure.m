@@ -37,16 +37,25 @@ end
 dimOneTile.x.values(end) = [];
 dimOneTile.y.values(end) = [];
 
-%% Correct dimOneTile.z to adjsut for focus position
+%% Correct dimOneTile.z to adjust for focus position
 if ~exist('focusPositionInImageZpix','var') || any(isnan(focusPositionInImageZpix))
-    % No adjustment
+    % No adjustment because no focus info is provided
 elseif length(focusPositionInImageZpix) == 1
-    % One value
+    % One single focus value; shift z-dimensions with this value
     dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
 else
     % One value for each depth
-    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(json.zDepths == 0));
+    if isempty(json.zDepths) || ~isnumeric(json.zDepths) % Validate presence of z-depths data
+        error('ScanInfo.json reports zero scans (empty zDepths). This volume appears to be empty or failed.');
+    end
+    [~, idx] = min(abs(json.zDepths)); 
+    if abs(json.zDepths(idx)) > 0.01 % Validate that the z=0 reference (minimum zDepth) is within 10 microns (0.01 mm)
+        error('Invalid z=0 position: the closest zDepth is %.5f mm from zero. Expected a value less than 0.01 mm (10 microns).', json.zDepths(idx));
+    end
+    % Adjust z-dimensions using the focus index at zDepth 0
+    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(idx)); 
 end
+
 
 %% Compute pixel size
 dx = diff(dimOneTile.x.values(1:2));
