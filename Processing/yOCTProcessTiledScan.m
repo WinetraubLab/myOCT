@@ -130,6 +130,28 @@ end
 focusSigma = in.focusSigma;
 OCTSystem = json.OCTSystem; %Provide OCT system to prevent unesscecary polling of file system
 
+%% z depth check
+% A working assumption of yOCTProcessTiledScan is that when yOCTScanTile
+% was called, zDepths list included "0". 
+% The meaning of this constraint is that exists a scan in the stack in
+% which the focus is at the tissue interface (according to the user's best
+% guess). This constraint helps us do something (not sure what, but it's good practice).
+%
+% In this section  we check that zDepths structure exists and that zdepth 0
+% is included in the stack.
+
+if isempty(json.zDepths) || ~isnumeric(json.zDepths) % Validate presence of z-depths data
+    error("ScanInfo.json doesn't include valid zDepths.");
+end
+
+if min(abs(json.zDepths)) > 0.001 % 1um tolerance
+    error( ...
+        ['It seems that yOCTScanTile was executed without including ' ...
+        'zDepth=0 in the list of depths which breaks our ability to ' ...
+        'estimate dimension z coordinate, please scan again.' ...
+        'See Demo_ScanAndProcess_3D.m for an example.'])
+end
+
 %% Extract some data (refactor candidate)
 % Note this is a good place for future refactoring, where we create a
 % function that for every yI index specifies which scans to load and where
