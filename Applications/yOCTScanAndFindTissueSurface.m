@@ -126,7 +126,7 @@ end
 
 %% Clean up
 if ~isempty(output_folder) && exist(output_folder, 'dir')
-%     rmdir(output_folder, 's'); % Remove the output directory after processing
+    rmdir(output_folder, 's'); % Remove the output directory after processing
     output_folder = fileparts(output_folder); % Return to original output_folder
 end
 totalEndTime = datetime;  % Capture the ending time
