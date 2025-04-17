@@ -105,6 +105,28 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             assert(mean(abs(y(:) - dim.y.values(:))) < 1);
             
         end
+
+        function testChangingDimensionsShouldntChangeOutputs(testCase)
+            
+            % Compute surface position with mm inputs
+            [surfacePosition1,x1,y1] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, ...
+                yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm'));
+
+            % Compute surface position with microns inputs
+            [surfacePosition2,x2,y2] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, ...
+                yOCTChangeDimensionsStructureUnits(testCase.dimensions,'microns'));
+
+            % Make sure that changing the inputs doesn't impact the output
+            % units. According to yOCTScanAndFindTissueSurface
+            % documentation, output is allways in mm
+            assert(...
+                max(abs(surfacePosition1(:)-surfacePosition2(:)))==0, ... 
+                "Input units impact surfacePosition")
+            assert(max(abs(x1(:)-x2(:)))==0, "Input units impact x")
+            assert(max(abs(y1(:)-y2(:)))==0, "Input units impact y")
+        end
     end
     
 end
