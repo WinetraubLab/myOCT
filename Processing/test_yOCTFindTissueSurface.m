@@ -105,6 +105,31 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             assert(mean(abs(y(:) - dim.y.values(:))) < 1);
             
         end
+
+        function testSAssertTissueSurfaceInFocus(testCase)
+            % This test verifies the assertion functionality
+
+            % Convert to mm to make calculations below easier
+            dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm');
+            
+            % Compute surface position
+            [surfacePosition,x,y] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, ...
+                dim);
+
+            % Where surface positoin should be (where we constructed it)
+            surfaceZ = dim.z.values(testCase.simulatedSurfacePositionZ_pix);
+
+            % Artificially move surface position such that focus is at
+            % surface, this function should pass:
+            yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ,x,y);
+
+            % This should fail, move 50um out of focus, make sure that
+            % function returns an error.
+            testCase.verifyError(...
+                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ+0.050,x,y),...
+                'yOCT:SurfaceOutOfFocus');
+        end
     end
     
 end
