@@ -6,6 +6,7 @@ function [surfacePosition_mm, x_mm, y_mm, isSurfaceInFocus] = yOCTScanAndFindTis
 %   isVisualize - set to true to generate image heatmap visualization
 %       figure. Default is false
 %   octProbePath - Where is the probe.ini is saved to be used. Default 'probe.ini'.
+%   octProbeFOV_mm - How much of the field of view to use from the probe during scans.
 %   output_folder - Directory for temporary files, default './Surface_Analysis_Temp'. 
 %       These files will be deleted after analysis is completed.
 %   dispersionQuadraticTerm - Dispersion compensation parameter.
@@ -16,6 +17,8 @@ function [surfacePosition_mm, x_mm, y_mm, isSurfaceInFocus] = yOCTScanAndFindTis
 %   acceptableRange_mm - Defines the range (in millimeters) within which the 
 %       average detected tissue surface position is considered to be in focus.
 %       Used to determine the output isSurfaceInFocus. Default is 25 microns.
+%   saveSurfaceMap - False by default. Set to true to save the detected
+%       surface map to a .mat file inside output_folder.
 %   v - Verbose mode for debugging purposes, default is false.
 % OUTPUTS:
 %   - surfacePosition_mm - 2D matrix. dimensions are (y,x). What
@@ -33,23 +36,28 @@ addParameter(p,'isVisualize',false);
 addParameter(p,'xRange_mm',[-1 1]);
 addParameter(p,'yRange_mm',[-1 1]);
 addParameter(p,'pixel_size_um',25);
+addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'output_folder','./Surface_Analysis_Temp');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'v',false);
-addParameter(p, 'acceptableRange_mm', 0.025, @isnumeric)
+addParameter(p, 'acceptableRange_mm', 0.025, @isnumeric);
+addParameter(p,'saveSurfaceMap',false,@islogical);
 
 parse(p,varargin{:});
 in = p.Results;
+
 xRange_mm = in.xRange_mm;
 yRange_mm = in.yRange_mm;
 pixel_size_um = in.pixel_size_um;
 isVisualize = in.isVisualize;
+octProbeFOV_mm = in.octProbeFOV_mm;
 octProbePath = in.octProbePath;
-output_folder = in.output_folder;
+output_folder = [in.output_folder '\surfaceAnalysis_temp'];
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
 acceptableRange_mm = in.acceptableRange_mm;
+saveSurfaceMap       = in.saveSurfaceMap;
 v = in.v;
 
 %% Scan
@@ -63,13 +71,14 @@ scanParameters = yOCTScanTile (...
     volumeOutputFolder, ...
     xRange_mm, ...
     yRange_mm, ...
+    'octProbeFOV_mm', octProbeFOV_mm, ...
     'octProbePath', octProbePath, ...
     'pixelSize_um', pixel_size_um, ...
     'v',v  ...
     );
 
 %% Check if focusPositionInImageZpix is provided, if not use yOCTFindFocusTilledScan
-if isempty(in.focusPositionInImageZpix)
+if isempty(in.focusPositionInImageZpix) || any(isnan(in.focusPositionInImageZpix))
     if (v)
         fprintf('%s Find focus position volume\n', datestr(datetime));
     end
@@ -100,19 +109,25 @@ end
 if (v)
     fprintf('%s Identifying tissue surface...\n', datestr(datetime));
 end
-tic;
+tSurface = tic;
 dimensions = yOCTChangeDimensionsStructureUnits(dimensions,'millimeters'); % Make sure it's in mm
-surfacePosition_mm = yOCTFindTissueSurface(logMeanAbs, dimensions, 'isVisualize', isVisualize);
+surfacePosition_mm = yOCTFindTissueSurface( ...
+    logMeanAbs, ...
+    dimensions, ...
+    'isVisualize', isVisualize, ...
+    'octProbeFOV_mm', octProbeFOV_mm);
+
 x_mm=dimensions.x.values;
 y_mm=dimensions.y.values;
-elapsedTimeSurfaceDetection_sec = toc;
+elapsedTimeSurfaceDetection_sec = toc(tSurface);
 if (v)
     fprintf('%s Surface identification completed in %.2f seconds.\n', datestr(datetime), elapsedTimeSurfaceDetection_sec);
 end
 
 %% Clean up
-if exist(output_folder, 'dir')
-    rmdir(output_folder, 's'); % Remove the output directory after processing
+if ~isempty(output_folder) && exist(output_folder, 'dir')
+%     rmdir(output_folder, 's'); % Remove the output directory after processing
+    output_folder = fileparts(output_folder); % Return to original output_folder
 end
 totalEndTime = datetime;  % Capture the ending time
 totalDuration = totalEndTime - totalStartTime;
@@ -145,4 +160,30 @@ else
         fprintf('%s Tissue surface is precisely positioned at the OCT focus.\n', datestr(datetime));
     end
     isSurfaceInFocus = true; % Tissue surface is at focus
+end
+
+
+%% Save the surface map to a .mat file if requested
+surfaceFilePath = '';  % default
+if saveSurfaceMap && ~isempty(output_folder)
+    % Generate a unique 'surface_dataN.mat' in output_folder
+    filenameBase = 'surface_data';
+    ext = '.mat';
+    n = 1;
+    surfaceFile = fullfile(output_folder, [filenameBase ext]);
+    % If it already exists, rename e.g. surface_data2.mat, surface_data3.mat, etc.
+    while exist(surfaceFile, 'file')
+        n = n + 1;
+        surfaceFile = fullfile(output_folder, [filenameBase num2str(n) ext]);
+    end
+    % Save the three variables to this file
+    save(surfaceFile, 'surfacePosition_mm', 'x_mm', 'y_mm');
+    if v
+        fprintf('Saved surface data to %s\n', surfaceFile);
+    end
+    surfaceFilePath = surfaceFile; % store the final path
+end
+% Path to the saved .mat file if requested by user
+if nargout > 4
+    varargout{1} = surfaceFilePath;
 end
