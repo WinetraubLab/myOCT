@@ -146,5 +146,23 @@ classdef test_yOCTSimulateInterferogram < matlab.unittest.TestCase
    
         end
 
+        function testMovingReferenceArm(testCase)
+            data = zeros(1024,1);
+            data(53) = 1; % Place a scatterer at 53 microns
+
+            % Find scatterer after moving a bit
+            [interf, dim] = yOCTSimulateInterferogram(data,'referenceArmZOffset_um',13);
+            [scanCpx, dim] = yOCTInterfToScanCpx(interf, dim, 'dispersionQuadraticTerm',0);
+            reconstructedData = abs(scanCpx);
+            [~,reconstructedDataI] = max(reconstructedData);
+            scatterPosition_um = dim.z.values(reconstructedDataI);
+            assert(abs(scatterPosition_um-40)<1.5); % Scatter should move by offset
+
+            % Move a lot and see that scatter is gone
+            [interf, dim] = yOCTSimulateInterferogram(data,'referenceArmZOffset_um',70);
+            [scanCpx, ~] = yOCTInterfToScanCpx(interf, dim, 'dispersionQuadraticTerm',0);
+            reconstructedData = abs(scanCpx);
+            assert(max(reconstructedData(:))<0.1)
+        end
     end
 end

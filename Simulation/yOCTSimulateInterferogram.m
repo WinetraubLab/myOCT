@@ -16,6 +16,11 @@ function [interf, dim] = yOCTSimulateInterferogram(varargin)
 %           bands. This is the Ganymede default. 
 %       dispersionQuadraticTerm: See yOCTInterfToScanCpx for further
 %           explanation about this term. Default is 0 (no dispersion).
+%   PHYSICAL PROBE PARAMETERS:
+%       referenceArmZOffset_um: When set to 0 (default) scanner's z=0 is
+%           placed at data(1,:,:). If increasing referenceArmZOffset_um
+%           then reference arm will be placed deeper data(i,:,:) removing
+%           all information from higher values of data.
 %
 % OUTPUTS:
 %   intef: interferogram values.
@@ -29,6 +34,7 @@ addParameter(p,'n', 1.33);
 addParameter(p,'lambdaRange', [800 1000]);
 addParameter(p,'numberOfSpectralBands', 2048);
 addParameter(p,'dispersionQuadraticTerm', 0);
+addParameter(p,'referenceArmZOffset_um',0);
 
 parse(p,varargin{:});
 in = p.Results;
@@ -53,7 +59,8 @@ for ix = 1:size(data,2)
         
         % Interpolate to new zeta positions
         dataInterp(:, ix, iy) = interp1(...
-            zData_um, slice, zScanner_um, 'linear', 0); % Put 0 where no value provided
+            zData_um - in.referenceArmZOffset_um, ... Set refrence arm as default position.
+            slice, zScanner_um, 'linear', 0); % Put 0 where no value provided
     end
 end
 
