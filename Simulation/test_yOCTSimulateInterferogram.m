@@ -113,5 +113,38 @@ classdef test_yOCTSimulateInterferogram < matlab.unittest.TestCase
                 testCase.verifyFail('Reconstruction failed');
             end
         end
+        
+        function testRealisticReconstruct1D(testCase)
+            scattererIndex = [];
+            for n=[1, 1.33] % Check both air and water
+                % Generate a A scan of a known pixel size, verify that
+                % reconstruction is the same
+                data = zeros(1024,1);
+                data(53) = 1; % Place a scatterer at 53 microns
+    
+                % Encode as interferogram
+                [interf, dim] = yOCTSimulateInterferogram(data,'n',n);
+    
+                % Reconstruct
+                [scanCpx, dim] = yOCTInterfToScanCpx(interf, dim, 'dispersionQuadraticTerm',0,'n',n);
+                reconstructedData = abs(scanCpx);
+    
+                % Find scatterer
+                [~, reconstructedDataI] = max(reconstructedData);
+                scattererIndex(end+1) = reconstructedDataI;
+
+                % Check position 
+                if abs(dim.z.values(reconstructedDataI) - 53) > 1.5 % Threshold in microns
+                    testCase.verifyFail(sprintf('Failed z depth, n=%.2f',n));
+                end
+            end
+
+            if (scattererIndex(2) < scattererIndex(1))
+                testCase.verifyFail(...
+                    'Increasing index of refraction should shorten the distance');
+            end
+   
+        end
+
     end
 end
