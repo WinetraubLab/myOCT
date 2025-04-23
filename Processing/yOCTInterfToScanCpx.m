@@ -132,12 +132,10 @@ scanCpx = reshape(scanCpx,[size(scanCpx,1) s(2:end)]);
 
 %% Update Dimensions
 dimensions.z.order = 1;
-lambda = mean(dimensions.lambda.values)/1000; %[um]
-dlambda = diff(dimensions.lambda.values([1 end]))/1000;%[um]
-N = length(dimensions.lambda.values);
-zStepSizeAir = 1/2*lambda^2/dlambda; %1/2 factor is because light goes back and forth
-zStepSizeMedium = zStepSizeAir/n;
-dimensions.z.values = linspace(0,zStepSizeMedium*N/2,N/2); 
+dimensions.z.values = yOCTInterfToScanCpx_getZ( ...
+    dimensions.lambda.values(1), ...
+    dimensions.lambda.values(end), ...
+    length(dimensions.lambda.values), n);
 dimensions.z.units = 'microns [in medium]';
 
 dimensionsOut = dimensionsIn;

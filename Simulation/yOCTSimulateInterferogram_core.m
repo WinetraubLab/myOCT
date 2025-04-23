@@ -2,6 +2,8 @@ function [interf, dim] = yOCTSimulateInterferogram_core(varargin)
 % This function generates an interferogram that matches the 3D volume 
 % provided as input. data dimension z is assume to match k-space, but is
 % not explicitly given. In fact, it may change depending on the medium.
+% Use yOCTInterfToScanCpx_getZ to get z depth corresponding to data z dim.
+%
 % INPUTS:
 %   data - a 3D matrix (z,x,y) or a 2D matrix (z,x)
 %   pixelSizeXY - how many microns is each pixel, default 1. Units: microns
