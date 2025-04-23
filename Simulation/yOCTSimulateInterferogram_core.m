@@ -1,4 +1,4 @@
-function [interf, dim] = yOCTSimulateInterferogram(varargin)
+function [interf, dim] = yOCTSimulateInterferogram_core(varargin)
 % This function generates an interferogram that matches the 3D volume 
 % provided as input. data dimension z is assume to match k-space, but is
 % not explicitly given. In fact, it may change depending on the medium.
