@@ -33,7 +33,7 @@ k=linspace(kMin,kMax,size(data,1));
 %% Generate dimension structure
 dim.lambda.order = 1;
 dim.lambda.values = k2lambda(k);
-dim.lambda.units = 'nm';
+dim.lambda.units = 'nm [in air]';
 dim.x.order = 2;
 dim.x.values = (0:(size(data,2)-1))*in.pixelSizeXY;
 dim.x.units = 'microns';
@@ -53,6 +53,10 @@ end
 
 %% Interferogram
 interf = real(fft(data,[],1));
+
+% Normalize to match energy in data (doubling data size requires doubling
+% the energy)
+interf = interf*2;
 
 end
 function k=lambda2k(lambda)

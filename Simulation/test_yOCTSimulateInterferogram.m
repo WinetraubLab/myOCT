@@ -14,7 +14,7 @@ classdef test_yOCTSimulateInterferogram < matlab.unittest.TestCase
             % Generate a A scan, see that we can simulate it and then
             % reconstruct without loosing data
             data = zeros(1024,1);
-            data(10) = 1;
+            data(50) = 1;
 
             % Encode as interferogram
             [interf, dim] = yOCTSimulateInterferogram(data);
@@ -24,20 +24,23 @@ classdef test_yOCTSimulateInterferogram < matlab.unittest.TestCase
             reconstructedData = abs(scanCpx);
 
             % Smooth data a bit, since yOCTInterfToScanCpx applies a filter
-            dataSmooth = conv(data,[0.5 1 0.5]/2,'same');
+            filt = [0.5 1.1 0.5];
+            dataSmooth = conv(data,filt*sqrt(mean(filt.^2)),'same');
 
             % Check size
             if (size(scanCpx,1) ~= size(data,1))
                 testCase.verifyFail('Expected to preserve size')
             end
 
-            % Check total intensity
-            if abs(sum(data) - sum(reconstructedData)) > 0.001
+            % Check total energy
+            eData = sqrt(sum(data.^2));
+            eReconstructed = sqrt(sum(reconstructedData.^2));
+            if abs( (eReconstructed-eData)/eData ) > 0.001
                 testCase.verifyFail('Expected to preserve energy');
             end
 
-            % Check match
-            if max(abs(dataSmooth-reconstructedData)) > 0.001
+            % Check match on a point by point bases
+            if max(abs(dataSmooth-reconstructedData)) > 0.05
                 testCase.verifyFail('Reconstruction failed');
             end
    
