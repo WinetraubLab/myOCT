@@ -164,5 +164,25 @@ classdef test_yOCTSimulateInterferogram < matlab.unittest.TestCase
             reconstructedData = abs(scanCpx);
             assert(max(reconstructedData(:))<0.1)
         end
+
+        function testFocusPosition(testCase)
+            data = zeros(1024,1);
+            data(53) = 1; % Place a scatterer at 53 microns
+            data(201) = 1; % Place a scatterer at 200 microns
+
+            % Compute which pixel will be around 200
+            zForEachPixel = yOCTInterfToScanCpx_getZ(800, 1000);
+            [~,i201] = min(abs(zForEachPixel-201+1));
+            [~,i53] = min(abs(zForEachPixel-53+1));
+
+            % Find scatterer after moving a bit
+            [interf, dim] = yOCTSimulateInterferogram(data,'focusPositionInImageZpix',i201,'lambdaRange',[800 1000]);
+            [scanCpx, ~] = yOCTInterfToScanCpx(interf, dim, 'dispersionQuadraticTerm',0);
+            reconstructedData = abs(scanCpx);
+
+            assert(reconstructedData(i53) < 1); % Pixel 53 was attenuated
+            assert(reconstructedData(i201) > 0.5); % Pixel 200 wasn't attenuated
+        end
+
     end
 end

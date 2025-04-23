@@ -21,6 +21,9 @@ function [interf, dim] = yOCTSimulateInterferogram(varargin)
 %           placed at data(1,:,:). If increasing referenceArmZOffset_um
 %           then reference arm will be placed deeper data(i,:,:) removing
 %           all information from higher values of data.
+%       focusPositionInImageZpix: which pixel is at focus. set to 1 for the
+%           top most pixel in the scan. Default is NaN which disables this.
+%       focusSigma: focus width in pixels, default: 20.
 %
 % OUTPUTS:
 %   intef: interferogram values.
@@ -35,6 +38,8 @@ addParameter(p,'lambdaRange', [800 1000]);
 addParameter(p,'numberOfSpectralBands', 2048);
 addParameter(p,'dispersionQuadraticTerm', 0);
 addParameter(p,'referenceArmZOffset_um',0);
+addParameter(p,'focusPositionInImageZpix',NaN);
+addParameter(p,'focusSigma',20);
 
 parse(p,varargin{:});
 in = p.Results;
@@ -61,6 +66,14 @@ for ix = 1:size(data,2)
         dataInterp(:, ix, iy) = interp1(...
             zData_um - in.referenceArmZOffset_um, ... Set refrence arm as default position.
             slice, zScanner_um, 'linear', 0); % Put 0 where no value provided
+    end
+end
+
+%% Apply focusing attenuation
+if ~isnan(in.focusPositionInImageZpix)
+    for zI=1:size(dataInterp,1)
+        factorZ = exp(-(zI-in.focusPositionInImageZpix).^2/(2*in.focusSigma)^2);
+        dataInterp(zI,:,:) = dataInterp(zI,:,:)*factorZ;
     end
 end
 
