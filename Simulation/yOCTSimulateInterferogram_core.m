@@ -1,5 +1,9 @@
-function [interf, dim] = yOCTSimulateInterferogram(varargin)
-% This function generates an interferogram that matches the 3D volume provided as input
+function [interf, dim] = yOCTSimulateInterferogram_core(varargin)
+% This function generates an interferogram that matches the 3D volume 
+% provided as input. data dimension z is assume to match k-space, but is
+% not explicitly given. In fact, it may change depending on the medium.
+% Use yOCTInterfToScanCpx_getZ to get z depth corresponding to data z dim.
+%
 % INPUTS:
 %   data - a 3D matrix (z,x,y) or a 2D matrix (z,x)
 %   pixelSizeXY - how many microns is each pixel, default 1. Units: microns
@@ -33,7 +37,7 @@ k=linspace(kMin,kMax,size(data,1));
 %% Generate dimension structure
 dim.lambda.order = 1;
 dim.lambda.values = k2lambda(k);
-dim.lambda.units = 'nm';
+dim.lambda.units = 'nm [in air]';
 dim.x.order = 2;
 dim.x.values = (0:(size(data,2)-1))*in.pixelSizeXY;
 dim.x.units = 'microns';
@@ -53,6 +57,10 @@ end
 
 %% Interferogram
 interf = real(fft(data,[],1));
+
+% Normalize to match energy in data (doubling data size requires doubling
+% the energy)
+interf = interf*2;
 
 end
 function k=lambda2k(lambda)
