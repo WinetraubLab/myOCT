@@ -18,7 +18,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             speckleField(testCase.simulatedSurfacePositionZ_pix:end, :, :) = ...
                 10 + 990 * abs(randn(1024 - testCase.simulatedSurfacePositionZ_pix + 1, 100, 200));
         
-            [interf, dim] = yOCTSimulateInterferogram(speckleField);
+            [interf, dim] = yOCTSimulateInterferogram_core(speckleField);
             [cpx, dim] = yOCTInterfToScanCpx(interf, dim);
             logMeanAbs_tmp = log(abs(cpx));
             testCase.logMeanAbs = logMeanAbs_tmp;
