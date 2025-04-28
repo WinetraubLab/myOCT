@@ -13,9 +13,8 @@ function json = yOCTPhotobleachTile(varargin)
 %   z                       0               Photobleaching depth (compared to corrent position in mm). 
 %                                           Can be array for multiple depths. Use array for high NA lens that require photobleach in serveral depths.
 %                                           This option will draw the same lines defined in ptStart and ptEnd in multiple dpeths. 
-%   surfaceMapFile          ''              Path to .mat file containing surfacePosition_mm, x_mm, y_mm.
-%                                           If empty (default), no surface‑based Z offset is applied and
-%                                           Z stage moves only to the depths specified in ‘z’.
+%   surfaceMap             ''               Struct containing surfacePosition_mm, surfaceX_mm, surfaceY_mm. If empty (default), no surface‑based Z offset 
+%                                           is applied and Z stage moves only to the depths specified in ‘z’.
 %   exposure                15              How much time to expose each spot to laser light. Units sec/mm 
 %                                           Meaning for each 1mm, we will expose for exposurePerLine sec 
 %                                           If scanning at multiple depths, exposure will for each depth. Meaning two depths will be exposed twice as much. 
@@ -63,7 +62,8 @@ addParameter(p,'v',true);
 addParameter(p,'skipHardware',false);
 addParameter(p,'plotPattern',false);
 addParameter(p,'laserToggleMethod','OpticalSwitch');
-addParameter(p,'surfaceMapFile','',@ischar);
+addParameter(p,'surfaceMap',struct(), @(x) isempty(x) || (isstruct(x) && ...
+        all(ismember({'surfacePosition_mm','surfaceX_mm','surfaceY_mm'}, fieldnames(x)))));
 
 parse(p,varargin{:});
 json = p.Results;
@@ -313,35 +313,42 @@ fprintf('%s Laser Diode is On\n',datestr(datetime));
 
 %% Photobleach pattern
 
-% Load SurfaceMap File if available to adjust Z position during photobleaching
+% Load surface struct if available to adjust Z position during photobleaching
 surfaceZ_fn = @(xx,yy) 0;          % Fallback if no map provided
-if ~isempty(json.surfaceMapFile)   % User provided a surfaceMapFile
-    if exist(json.surfaceMapFile,'file')
-        S = load(json.surfaceMapFile, 'surfacePosition_mm','x_mm','y_mm'); % loaded
-        Zsmooth = medfilt2(S.surfacePosition_mm, [3 3]); % Remove outliers
-        % Create a function handle to use with the detected surface
-        surfaceZ_fn = @(xx,yy) interp2(S.x_mm, S.y_mm, Zsmooth, xx, yy, 'linear', NaN);
-
-        if v
-            fprintf('%s Loaded surface map from %s\n', datestr(datetime), json.surfaceMapFile);
-        end
-    else
-        warning('Surface map file not found: %s. Using 0 offset.', json.surfaceMapFile);
+if ~isempty(json.surfaceMap)   % User provided a surfaceMap struct
+    S = json.surfaceMap;
+    Zsmooth     = medfilt2(S.surfacePosition_mm, [3 3]);   % remove outliers  
+    
+    idxNaN = isnan(Zsmooth);  % fallback if out-of-bounds
+    if any(idxNaN(:))
+        warning('%d points in the map are NaN: they will be set to 0 mm.', nnz(idxNaN));
+        Zsmooth(idxNaN) = 0;
     end
+    
+    maxOffset = 0.2;  % 200μm maximum expected surface variation
+    idxBig = abs(Zsmooth) > maxOffset;
+    if any(idxBig(:))
+        warning('%d points in the map exceed ±%.1f mm: they will be limited.', ...
+                nnz(idxBig), maxOffset);
+        Zsmooth(idxBig) = maxOffset .* sign(Zsmooth(idxBig));
+    end
+
+    surfaceZ_fn = @(xx,yy) interp2(S.surfaceX_mm, S.surfaceY_mm, Zsmooth, xx, yy, 'linear', NaN);
+
+    if v
+        fprintf('%s Loaded surface map\n', datestr(datetime));
+    end
+else
+    warning('Surface map not found: Using 0 offset.');
 end
+unique_z = unique(json.z); % Eliminate redundant Z-movements that are not necessary
 
 % Loop over FOVs
 for i=1:length(xcc)
-    unique_z = unique(json.z); % Eliminate redundant Z-movements that are not necessary
     % Loop over depths in the same FOV
     for iZ=1:length(unique_z)
         % Get offset to start Z with tissue surface at (xcc(i), ycc(i))
         surfaceZOffset = surfaceZ_fn(xcc(i), ycc(i));
-        if isnan(surfaceZOffset)
-            surfaceZOffset = 0;           % fallback if out-of-bounds
-        elseif abs(surfaceZOffset) > 0.2  
-            surfaceZOffset = 0.2;         % 200μm maximum expected surface variation
-        end
         desiredZ = z0 + surfaceZOffset + unique_z(iZ);  % combine them
         
         if (v && (length(xcc) > 1 || length(unique_z) > 1))
@@ -355,12 +362,12 @@ for i=1:length(xcc)
         yOCTStageMoveTo( x0 + xcc(i), y0 + ycc(i), desiredZ, v );
 
         %Find lines to photobleach, center along current position of the stage
-        ptStart_i = ptStartcc{i} - [xcc(i); ycc(i)];
-        ptEnd_i   = ptEndcc{i}   - [xcc(i); ycc(i)];
-        exposures_sec_i = json.exposure * sqrt(sum( (ptStart_i - ptEnd_i).^2 ));
+        ptStart = ptStartcc{i} - [xcc(i); ycc(i)];
+        ptEnd   = ptEndcc{i}   - [xcc(i); ycc(i)];
+        exposures_sec = json.exposure * sqrt(sum( (ptStart - ptEnd).^2 ));
         
         % Perform photobleaching of this FOV
-        photobleach_lines(ptStart_i, ptEnd_i, exposures_sec_i, v, json);
+        photobleach_lines(ptStart, ptEnd, exposures_sec, v, json);
  
         % Wait before moving the stage to next position to prevent stage
         % motor jamming.
