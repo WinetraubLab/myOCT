@@ -44,10 +44,10 @@ dim.x.units = 'microns';
 dim.x.index = 1:length(dim.x.values);
 if (size(data,3)==1)
     % No Y-axis
-    dim.y.order = NaN;
-    dim.y.values = [];
-    dim.y.units = 'NA';
-    dim.y.index = [];
+    dim.y.order = 3;
+    dim.y.values = 0;
+    dim.y.units = 'microns';
+    dim.y.index = 1;
 else
     dim.y.order = 3;
     dim.y.values = (0:(size(data,3)-1))*in.pixelSizeXY;
