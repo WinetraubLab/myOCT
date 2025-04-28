@@ -137,6 +137,8 @@ dimensions.z.values = yOCTInterfToScanCpx_getZ( ...
     dimensions.lambda.values(end), ...
     length(dimensions.lambda.values), n);
 dimensions.z.units = 'microns [in medium]';
+dimensions.z.origin = 'z=0 matches reference arm';
+dimensions.z.index = 1:length(dimensions.z.values);
 
 dimensionsOut = dimensionsIn;
 dimensionsOut.z = dimensions.z;

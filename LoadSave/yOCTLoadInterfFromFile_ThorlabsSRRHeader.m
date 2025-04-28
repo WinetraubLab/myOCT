@@ -74,6 +74,7 @@ dimensions.x.values = dimensions.x.values(:)';
 dimensions.x.units = 'NA';
 dimensions.x.index = (1:sizeX);
 dimensions.x.index = dimensions.x.index(:)';
+dimensions.x.origin = 'Unknown';
 order = order + 1;
 
 %% Add the other direction (Y)
@@ -84,6 +85,7 @@ dimensions.y.units = 'NA';
 dimensions.y.index = (1:sizeY);
 dimensions.y.index = dimensions.y.index(:)';
 dimensions.y.indexMax = sizeY;
+dimensions.y.origin = 'Unknown';
 order = order + 1;
 
 %% Add B Scan Average+

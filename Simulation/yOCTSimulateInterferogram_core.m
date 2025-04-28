@@ -42,17 +42,20 @@ dim.x.order = 2;
 dim.x.values = (0:(size(data,2)-1))*in.pixelSizeXY;
 dim.x.units = 'microns';
 dim.x.index = 1:length(dim.x.values);
+dim.x.origin = 'Unknown';
 if (size(data,3)==1)
     % No Y-axis
     dim.y.order = 3;
     dim.y.values = 0;
     dim.y.units = 'microns';
     dim.y.index = 1;
+    dim.y.origin = 'Unknown';
 else
     dim.y.order = 3;
     dim.y.values = (0:(size(data,3)-1))*in.pixelSizeXY;
     dim.y.units = 'microns';
     dim.y.index = 1:length(dim.y.values);
+    dim.y.origin = 'Unknown';
 end
 
 %% Interferogram
