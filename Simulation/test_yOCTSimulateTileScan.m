@@ -206,12 +206,14 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
                 'focusSigma',focusSigma, ...
                 'dispersionQuadraticTerm',0, ... Use 0 as simulated data doesn't have dispersion
                 'interpMethod','sinc5', ...
-                'cropZAroundFocusArea',true ...
+                'cropZAroundFocusArea',true, ...
+                'outputFilePixelSize_um',1 ...
                 );
             [dat, dim] = yOCTFromTif('tmp2.tif');
             dat(isnan(dat))=0;
             datMean = mean(dat,[2 3]);
             delete tmp2.tif;
+            rmdir(outputFolder, 's'); % Remove the folder and all its contents
             
             % Make sure the peaks show in the data
             dim = yOCTChangeDimensionsStructureUnits(dim,'um');
@@ -224,6 +226,18 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             assert(datMean(i300) > prctile(datMean,80), 'Value should be high')
             assert(datMean(i250) < prctile(datMean,60), 'Value should be low')
             %figure(1); plot(dim.z.values,mean(dat,[2 3]))
+
+            % Check the dimensions size of the file
+            assert(length(dim.x.values) == size(dummyData,2), 'X dimensions size is off')
+            assert(length(dim.y.values) == size(dummyData,3), 'Y dimensions size is off')
+
+            % Check start and finish of z dimensoin
+            assert(abs(dim.z.values(1)-zDepths_mm(1)*1e3)<1,'Z start issue')
+            assert(abs(dim.z.values(end)-zDepths_mm(end)*1e3)<1,'Z end issue')
+            
+            % Check pixel size
+            assert(all(abs(diff(dim.x.values)-1)<0.01),'X dimension should be 1um')
+            assert(all(abs(diff(dim.z.values)-1)<0.01),'Z dimension should be 1um')
         end
     end
     
