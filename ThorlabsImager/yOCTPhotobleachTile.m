@@ -111,7 +111,7 @@ json.photobleachPlan = photobleachPlan;
 % Plot the plan
 if json.plotPattern
     % Estimate photobleach time
-    totalLineLength = sum(sum([PI.lineLengths_mm{:}])); % mm
+    totalLineLength = sum(sum([photobleachPlan.lineLengths_mm{:}])); % mm
     estimatedPhotobleachTime_sec = totalLineLength*json.exposure; % sec
    
     yOCTPhotobleachTile_drawPlan(...
@@ -184,7 +184,7 @@ fprintf('%s Laser Diode is On\n',datestr(datetime));
 for i=1:length(photobleachPlan)
     ppStep = photobleachPlan(i);
 
-    if (v && (length(xcc) > 1 || length(json.z) > 1) )
+    if v && length(photobleachPlan) > 1 
         fprintf('%s Moving to positoin (x = %.1fmm, y = %.1fmm, z= %.1fmm) #%d of %d\n',...
             datestr(datetime),...
             ppStep.stageCenterX_mm, ...
