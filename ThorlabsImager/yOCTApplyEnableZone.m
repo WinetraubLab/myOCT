@@ -5,9 +5,9 @@ function [ptStartO, ptEndO] = yOCTApplyEnableZone(...
 % disabled zone.
 %
 % INPUTS:
-%   ptStart: point(s) to strat line x and y (in mm). Can be 2Xn matrix for
-%       drawing multiple lines
-%   ptEnd: corresponding end point (x,y), in mm
+%   ptStart: line start coordinate (dim,n). Where dim=1 is x coordinate,
+%       dim=2 is the y coordinate. n is number of lines. Values are in mm.
+%   ptEnd: corresponding line end point in mm (dim,n).
 %   enableZone: a function handle returning 1 if we can photobleach in
 %       that coordinate, 0 otherwise. For example, this function will allow 
 %       photobleaching only in a circle:
