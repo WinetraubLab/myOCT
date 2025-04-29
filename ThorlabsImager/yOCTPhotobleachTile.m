@@ -1,15 +1,16 @@
 function json = yOCTPhotobleachTile(varargin)
-%This function photobleaches a pattern, the pattern can be bigger than the FOV of the scanner and then the script wii tile around to
-%stitch together multiple scans.
-%INPUTS:
-%   ptStart - point(s) to strat line x and y (in mm). Can be 2Xn matrix for
+% This function photobleaches a pattern, the pattern can be bigger than the
+% FOV of the scanner and then the script wii tile around to stitch together
+% multiple scans.
+% INPUTS:
+%   ptStart: point(s) to strat line x and y (in mm). Can be 2Xn matrix for
 %       drawing multiple lines. Line position is relative to current's stage position and relative to the opical axis of the lens 
-%   ptEnd - corresponding end point (x,y), in mm
-%NAME VALUE INPUTS:
+%   ptEnd: corresponding end point (x,y), in mm
+% NAME VALUE INPUTS:
 %   Parameter               Default Value   Notes
-%Probe defenitions:
+% Probe defenitions:
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used
-%Photobleaching Parameters:
+% Photobleaching Parameters:
 %   z                       0               Photobleaching depth (compared to corrent position in mm). 
 %                                           Can be array for multiple depths. Use array for high NA lens that require photobleach in serveral depths.
 %                                           This option will draw the same lines defined in ptStart and ptEnd in multiple dpeths. 
@@ -20,14 +21,14 @@ function json = yOCTPhotobleachTile(varargin)
 %                                           The lower number of passes the better 
 %   oct2stageXYAngleDeg     0               The angle to convert OCT coordniate system to motor coordinate system, see yOCTStageInit
 %   maxLensFOV              []              What is the FOV allowed for photobleaching, by default will use lens defenition [mm].
-%Constraints
+% Constraints
 %   enableZone              ones evrywhere  a function handle returning 1 if we can photobleach in that coordinate, 0 otherwise.
 %                                           For example, this function will allow photobleaching only in a circle:
 %                                           @(x,y)(x^2+y^2 < 2^2). enableZone accuracy see enableZoneAccyracy_mum.
 %   bufferZoneWidth         10e-3           To prevent line overlap between near by tiles we use a buffer zone [mm].
 %   enableZoneAccuracy      5e-3            Defines the evaluation step size of enable zone [mm].
 %   minLineLength           10e-3           Minimal line length to photobleach, shorter lines are skipped [mm].
-%Debug parameters:
+% Debug parameters:
 %   v                       true            verbose mode  
 %   skipHardware            false           Set to true if you would like to calculate only and not move or photobleach 
 %   plotPattern             false           Plot the pattern of photonleach before executing on it.
@@ -36,10 +37,10 @@ function json = yOCTPhotobleachTile(varargin)
 %											The script can utilize 'LaserPowerSwitch' to turn on/off the diode. This is slower method with less accuracy but
 %											can work if no optical switch in the setup.
 %											View current setup: https://docs.google.com/document/d/1xHOKHVPpNBcxyRosTiVxx17hyXQ0NDnQGgiR3jcAuOM/edit
-%OUTPUT:
+% OUTPUT:
 %   json with the parameters used for photboleach
   
-%% Input Parameters
+%% Input Parameters & Input Checks
 p = inputParser;
 addRequired(p,'ptStart');
 addRequired(p,'ptEnd');
@@ -89,8 +90,6 @@ end
 json = rmfield(json,'maxLensFOV');
 FOV = json.FOV;
 
-epsilon = 10e-3; % mm, small buffer number
-
 v = json.v;
 json = rmfield(json,'v');
 
@@ -98,13 +97,13 @@ json = rmfield(json,'v');
 json.stagePauseBeforeMoving_sec = 0.5;
 
 % Check number of passes and exposure
-assert(length(json.nPasses) == 1, 'Only 1 nPasses is permitted for all lines');
-assert(length(json.exposure) == 1, 'Only 1 exposure is permitted for all lines');
+assert(isscalar(json.nPasses), 'Only 1 nPasses is permitted for all lines');
+assert(isscalar(json.exposure), 'Only 1 exposure is permitted for all lines');
     
 %% Pre processing
 
 if isempty(json.ptStart) || isempty(json.ptEnd)
-	%Nothing to photobleach
+	% Nothing to photobleach
 	return;
 end
 
