@@ -8,7 +8,7 @@ function [ptStartO, ptEndO] = yOCTApplyEnableZone(...
 %   ptStart: point(s) to strat line x and y (in mm). Can be 2Xn matrix for
 %       drawing multiple lines
 %   ptEnd: corresponding end point (x,y), in mm
-%   enableZone - a function handle returning 1 if we can photobleach in
+%   enableZone: a function handle returning 1 if we can photobleach in
 %       that coordinate, 0 otherwise. For example, this function will allow 
 %       photobleaching only in a circle:
 %           @(x,y)(x^2+y^2 < 2^2)
