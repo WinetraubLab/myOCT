@@ -217,13 +217,13 @@ if cropZAroundFocusArea
         ) = []; 
 
     if isempty(zAll)
-        % Find one position
+        % No zAll matches our criteria, find the closest one.
         [dist, i] = min(abs(dimOutput_mm.z.values - ...
             ( ...
             min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1))) ...
             ) ...
             ));
-        assert(dist<1e-3,'Closest Z is too far');
+        assert(dist<1e-3,'Closest Z is >1um away from target, too far');
         zAll = dimOutput_mm.z.values(i);
     end
 
