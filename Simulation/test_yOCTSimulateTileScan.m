@@ -91,8 +91,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             % Verify that z=0 (which is the focus position), is indeed in
             % focus
             [~,i0] = min(abs(dim.z.values*1e3));
-            assert(abs(i0-69)<2,'z=0 is not the focus position')
-            assert(flatDat2(focusPositionInImageZpix) > prctile(flatDat2,80));
+            assert(flatDat2(i0) > prctile(flatDat2,80), 'Verify z=0 is in focus');
             %plot(dim.z.values*1e3,(mean(dat,[2 3])))
 
             %% Step 3 With focus, and return only zs that were scanned

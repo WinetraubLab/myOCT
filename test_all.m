@@ -37,3 +37,4 @@ fprintf('\nDone!\n');
 
 % Display the results
 disp(results);
+assert(all([results.Passed]),'Some test failed');
