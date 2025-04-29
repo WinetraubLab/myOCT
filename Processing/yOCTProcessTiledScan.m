@@ -216,6 +216,17 @@ if cropZAroundFocusArea
         ( zAll > max(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(end))) ) ...
         ) = []; 
 
+    if isempty(zAll)
+        % No zAll matches our criteria, find the closest one.
+        [dist, i] = min(abs(dimOutput_mm.z.values - ...
+            ( ...
+            min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1))) ...
+            ) ...
+            ));
+        assert(dist<1e-3,'Closest Z is >1um away from target, too far');
+        zAll = dimOutput_mm.z.values(i);
+    end
+
     dimOutput_mm.z.values = zAll(:)';
 end
 
@@ -248,7 +259,7 @@ if(v)
     fprintf('%s Stitching ...\n',datestr(datetime)); tt=tic();
 end
 whereAreMyFiles = yOCT2Tif([], outputPath, 'partialFileMode', 1); %Init
-for yI=1:length(dimOutput_mm.y.values) 
+parfor yI=1:length(dimOutput_mm.y.values) 
     try
         % Create a container for all data
         stack = zeros(imOutSize(1:2)); %z,x,zStach
@@ -310,7 +321,8 @@ for yI=1:length(dimOutput_mm.y.values)
                 x(end) = x(end) + 1e-10; 
                 z(1) = z(1) - 1e-10; 
                 z(end) = z(end) + 1e-10; 
-                
+
+              
                 % Add to stack
                 [xxAll,zzAll] = meshgrid(dimOutput_mm.x.values,dimOutput_mm.z.values);
                 stack = stack + interp2(x,z,scan1.*factor,xxAll,zzAll,'linear',0);
