@@ -1,6 +1,6 @@
-function [ptStartO, ptEndO] = yOCTApplyEnableZone(ptStart, ptEnd, enableZone, enableZoonRes)
+function [ptStartO, ptEndO] = yOCTApplyEnableZone(ptStart, ptEnd, enableZone, enableZoneRes)
 %This function takes a collection of lines (and returns a collection of
-%lines) after trimming the enable zoon, to prevent photobleaching in the disabled zoon 
+%lines) after trimming the enable zoon, to prevent photobleaching in the disabled zone 
 %   ptStart - point(s) to strat line x and y (in mm). Can be 2Xn matrix for
 %       drawing multiple lines
 %   ptEnd - corresponding end point (x,y), in mm
@@ -14,10 +14,10 @@ function [ptStartO, ptEndO] = yOCTApplyEnableZone(ptStart, ptEnd, enableZone, en
 %ptStart = [-1 -1;-1 1];
 %ptEnd = [1 1;1 -1];
 %enableZone = @(x,y)(x.^2+y.^2<=0.5^2 | x.^2+y.^2>1^2);
-%enableZoonRes = 1e-3;
+%enableZoneRes = 1e-3;
 
 if ~exist('enableZoonRes','var')
-    enableZoonRes = 1/100; %mm
+    enableZoneRes = 1/100; %mm
 end
 
 %% Preform work
@@ -29,7 +29,7 @@ for i=1:size(ptStart,2)
     pt2 = ptEnd(:,i);
 
     d = sqrt(sum((pt1-pt2).^2));
-    n = max(d/enableZoonRes,1); %How many points fit in the line
+    n = max(d/enableZoneRes,1); %How many points fit in the line
 
     %Compute points in between those initial two
     clear p;
