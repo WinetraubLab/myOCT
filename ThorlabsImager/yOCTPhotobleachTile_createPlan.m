@@ -41,7 +41,7 @@ end
 if isscalar(z_mm)
     % Only one depth was provided, make sure depth is assigned for each
     % line.
-    z_mm = ones(1,size(ptStart_mm,1))*z_mm;
+    z_mm = ones(1,size(ptStart_mm,2))*z_mm;
 end
 
 %% Add z:
