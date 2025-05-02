@@ -7,7 +7,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %       figure. Default is false
 %   octProbePath - Where is the probe.ini is saved to be used. Default 'probe.ini'.
 %   octProbeFOV_mm - How much of the field of view to use from the probe during scans.
-%   output_folder - Directory for temporary files, default './Surface_Analysis_Temp'. 
+%   output_folder - Directory for temporary files, default './temporary_files_folder'. 
 %       These files will be deleted after analysis is completed.
 %   dispersionQuadraticTerm - Dispersion compensation parameter.
 %   focusPositionInImageZpix - For all B-Scans, this parameter defines the 
@@ -47,7 +47,7 @@ pixel_size_um = in.pixel_size_um;
 isVisualize = in.isVisualize;
 octProbeFOV_mm = in.octProbeFOV_mm;
 octProbePath = in.octProbePath;
-output_folder = [in.output_folder '\surfaceAnalysis_temp'];
+output_folder = [in.output_folder '\temporary_files_folder'];
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
 v = in.v;
 
@@ -69,13 +69,12 @@ yOCTScanTile (...
     'skipHardware', in.skipHardware ...
     );
 
-if in.skipHardware
-     % No need to continue
+if in.skipHardware % No need to continue
      surfacePosition_mm = 0;
      x_mm = 0;
      y_mm = 0;
      return;
- end
+end
 
 %% Check if focusPositionInImageZpix is provided, if not use yOCTFindFocusTilledScan
 if isempty(in.focusPositionInImageZpix) || any(isnan(in.focusPositionInImageZpix))
@@ -127,7 +126,6 @@ end
 %% Clean up
 if ~isempty(output_folder) && exist(output_folder, 'dir')
     rmdir(output_folder, 's'); % Remove the output directory after processing
-    output_folder = fileparts(output_folder); % Return to original output_folder
 end
 totalEndTime = datetime;  % Capture the ending time
 totalDuration = totalEndTime - totalStartTime;
