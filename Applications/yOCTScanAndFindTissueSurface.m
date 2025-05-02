@@ -70,10 +70,10 @@ yOCTScanTile (...
     );
 
 if in.skipHardware % No need to continue
-     surfacePosition_mm = 0;
-     x_mm = 0;
-     y_mm = 0;
-     return;
+    surfacePosition_mm = 0;
+    x_mm = 0;
+    y_mm = 0;
+    return;
 end
 
 %% Check if focusPositionInImageZpix is provided, if not use yOCTFindFocusTilledScan
