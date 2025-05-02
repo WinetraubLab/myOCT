@@ -109,6 +109,8 @@ else
             OCTSystemManufacturer = 'Thorlabs_SRR';
         case {'Wasatch'}
             OCTSystemManufacturer = 'Wasatch';
+        case {'Simulated Ganymede'}
+            OCTSystemManufacturer = 'Simulated';
         otherwise
             error('ERROR: Wrong OCTSystem name! (yOCTLoadInterfFromFile)')
     end
@@ -126,6 +128,9 @@ if ~exist('dimensions','var')
                 
         case {'Wasatch'}
             dimensions = yOCTLoadInterfFromFile_WasatchHeader(inputDataFolder);
+        
+        case('Simulated')
+            dimensions = load(fullfile(inputDataFolder,'data.mat'), 'dim').dim;
     end
     
     dimensions.aux.OCTSystem = OCTSystem; %Add the OCT system we just discovered
@@ -135,9 +140,11 @@ end
 
 %Correct dimensions according to what user asks to process
 if exist('YFramesToProcess','var')
-    if (length(dimensions.y.index) == 1)
-        %Only y frame to process already
-        if (dimensions.y.index ~= YFramesToProcess)
+    if (any(length(dimensions.y.index) == [0,1]))
+        % dimensions contains only one frame. Empty array means index=1.
+        if isempty(dimensions.y.index) && YFramesToProcess ~= 1
+            error('dimensions.y.index is empty which means only YFrame is in the file, YFramesToProcess must be 1');
+        elseif (dimensions.y.index ~= YFramesToProcess)
             error('Asking to process non existant frame');
         else
             %We already have one frame to process, nothing to do..
@@ -188,6 +195,8 @@ switch(OCTSystemManufacturer)
         [interferogram, apodization, prof] = yOCTLoadInterfFromFile_ThorlabsSRRData([varargin {'dimensions'} {dimensions}]);
     case {'Wasatch'}
         [interferogram, apodization, prof] = yOCTLoadInterfFromFile_WasatchData([varargin {'dimensions'} {dimensions}]);
+    case('Simulated')
+        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_SimulatedData([varargin {'dimensions'} {dimensions}]);
 end
 
 %% Correct For Apodization

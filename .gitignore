@@ -8,3 +8,5 @@ _private/My_ec2RunStructure_DeepLearning.m
 *.getmeout
 *.tif
 *.tiff
+*.mat
+*.json

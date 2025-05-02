@@ -1,14 +1,14 @@
 function yOCTProcessTiledScan(varargin)
-%This function Processes Tiled scan, my assumption is that scan size is
-%very big, so the processed volume will not be returned directly to Matlab,
-%but will be saved directly to disk (or cloud).
-%For speed purposes, make sure that input and output folder are either both
-%local or both on the cloud. In case, both are on the cloud - run using
-%cluster.
-%USAGE:
+% This function Processes Tiled scan, my assumption is that scan size is
+% very big, so the processed volume will not be returned directly to Matlab,
+% but will be saved directly to disk (or cloud).
+% For speed purposes, make sure that input and output folder are either both
+% local or both on the cloud. In case, both are on the cloud - run using
+% cluster.
+% USAGE:
 %   yOCTProcessTiledScan(tiledScanInputFolder,outputPath,[params])
 %   yOCTProcessTiledScan({parameters})
-%INPUTS:
+% INPUTS:
 %   - tiledScanInputFolder - where tiled scan is saved. Make sure the
 %       ScanInfo.json is present in the folder
 %   - outputPath - where products of the processing are saved. can be a
@@ -16,19 +16,23 @@ function yOCTProcessTiledScan(varargin)
 %       input a cell array with both file and folder, will save both
 %   - params can be any processing parameters used by
 %     yOCTLoadInterfFromFile or yOCTInterfToScanCpx or any of those below
-%NAME VALUE INPUTS:
+% NAME VALUE INPUTS:
 %   Parameter           Default Value   Notes
-%Z position stitching:
+% Z position stitching:
 %   focusSigma                  20      If stitching along Z axis (multiple focus points), what is the size of each focus in z [pixel]
 %   focusPositionInImageZpix    NaN     For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at. 
 %                                       See yOCTFindFocusTilledScan for more details.
 %   cropZAroundFocusArea        true    When set to true, will crop output processed scan around the area of z focus. 
-%Save some Y planes in a debug folder:
+% Save some Y planes in a debug folder:
 %   yPlanesOutputFolder         ''      If set will save some y planes for debug purpose in that folder
 %   howManyYPlanes              3       How many y planes to save (if yPlanesOutput folder is set)
-%Other parameters:
-%   applyPathLengthCorrection true  Apply path link correction, if probe ini has the information.
-%   v                         true        verbose mode      
+% Other parameters:
+%   applyPathLengthCorrection   true    Apply path link correction, if probe ini has the information.
+%   outputFilePixelSize_um      1       Output file pixel size (isotropic).
+%                                       Set to [] to keep input file
+%                                       resolution though it may be non
+%                                       isotropic resolution
+%   v                           true    verbose mode  
 %
 %OUTPUT:
 %   No output is returned. Will save mag2db(scan Abs) to outputPath, and
@@ -59,6 +63,9 @@ addParameter(p,'howManyYPlanes',3,@isnumeric);
 % Debug
 addParameter(p,'v',true,@islogical);
 addParameter(p,'applyPathLengthCorrection',true); %TODO(yonatan) shift this parameter to ProcessScanFunction
+
+% Output file resolution
+addParameter(p,'outputFilePixelSize_um',1,@(x)(isnumeric(x) & x>0));
 
 p.KeepUnmatched = true;
 if (~iscell(varargin{1}))
@@ -168,22 +175,59 @@ end
 zDepths = json.zDepths;
 
 %% Create dimensions structure for the entire tiled volume
-[dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(tiledScanInputFolder, focusPositionInImageZpix);
+[dimOneTile_mm, dimOutput_mm] = yOCTProcessTiledScan_createDimStructure(tiledScanInputFolder, focusPositionInImageZpix);
+
+% Adjust output pixel size if needed
+if ~isempty(in.outputFilePixelSize_um)
+    pixelSizeX_um = round(mean(diff(dimOutput_mm.x.values))*1e3*100)/100;
+    pixelSizeY_um = round(mean(diff(dimOutput_mm.y.values))*1e3*100)/100;
+
+    % Check that x resolution matches y resolution
+    if length(dimOutput_mm.y.values) >= 2
+        assert(pixelSizeX_um == pixelSizeY_um,'X resolution should match Y resolution')
+    else
+        pixelSizeY_um = pixelSizeX_um;
+    end
+
+    % Check that X,Y resolution matches outputFilePixelSize_um otherwise,
+    % we didn't implement yet.
+    assert(in.outputFilePixelSize_um == pixelSizeX_um & in.outputFilePixelSize_um == pixelSizeY_um, ...
+        ["pixelSizeX used for scanning is not the same as 'outputFilePixelSize_um', " ...
+        "this is not implemented yet. Please specifiy outputFilePixelSize_um in function's input and make sure it matches scanning parameters."]);
+
+    % Change Z resolution
+    dimOutput_mm.z.values = ...
+        (dimOutput_mm.z.values): ...
+        (in.outputFilePixelSize_um*1e-3): ...
+        max(dimOutput_mm.z.values);
+    dimOutput_mm.z.index = 1:length(dimOutput_mm.z.values);
+end
 
 if cropZAroundFocusArea
     % Remove Z positions that are way out of focus (if we are doing focus processing)
 
-    zAll = dimOutput.z.values;
+    zAll = dimOutput_mm.z.values;
 
     % Remove depths that are out of focus
     % Final crop is from first focus position to last focus position.
     zAll( ...
-        ( zAll < min(zDepths) + dimOneTile.z.values(round(focusPositionInImageZpix(1)  )) ) ...
+        ( zAll < min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1)  )) ) ...
         | ...
-        ( zAll > max(zDepths) + dimOneTile.z.values(round(focusPositionInImageZpix(end))) ) ...
+        ( zAll > max(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(end))) ) ...
         ) = []; 
 
-    dimOutput.z.values = zAll(:)';
+    if isempty(zAll)
+        % No zAll matches our criteria, find the closest one.
+        [dist, i] = min(abs(dimOutput_mm.z.values - ...
+            ( ...
+            min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1))) ...
+            ) ...
+            ));
+        assert(dist<1e-3,'Closest Z is >1um away from target, too far');
+        zAll = dimOutput_mm.z.values(i);
+    end
+
+    dimOutput_mm.z.values = zAll(:)';
 end
 
 %% Save some Y planes in a debug folder if needed
@@ -197,7 +241,7 @@ if ~isempty(in.yPlanesOutputFolder) && in.howManyYPlanes > 0
     end
     
     %Save some stacks, which ones?
-    yToSaveI = round(linspace(1,length(dimOutput.y.values),in.howManyYPlanes));
+    yToSaveI = round(linspace(1,length(dimOutput_mm.y.values),in.howManyYPlanes));
 else
     isSaveSomeYPlanes = false;
     yPlanesOutputFolder = '';
@@ -206,16 +250,16 @@ end
 
 %% Main loop
 imOutSize = [...
-    length(dimOutput.z.values) ...
-    length(dimOutput.x.values) ...
-    length(dimOutput.y.values)];
-printStatsEveryyI = max(floor(length(dimOutput.y.values)/20),1);
+    length(dimOutput_mm.z.values) ...
+    length(dimOutput_mm.x.values) ...
+    length(dimOutput_mm.y.values)];
+printStatsEveryyI = max(floor(length(dimOutput_mm.y.values)/20),1);
 ticBytes(gcp);
 if(v)
     fprintf('%s Stitching ...\n',datestr(datetime)); tt=tic();
 end
 whereAreMyFiles = yOCT2Tif([], outputPath, 'partialFileMode', 1); %Init
-parfor yI=1:length(dimOutput.y.values) 
+parfor yI=1:length(dimOutput_mm.y.values) 
     try
         % Create a container for all data
         stack = zeros(imOutSize(1:2)); %z,x,zStach
@@ -239,7 +283,7 @@ parfor yI=1:length(dimOutput.y.values)
                 % Note that a frame is smaller than one tile as frame contains only one YFrameToPRocess, thus dim structure needs an update. 
                 [intFrame, dimFrame] = ...
                     yOCTLoadInterfFromFile([{fpTxt}, reconstructConfig, ...
-                    {'dimensions', dimOneTile 'YFramesToProcess', yIInFile, 'OCTSystem', OCTSystem}]);
+                    {'dimensions', dimOneTile_mm 'YFramesToProcess', yIInFile, 'OCTSystem', OCTSystem}]);
                 [scan1,~] = yOCTInterfToScanCpx([{intFrame} {dimFrame} reconstructConfig]);
                 intFrame = []; %#ok<NASGU> %Freeup some memory
                 scan1 = abs(scan1);
@@ -277,9 +321,10 @@ parfor yI=1:length(dimOutput.y.values)
                 x(end) = x(end) + 1e-10; 
                 z(1) = z(1) - 1e-10; 
                 z(end) = z(end) + 1e-10; 
-                
+
+              
                 % Add to stack
-                [xxAll,zzAll] = meshgrid(dimOutput.x.values,dimOutput.z.values);
+                [xxAll,zzAll] = meshgrid(dimOutput_mm.x.values,dimOutput_mm.z.values);
                 stack = stack + interp2(x,z,scan1.*factor,xxAll,zzAll,'linear',0);
                 totalWeights = totalWeights + interp2(x,z,factor,xxAll,zzAll,'linear',0);
                 
@@ -325,7 +370,7 @@ parfor yI=1:length(dimOutput.y.values)
         if mod(yI,printStatsEveryyI)==0 && v
             % Stats time!
             cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles);
-            fprintf('%s Completed yIs so far: %d/%d (%.1f%%)\n',datestr(datetime),cnt,length(dimOutput.y.values),100*cnt/length(dimOutput.y.values));
+            fprintf('%s Completed yIs so far: %d/%d (%.1f%%)\n',datestr(datetime),cnt,length(dimOutput_mm.y.values),100*cnt/length(dimOutput_mm.y.values));
         end
 
     catch ME
@@ -351,7 +396,7 @@ end
 % Count how many files are in the library
 cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles);
     
-if cnt ~= length(dimOutput.y.values)
+if cnt ~= length(dimOutput_mm.y.values)
     % Some files are missing, print debug to help trubleshoot 
     fprintf('\nDebug Data:\n');
     fprintf('whereAreMyFiles = ''%s''\n',whereAreMyFiles);
@@ -386,7 +431,7 @@ if (v)
 end
 
 % Get the main data out
-yOCT2Tif([], outputPath, 'metadata', dimOutput, 'partialFileMode', 3);
+yOCT2Tif([], outputPath, 'metadata', dimOutput_mm, 'partialFileMode', 3);
 
 % Get saved y planes out
 if isSaveSomeYPlanes

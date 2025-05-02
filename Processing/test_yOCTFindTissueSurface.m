@@ -21,7 +21,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             rng(1);
             speckleField(testCase.simulatedSurfacePositionZ_pix:end, :, :) = ...
                 10 + 990 * abs(randn(1024 - testCase.simulatedSurfacePositionZ_pix + 1, 100, 200));
-            
+
             if coverslip
                 coverslipZ_start = testCase.simulatedSurfacePositionZ_pix - 105; % top of coverslip
                 coverslipThickness = 7;    % coverslip is 7 pixels thick
@@ -34,7 +34,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 200 + 50 * abs(randn(coverslipThickness, coverslipX_end - coverslipX_start + 1, 200));
             end
 
-            [interf, dim] = yOCTSimulateInterferogram(speckleField);
+            [interf, dim] = yOCTSimulateInterferogram_core(speckleField);
             [cpx, dim] = yOCTInterfToScanCpx(interf, dim);
             logMeanAbs_tmp = log(abs(cpx));
             testCase.logMeanAbs = logMeanAbs_tmp;
@@ -166,6 +166,31 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             testCase.verifyError(...
              @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ+0.050,x,y),...
              'yOCT:SurfaceOutOfFocus');
+        end
+
+        function testSAssertTissueSurfaceInFocus(testCase)
+            % This test verifies the assertion functionality
+
+            % Convert to mm to make calculations below easier
+            dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm');
+            
+            % Compute surface position
+            [surfacePosition,x,y] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, ...
+                dim);
+
+            % Where surface positoin should be (where we constructed it)
+            surfaceZ = dim.z.values(testCase.simulatedSurfacePositionZ_pix);
+
+            % Artificially move surface position such that focus is at
+            % surface, this function should pass:
+            yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ,x,y);
+
+            % This should fail, move 50um out of focus, make sure that
+            % function returns an error.
+            testCase.verifyError(...
+                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ+0.050,x,y),...
+                'yOCT:SurfaceOutOfFocus');
         end
     end
 end

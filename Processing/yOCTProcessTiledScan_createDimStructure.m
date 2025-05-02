@@ -26,7 +26,7 @@ end
 
 dimOneTile = yOCTLoadInterfFromFile(firstDataFolder,'OCTSystem',json.OCTSystem,'peakOnly',true);
 tmp = zeros(size(dimOneTile.lambda.values(:)));
-dimOneTile = yOCTInterfToScanCpx (tmp, dimOneTile, 'n', json.tissueRefractiveIndex, 'peakOnly',true);
+dimOneTile = yOCTInterfToScanCpx(tmp, dimOneTile, 'n', json.tissueRefractiveIndex, 'peakOnly',true);
 
 % Update dimensions to mm
 dimOneTile = yOCTChangeDimensionsStructureUnits(dimOneTile, 'mm');
@@ -45,6 +45,8 @@ else
 end
 dimOneTile.x.values(end) = [];
 dimOneTile.y.values(end) = [];
+dimOneTile.x.origin = "x=0 is under objective's principal";
+dimOneTile.y.origin = "y=0 is under objective's principal";
 
 %% Correct dimOneTile.z to adjust for focus position
 if ~exist('focusPositionInImageZpix','var') || any(isnan(focusPositionInImageZpix))
@@ -121,12 +123,14 @@ dimOutput.lambda = dimOneTile.lambda;
 dimOutput.z = dimOneTile.z; % Template, we will update it soon
 dimOutput.z.values = zAll_mm(:)';
 dimOutput.z.origin = 'z=0 is tissue interface as specified by user';
+dimOutput.z.index = 1:length(dimOutput.z.values);
 dimOutput.x = dimOneTile.x;
-dimOutput.x.origin = 'x=0 is OCT scanner origin when xCenters=0 scan was taken';
+dimOutput.x.origin = 'x=0 is OCT scanner origin (under objective''s principal) when xCenters=0 scan was taken';
 dimOutput.x.values = xAll_mm(:)';
 dimOutput.x.index = 1:length(dimOutput.x.values);
 dimOutput.y = dimOneTile.y;
 dimOutput.y.values = yAll_mm(:)';
 dimOutput.y.index = 1:length(dimOutput.y.values);
-dimOutput.y.origin = 'y=0 is OCT scanner origin when yCenters=0 scan was taken';
+dimOutput.y.origin = 'y=0 is OCT scanner origin (under objective''s principal) when yCenters=0 scan was taken';
 dimOutput.aux = dimOneTile.aux;
+

@@ -63,11 +63,13 @@ if (oneDMode)
     dimensions.x.values = 0;
     dimensions.x.units  = 'NaN';
     dimensions.x.index  = 1;
+    dimensions.x.origin = 'Unknown';
     dimensions.y.order  = NaN;
     dimensions.y.values = 0;
     dimensions.y.units  = 'NaN';
     dimensions.y.index  = 1;
     dimensions.y.indexMax = 1;
+    dimensions.y.origin = 'Unknown';
     dimensions.AScanAvg.order = 2;
     dataFile = xDoc.DataFiles.DataFile{4}; %This is the xml file specifing 'SpectralFloat.data' file
     AScanAvgN = str2double(dataFile.Attributes.RangeX);
@@ -88,6 +90,7 @@ dimensions.x.values = dimensions.x.values(:)';
 dimensions.x.units = 'microns';
 dimensions.x.index = (1:sizeX);
 dimensions.x.index = dimensions.x.index(:)';
+dimensions.x.origin = 'Unknown';
 order = order + 1;
 
 %Across B Scan Axis (y)
@@ -98,6 +101,7 @@ if ~isfield(xDoc.Image.SizeReal,'SizeY') || str2double(xDoc.Image.SizeReal.SizeY
     dimensions.y.units = 'microns';
     dimensions.y.index = 1;
     dimensions.y.indexMax = 1;
+    dimensions.y.origin = 'Unknown';
 else
     sizeY = str2double(xDoc.Image.SizePixel.SizeY.Text);
     sizeYReal=str2double(xDoc.Image.SizeReal.SizeY.Text)*1000;
@@ -111,6 +115,7 @@ else
         dimensions.y.index = 1:sizeY;
         dimensions.y.index = dimensions.y.index(:)';
         dimensions.y.indexMax = sizeY;
+        dimensions.y.origin = 'Unknown';
         order = order + 1;
 
     else
@@ -122,6 +127,7 @@ else
         dimensions.y.units = 'microns';
         dimensions.y.index = 1;
         dimensions.y.indexMax = sizeY;
+        dimensions.y.origin = 'Unknown';
     end
 end
 
