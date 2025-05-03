@@ -1,8 +1,4 @@
-
-_private/awsSetCredentials_Private.m
-_private/HistologyWest.pem
-_private/My_ec2RunStructure.m
-_private/My_ec2RunStructure_DeepLearning.m
+_private/*.*
 .DS_Store
 *.asv
 *.getmeout
@@ -10,3 +6,4 @@ _private/My_ec2RunStructure_DeepLearning.m
 *.tiff
 *.mat
 *.json
+
