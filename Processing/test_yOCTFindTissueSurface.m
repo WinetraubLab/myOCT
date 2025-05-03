@@ -130,6 +130,65 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ+0.050,x,y),...
                 'yOCT:SurfaceOutOfFocus');
         end
+
+        function testRealworldDataset(testCase)
+            % This test loads a dataset from roboflow with real life cases
+            % and tests that they pass
+
+            % Load dataset
+            rfFolder = rfDownloadDataset('tissue-surface','outputFolder','./temp/');
+            [imageFilePath, imageMaskPath, ~] = ...
+                rfListImagesAndSegmentationsInDataset(rfFolder,'above-tissue');
+
+            % Loop over all images and compare algorithm with ground truth
+            for i=1:length(imageFilePath)
+                % Load OCT image
+                oct = rgb2gray(imread(imageFilePath{i}));
+
+                % Create dimensions, assuming 1 micron per pixel
+                dim.x.order = 2;
+                dim.x.values = 1:size(oct,2);
+                dim.x.units = 'microns';
+                dim.x.index = 1:size(oct,2);
+                dim.x.origin = 'unknown';
+                dim.z.order = 1;
+                dim.z.values = 1:size(oct,1);
+                dim.z.units = 'microns';
+                dim.z.index = 1:size(oct,1);
+                dim.z.origin = 'unknown';
+                dim.y.order = 3;
+                dim.y.values = 1;
+                dim.y.units = 'microns';
+                dim.y.index = 1;
+                dim.y.origin = 'unknown';
+
+                % Get surface from algorithm
+                surfacePosition_mm = yOCTFindTissueSurface( ...
+                    oct, dim);
+
+                % Convert surface position to pixel
+                surfacePosition_pix = surfacePosition_mm*1e-3;
+
+                % Load ground truth, surface is the bottom of the mask
+                bMask = imread(imageMaskPath{i});
+                surfacePositionGT_pix = zeros(size(surfacePosition_pix));
+                for col = 1:length(surfacePosition_pix)
+                    f = find(bMask(:, col), 1, 'last');
+                    if ~isempty(f)
+                        surfacePositionGT_pix(col) = f;
+                    else
+                        % Couldn't find ground truth for this column
+                        surfacePositionGT_pix(col) = NaN;
+                    end
+                end
+
+                % Compare 
+                e_pix = abs(surfacePosition_pix - surfacePositionGT_pix);
+                errorText = sprintf('Error too high for "%s"',imageFilePath{i});
+                assert(sum(isnan(e_pix))/length(e_pix)<0.1, errorText); % Make sure not too many nans
+                assert(mean(e_pix(~isnan(e_pix)))<10,errorText); % Make sure average error is not too high
+                assert(prctile(e_pix(~isnan(e_pix)),90)<40,errorText); % Make sure max error is not too high
+            end
+        end
     end
-    
 end
