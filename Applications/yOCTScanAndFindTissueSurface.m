@@ -12,8 +12,6 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %   dispersionQuadraticTerm: Dispersion compensation parameter.
 %   focusPositionInImageZpix: For all B-Scans, this parameter defines the 
 %       depth (Z, pixels) that the focus is located at. 
-%       If set to NaN (default), yOCTFindFocusTilledScan will be executed 
-%       to request user to select focus position.
 %   assertInFocusAcceptableRange_mm: how far can tissue surface be from 
 %       focus position to be considered "good enough". Default: 0.025mm, 
 %       set to [] to skip assertion.
@@ -35,7 +33,7 @@ addParameter(p,'yRange_mm',[-1 1]);
 addParameter(p,'pixel_size_um',25);
 addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p,'octProbePath','probe.ini',@ischar);
-addParameter(p,'output_folder','./Surface_Analysis_Temp');
+addParameter(p,'output_folder','./Surface_Analysis_Temp/');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'assertInFocusAcceptableRange_mm',0.025)
@@ -51,15 +49,19 @@ pixel_size_um = in.pixel_size_um;
 isVisualize = in.isVisualize;
 octProbeFOV_mm = in.octProbeFOV_mm;
 octProbePath = in.octProbePath;
-output_folder = [in.output_folder '\temporary_files_folder'];
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
+output_folder = in.output_folder;
 v = in.v;
+
+if isnan(in.focusPositionInImageZpix)
+    error('Please provide a valid "focusPositionInImageZpix". Use yOCTFindFocusTilledScan to estimate.');
+end
+focusPositionInImageZpix = in.focusPositionInImageZpix;
 
 %% Scan
 totalStartTime = datetime;  % Capture the starting time
 volumeOutputFolder = [output_folder '/OCTVolume/'];
 if (v)
-    fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
     fprintf('%s Scanning Volume...\n', datestr(datetime));
 end
 yOCTScanTile (...
@@ -78,17 +80,6 @@ if in.skipHardware % No need to continue
     x_mm = 0;
     y_mm = 0;
     return;
-end
-
-%% Check if focusPositionInImageZpix is provided, if not use yOCTFindFocusTilledScan
-if isempty(in.focusPositionInImageZpix) || any(isnan(in.focusPositionInImageZpix))
-    if (v)
-        fprintf('%s Find focus position volume\n', datestr(datetime));
-    end
-    focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
-        'reconstructConfig', {'dispersionQuadraticTerm', dispersionQuadraticTerm}, 'verbose', v);
-else
-    focusPositionInImageZpix = in.focusPositionInImageZpix;
 end
 
 %% Reconstruct OCT Image for Subsequent Surface Analysis
