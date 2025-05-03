@@ -59,7 +59,6 @@ end
         'focusPositionInImageZpix', focusPositionInImageZpix,...
         'dispersionQuadraticTerm', dispersionQuadraticTerm, ...
         'skipHardware',skipScanning);
-yOCTAssertTissueSurfaceIsInFocus(surfacePosition_mm, x_mm, y_mm);
 
 %% Perform the scan
 volumeOutputFolder = [output_folder '/OCTVolume/'];

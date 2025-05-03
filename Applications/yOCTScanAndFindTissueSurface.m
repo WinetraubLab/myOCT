@@ -1,21 +1,24 @@
 function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargin)
 % This function uses the OCT to scan and then identify tissue surface from 
 % the OCT image.
-%   xRange_mm, yRange_mm - what range to scan, default [-1 1] mm.
-%   pixel_size_um - Pixel resolution for this analysis, default: 25 um.
-%   isVisualize - set to true to generate image heatmap visualization
+%   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
+%   pixel_size_um: Pixel resolution for this analysis, default: 25 um.
+%   isVisualize: set to true to generate image heatmap visualization
 %       figure. Default is false
-%   octProbePath - Where is the probe.ini is saved to be used. Default 'probe.ini'.
-%   octProbeFOV_mm - How much of the field of view to use from the probe during scans.
-%   output_folder - Directory for temporary files, default './temporary_files_folder'. 
+%   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
+%   octProbeFOV_mm: How much of the field of view to use from the probe during scans.
+%   output_folder: Directory for temporary files, default './temporary_files_folder'. 
 %       These files will be deleted after analysis is completed.
-%   dispersionQuadraticTerm - Dispersion compensation parameter.
-%   focusPositionInImageZpix - For all B-Scans, this parameter defines the 
+%   dispersionQuadraticTerm: Dispersion compensation parameter.
+%   focusPositionInImageZpix: For all B-Scans, this parameter defines the 
 %       depth (Z, pixels) that the focus is located at. 
 %       If set to NaN (default), yOCTFindFocusTilledScan will be executed 
 %       to request user to select focus position.
-%   v - Verbose mode for debugging purposes, default is false.
-%   skipHardware - Set to true to skip hardware operation. Default: false
+%   assertInFocusAcceptableRange_mm: how far can tissue surface be from 
+%       focus position to be considered "good enough". Default: 0.025mm, 
+%       set to [] to skip assertion.
+%   v: Verbose mode for debugging purposes, default is false.
+%   skipHardware: Set to true to skip hardware operation. Default: false.
 % OUTPUTS:
 %   - surfacePosition_mm - 2D matrix. dimensions are (y,x). What
 %       height (mm) is image surface. Height measured from "user specified
@@ -35,6 +38,7 @@ addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'output_folder','./Surface_Analysis_Temp');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
+addParameter(p,'assertInFocusAcceptableRange_mm',0.025)
 addParameter(p,'v',false);
 addParameter(p,'skipHardware',false)
 
@@ -100,6 +104,7 @@ yOCTProcessTiledScan(...
     'cropZAroundFocusArea', false,...
     'v',v);
 [logMeanAbs, dimensions, ~] = yOCTFromTif(outputTiffFile);
+dimensions = yOCTChangeDimensionsStructureUnits(dimensions,'millimeters'); % Make sure dimensions in mm
 if (v)
     fprintf('%s -- Data loaded and processed successfully.\n', datestr(datetime));
 end
@@ -109,7 +114,6 @@ if (v)
     fprintf('%s Identifying tissue surface...\n', datestr(datetime));
 end
 tSurface = tic;
-dimensions = yOCTChangeDimensionsStructureUnits(dimensions,'millimeters'); % Make sure it's in mm
 surfacePosition_mm = yOCTFindTissueSurface( ...
     logMeanAbs, ...
     dimensions, ...
@@ -132,4 +136,11 @@ totalDuration = totalEndTime - totalStartTime;
 if (v)
     fprintf('%s yOCTScanAndFindTissueSurface function evaluation completed in %s.\n', ...
         datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
+end
+
+%% Assert
+if ~isempty(in.assertInFocusAcceptableRange_mm)
+    yOCTAssertTissueSurfaceIsInFocus( ...
+        surfacePosition_mm, x_mm, y_mm, ...
+        in.assertInFocusAcceptableRange_mm, v);
 end
