@@ -7,7 +7,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %       figure. Default is false
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
 %   octProbeFOV_mm: How much of the field of view to use from the probe during scans.
-%   output_folder: Directory for temporary files, default './temporary_files_folder'. 
+%   temporaryFolder: Directory for temporary files, default './temporary_files_folder'. 
 %       These files will be deleted after analysis is completed.
 %   dispersionQuadraticTerm: Dispersion compensation parameter.
 %   focusPositionInImageZpix: For all B-Scans, this parameter defines the 
@@ -33,7 +33,7 @@ addParameter(p,'yRange_mm',[-1 1]);
 addParameter(p,'pixel_size_um',25);
 addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p,'octProbePath','probe.ini',@ischar);
-addParameter(p,'output_folder','./Surface_Analysis_Temp/');
+addParameter(p,'temporaryFolder','./Surface_Analysis_Temp/');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'assertInFocusAcceptableRange_mm',0.025)
@@ -50,7 +50,7 @@ isVisualize = in.isVisualize;
 octProbeFOV_mm = in.octProbeFOV_mm;
 octProbePath = in.octProbePath;
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
-output_folder = in.output_folder;
+temporaryFolder = in.temporaryFolder;
 v = in.v;
 
 if isnan(in.focusPositionInImageZpix)
@@ -60,7 +60,7 @@ focusPositionInImageZpix = in.focusPositionInImageZpix;
 
 %% Scan
 totalStartTime = datetime;  % Capture the starting time
-volumeOutputFolder = [output_folder '/OCTVolume/'];
+volumeOutputFolder = [temporaryFolder '/OCTVolume/'];
 if (v)
     fprintf('%s Scanning Volume...\n', datestr(datetime));
 end
@@ -86,7 +86,7 @@ end
 if (v)
     fprintf('%s Loading and processing the OCT scan...\n', datestr(datetime));
 end
-outputTiffFile = [output_folder '\surface_analysis.tiff'];
+outputTiffFile = [temporaryFolder '\surface_analysis.tiff'];
 yOCTProcessTiledScan(...
     volumeOutputFolder, ... Input
     {outputTiffFile},... Save only Tiff file as folder will be generated after smoothing
@@ -119,8 +119,8 @@ if (v)
 end
 
 %% Clean up
-if ~isempty(output_folder) && exist(output_folder, 'dir')
-    rmdir(output_folder, 's'); % Remove the output directory after processing
+if ~isempty(temporaryFolder) && exist(temporaryFolder, 'dir')
+    rmdir(temporaryFolder, 's'); % Remove the output directory after processing
 end
 totalEndTime = datetime;  % Capture the ending time
 totalDuration = totalEndTime - totalStartTime;
