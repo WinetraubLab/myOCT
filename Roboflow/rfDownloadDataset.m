@@ -1,4 +1,4 @@
-function roboflowDatasetFolder = rfLoadDataset(varargin)
+function roboflowDatasetFolder = rfDownloadDataset(varargin)
 % This function connects to Roboflow and downloads dataset locally.
 %
 % INPUTS:
