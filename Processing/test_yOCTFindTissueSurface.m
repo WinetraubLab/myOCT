@@ -48,7 +48,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
 
         function testSurfacePositionValue(testCase)
             % This test verifies that surfacePosition matches speckle
-            % field.
+            % field in simulated dataset.
 
             %% Microns units
             dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'microns');
