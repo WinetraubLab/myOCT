@@ -6,4 +6,5 @@ _private/*.*
 *.tiff
 *.mat
 *.json
+*temp*
 
