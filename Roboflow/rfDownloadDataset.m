@@ -11,17 +11,6 @@ function roboflowDatasetFolder = rfDownloadDataset(varargin)
 % OUTPUT:
 %   roboflow folder path
 
-%% Check API Key
-if ~exist('yOCTRoboflowAPIKey','file')
-    error([ ...
-        'Please create /_private/yOCTRoboflowAPIKey.m that contains ' ...
-        'Roboflow API key. Function should look like this:' newline newline ...
-        'function apiKey = yOCTRoboflowAPIKey()' newline ...
-        'apiKey = "key_value";' newline newline ...
-        'Ask Yonatan if need help.'])
-end
-apiKey = yOCTRoboflowAPIKey();
-
 %% Input check
 
 p = inputParser;
@@ -33,14 +22,31 @@ addParameter(p,'outputFolder','');
 
 parse(p,varargin{:});
 in = p.Results;
-in.apiKey = apiKey;
 
 if isempty(in.outputFolder)
     in.outputFolder = ['./' in.projectName];
 end
+roboflowDatasetFolder = in.outputFolder;
+
+%% Check if folder already exist
+if exist(roboflowDatasetFolder,'dir')
+    % Do nothing
+    return;
+end
+
+%% Check API Key
+if ~exist('yOCTRoboflowAPIKey','file')
+    error([ ...
+        'Please create /_private/yOCTRoboflowAPIKey.m that contains ' ...
+        'Roboflow API key. Function should look like this:' newline newline ...
+        'function apiKey = yOCTRoboflowAPIKey()' newline ...
+        'apiKey = "key_value";' newline newline ...
+        'Ask Yonatan if need help.'])
+end
+apiKey = yOCTRoboflowAPIKey();
+in.apiKey = apiKey;
 
 %% Fetch data
-
 apiURL = ...
     "https://api.roboflow.com/" + in.workspace + "/" + ...
     in.projectName + "/" + string(in.version) + "/" + ...
@@ -62,4 +68,3 @@ unzip(outputFile, in.outputFolder);
 
 % Cleanup
 delete(outputFile)
-roboflowDatasetFolder = in.outputFolder;
