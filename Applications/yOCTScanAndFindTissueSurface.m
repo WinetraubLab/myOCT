@@ -2,7 +2,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 % This function uses the OCT to scan and then identify tissue surface from 
 % the OCT image.
 %   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
-%   pixel_size_um: Pixel resolution for this analysis, default: 25 um.
+%   pixelSize_um: Pixel resolution for this analysis, default: 25 um.
 %   isVisualize: set to true to generate image heatmap visualization
 %       figure. Default is false
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
@@ -30,7 +30,7 @@ p = inputParser;
 addParameter(p,'isVisualize',false);
 addParameter(p,'xRange_mm',[-1 1]);
 addParameter(p,'yRange_mm',[-1 1]);
-addParameter(p,'pixel_size_um',25);
+addParameter(p,'pixelSize_um',25);
 addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'temporaryFolder','./SurfaceAnalysisTemp/');
@@ -45,7 +45,7 @@ in = p.Results;
 
 xRange_mm = in.xRange_mm;
 yRange_mm = in.yRange_mm;
-pixel_size_um = in.pixel_size_um;
+pixelSize_um = in.pixelSize_um;
 isVisualize = in.isVisualize;
 octProbeFOV_mm = in.octProbeFOV_mm;
 octProbePath = in.octProbePath;
@@ -70,7 +70,7 @@ yOCTScanTile (...
     yRange_mm, ...
     'octProbeFOV_mm', octProbeFOV_mm, ...
     'octProbePath', octProbePath, ...
-    'pixelSize_um', pixel_size_um, ...
+    'pixelSize_um', pixelSize_um, ...
     'v',v,  ...
     'skipHardware', in.skipHardware ...
     );
