@@ -211,12 +211,14 @@ if mode == 0
             % Check for valid metadata to set resolution accordingly in ImageJ
             if ~isempty(metadata) && ...
                 isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
+                isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
                 isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
-                numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
+                numel(metadata.x.values) > 1 && numel(metadata.y.values) > 1 && numel(metadata.z.values) > 1
 
                 % Convert dimension structure to microns for accurate pixel spacing in ImageJ
                 meta_um = yOCTChangeDimensionsStructureUnits(metadata,'microns');
                 pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
+                pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
                 pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
 
                 % ImageJ uses 'XResolution', 'YResolution', 'ResolutionUnit', and reads 
@@ -224,10 +226,16 @@ if mode == 0
                 tagstruct.XResolution         = 1/(pixelSizeX_um*1e-4); % Resolution in microns
                 tagstruct.YResolution         = 1/(pixelSizeZ_um*1e-4); % Z is Y in ImageJ/Fiji
                 tagstruct.ResolutionUnit      = Tiff.ResolutionUnit.Centimeter; % Inch also possible
-                tagstruct.ImageDescription    = sprintf('ImageJ=1.53\nunit=um\nspacing=1.00\nimages=%d\n', size(data,3));
+                tagstruct.ImageDescription = sprintf( ...
+                    ['ImageJ=1.53\n' ...
+                     'unit=um\n' ...
+                     'spacing=%g\n' ...         % Spacing is Y axis (Z in Fiji)
+                     'images=%d\n'], ...
+                     pixelSizeY_um, size(data,3));
             else
+
                 % Default to 1 px if metadata is invalid or absent
-                warning('No valid metadata provided. Using default resolution = 1 pixel (no real-world scaling).');
+                % No valid metadata provided. Using default resolution = 1 pixel (no real-world scaling).
                 tagstruct.XResolution      = 1;   % 1 pixel
                 tagstruct.YResolution      = 1;   % 1 pixel
                 tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None; 
