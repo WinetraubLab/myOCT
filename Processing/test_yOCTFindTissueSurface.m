@@ -49,61 +49,80 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
         function testSurfacePositionValue(testCase)
             % This test verifies that surfacePosition matches speckle
             % field in simulated dataset.
-
-            %% Microns units
             dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'microns');
-            expectedSurfacePos = dim.z.values(...
+            expectedSurfacePos_um = dim.z.values(...
                 testCase.simulatedSurfacePositionZ_pix);
-            [surfacePosition,x,y] = yOCTFindTissueSurface( ...
+            
+            % Convert expected values to 'mm' to match output units
+            expectedSurfacePos_mm = expectedSurfacePos_um * 1e-3;
+            dimX_mm = dim.x.values * 1e-3;  % x dimensions in mm
+            dimY_mm = dim.y.values * 1e-3;  % y dimensions in mm
+
+            % Identify surface (always in mm)
+            [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, dim);
             
             % Check surface position
             assert(...
-                abs(mean(mean(surfacePosition)) - ... Average surface position
-                expectedSurfacePos) ... Expected surface position
-                <2);
+                abs(mean(mean(surfacePosition_mm)) - ...  Average surface position in mm
+                expectedSurfacePos_mm) ...                Expected surface position in mm
+                < 2e-3 );
 
             % Check x,y
-            assert(mean(abs(x(:) - dim.x.values(:))) < 1);
-            assert(mean(abs(y(:) - dim.y.values(:))) < 1);
-
-            %% Milimeter units
-            dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm');
-            expectedSurfacePos = dim.z.values(...
-                testCase.simulatedSurfacePositionZ_pix);
-            [surfacePosition,x,y] = yOCTFindTissueSurface( ...
-                testCase.logMeanAbs, dim);
-            
-            % Check surface position
-            assert(...
-                abs(mean(mean(surfacePosition)) - ... Average surface position
-                expectedSurfacePos) ... Expected surface position
-                <2e-3);
-
-            % Check x,y
-            assert(mean(abs(x(:) - dim.x.values(:))) < 1e-3);
-            assert(mean(abs(y(:) - dim.y.values(:))) < 1e-3);
-
-            %% Ofset dim x,y,z by a small ammount. Verify that surface position oved as well
+            assert(mean(abs(x_mm(:) - dimX_mm(:))) < 1e-3);
+            assert(mean(abs(y_mm(:) - dimY_mm(:))) < 1e-3);
+        end
+        
+        function testSurfacePositionAfterOffset(testCase)
+            % Offset dim x,y,z by a small amount. Verify that surface position moved as well
+            % Inputs in Microns (Outputs are always in Millimeters)
             dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'microns');
             dim.z.values = dim.z.values+100; % Shift by 100 microns
             dim.x.values = dim.x.values+100; % Shift by 100 microns
             dim.y.values = dim.y.values+100; % Shift by 100 microns
-            expectedSurfacePos = dim.z.values(...
+            expectedSurfacePos_um = dim.z.values(...
                 testCase.simulatedSurfacePositionZ_pix);
-            [surfacePosition,x,y] = yOCTFindTissueSurface( ...
+
+            % Convert expected values to 'mm' to match output units
+            expectedSurfacePos_mm = expectedSurfacePos_um * 1e-3;
+            dimX_mm = dim.x.values * 1e-3;  % x dimensions in mm
+            dimY_mm = dim.y.values * 1e-3;  % y dimensions in mm
+
+            % Identify surface (always in mm)
+            [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, dim);
             
             % Check surface position
-            assert(...
-                abs(mean(mean(surfacePosition)) - ... Average surface position
-                expectedSurfacePos) ... Expected surface position
-                <2);
-
-            % Check x,y
-            assert(mean(abs(x(:) - dim.x.values(:))) < 1);
-            assert(mean(abs(y(:) - dim.y.values(:))) < 1);
+            assert( ...
+                abs(mean(mean(surfacePosition_mm)) - ...  Average surface position in mm
+                expectedSurfacePos_mm) ...                Expected surface position in mm
+                < 2e-3 );
             
+            % Check x,y
+            assert(mean(abs(x_mm(:) - dimX_mm(:))) < 1e-3);
+            assert(mean(abs(y_mm(:) - dimY_mm(:))) < 1e-3);
+        end
+
+        function testChangingDimensionsShouldntChangeOutputs(testCase)
+            
+            % Compute surface position with mm inputs
+            [surfacePosition1,x1,y1] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, ...
+                yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm'));
+ 
+            % Compute surface position with microns inputs
+            [surfacePosition2,x2,y2] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, ...
+                yOCTChangeDimensionsStructureUnits(testCase.dimensions,'microns'));
+ 
+            % Make sure that changing the inputs doesn't impact the output
+            % units. According to yOCTScanAndFindTissueSurface
+            % documentation, output is allways in mm
+            assert(...
+                max(abs(surfacePosition1(:)-surfacePosition2(:)))==0, ... 
+                "Input units impact surfacePosition")
+            assert(max(abs(x1(:)-x2(:)))==0, "Input units impact x")
+            assert(max(abs(y1(:)-y2(:)))==0, "Input units impact y")
         end
 
         function testSAssertTissueSurfaceInFocus(testCase)
