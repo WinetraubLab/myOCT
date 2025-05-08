@@ -7,7 +7,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %       figure. Default is false
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
 %   octProbeFOV_mm: How much of the field of view to use from the probe during scans.
-%   temporaryFolder: Directory for temporary files, default './temporary_files_folder'. 
+%   temporaryFolder: Directory for temporary files. 
 %       These files will be deleted after analysis is completed.
 %   dispersionQuadraticTerm: Dispersion compensation parameter.
 %   focusPositionInImageZpix: For all B-Scans, this parameter defines the 
@@ -33,7 +33,7 @@ addParameter(p,'yRange_mm',[-1 1]);
 addParameter(p,'pixel_size_um',25);
 addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p,'octProbePath','probe.ini',@ischar);
-addParameter(p,'temporaryFolder','./Surface_Analysis_Temp/');
+addParameter(p,'temporaryFolder','./SurfaceAnalysisTemp/');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'assertInFocusAcceptableRange_mm',0.025)
