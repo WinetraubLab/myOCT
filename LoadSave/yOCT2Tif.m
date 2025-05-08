@@ -209,6 +209,9 @@ if mode == 0
             tagstruct.Software            = jsonencode(metaJson);  % Saves our metadata in the TIFF 'Software' Tag
             
             % Check for valid metadata to set resolution accordingly in ImageJ
+            % Proceed only if metadata contains at least TWO samples in each axis (z, x, y).
+            % We need ≥2 points to compute pixel spacing => pixelSize = |v(2) – v(1)|.
+            % If any axis has ≤1 value we skip physical scaling and fall back to 1‑pixel units
             if ~isempty(metadata) && ...
                 isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
                 isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
@@ -229,7 +232,7 @@ if mode == 0
                 tagstruct.ImageDescription = sprintf( ...
                     ['ImageJ=1.53\n' ...
                      'unit=um\n' ...
-                     'spacing=%g\n' ...         % Spacing is Y axis (Z in Fiji)
+                     'spacing=%g\n' ...    % Set Z spacing in Fiji (which is the same as Y axis in metadata)
                      'images=%d\n'], ...
                      pixelSizeY_um, size(data,3));
             else
@@ -239,7 +242,7 @@ if mode == 0
                 tagstruct.XResolution      = 1;   % 1 pixel
                 tagstruct.YResolution      = 1;   % 1 pixel
                 tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None; 
-                tagstruct.ImageDescription = sprintf('ImageJ=1.53\nimages=%d\n', size(data,3));
+                tagstruct.ImageDescription = sprintf('ImageJ=1.53\nspacing=1.00\nimages=%d\n', size(data,3));
             end
 
             t.setTag(tagstruct);
