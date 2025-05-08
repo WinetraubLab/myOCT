@@ -100,15 +100,15 @@ smoothed_surface_depth(normalizing_kernel == 0) = NaN;  % Restore NaN values whe
 smoothed_surface_depth = round(smoothed_surface_depth);  % Round smoothed values to the nearest integer for uniform depth representation
 
 % Assign z, x, y, coordinates
-z = dim.z.values(:); x_mm = dim.x.values(:); y_mm = dim.y.values(:);
+z_mm = dim.z.values(:); x_mm = dim.x.values(:); y_mm = dim.y.values(:);
 
 % Convert Depth found from Pixels to Units in dim.z.units like microns or mm
 surface_depth_pixels = smoothed_surface_depth.'; % Transpose for consistent global orientation system
 surfacePosition_mm = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
 for i = 1:numel(surfacePosition_mm) % Populate surfacePosition using valid indices
     index = surface_depth_pixels(i);
-    if ~isnan(index) && index >= 1 && index <= length(z) % Check for valid index
-        surfacePosition_mm(i) = z(index); % Assign corresponding value from z
+    if ~isnan(index) && index >= 1 && index <= length(z_mm) % Check for valid index
+        surfacePosition_mm(i) = z_mm(index); % Assign corresponding value from z
     end
 end
 
