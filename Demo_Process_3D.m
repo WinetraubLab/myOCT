@@ -1,6 +1,7 @@
-%Run this demo to load and process 3D OCT Images in a batch format due to
-%memory limitations. This script does not process TildScan see
-%Demo_3DTildScan.m
+% Run this demo to load and process 3D OCT Images in a batch format due to
+% memory limitations. This script does not process TildScan see
+% Demo_3DTildScan.m
+yOCTSetLibraryPath(); % Set path
 
 %% Iputs
 %Wasatch

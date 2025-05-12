@@ -1,10 +1,12 @@
 % Run this demo to use Thorlabs system to scan a 3D OCT Volume and process
 % it.
-% Before running this script, make sure myOCT folder is in path for example
-% by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
 
 % The protocol for how to use this script can be found here:
 % https://docs.google.com/document/d/1aMgy00HvxrOlTXRINk-SvcvQSMU1VzT0U60hdChUVa0/edit
+
+% Before running this script, make sure myOCT folder is in path for example
+% by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
+yOCTSetLibraryPath(); % Set path
 
 %% Inputs
 

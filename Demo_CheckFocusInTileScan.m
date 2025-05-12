@@ -2,10 +2,12 @@
 % It will create an output XY file showing where the focus is for each
 % depth.
 
+yOCTSetLibraryPath(); % Set path
+
 %% Inputs
 
 % Input folder
-tiledScanInputFolder = './OCTVolume/' % Replace the . with your input folder. Keep the /OCTVolume/ extension to 1) point to the correct folder within your input folder and 2) to signal this is a folder. 
+tiledScanInputFolder = './OCTVolume/'; % Replace the . with your input folder. Keep the /OCTVolume/ extension to 1) point to the correct folder within your input folder and 2) to signal this is a folder. 
 
 % Processing parameters
 dispersionQuadraticTerm=-1.482e8; % 40x, OCTP900 

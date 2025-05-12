@@ -3,6 +3,7 @@
 
 % Before running this script, make sure myOCT folder is in path for example
 % by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
+yOCTSetLibraryPath(); % Set path
 
 %% Inputs
 
