@@ -1,5 +1,5 @@
 % Run this demo to use Thorlabs system to scan a 3D OCT Volume and process
-% it.
+% it. It will do so repeatedly for a time interval.
 % Before running this script, make sure myOCT folder is in path for example
 % by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
 
@@ -34,7 +34,7 @@ tissueRefractiveIndex = 1.4; % Use either 1.33 or 1.4 depending on the results. 
 dispersionQuadraticTerm=-1.549e08;  % 40x, OCTP900
 
 % Where to save scan files
-output_folder = '\';
+outputFolder = '\';
 
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
@@ -43,7 +43,15 @@ skipScanning = false;
 % If set to NaN, yOCTFindFocusTilledScan will be executed to request user to select focus position.
 focusPositionInImageZpix = NaN;
 
+% Time interval
+scanTimeInterval_min = 60; % How often to scan
+scanTimeNumberOfIntervals = 12; % How many times to repeat the interval
+
 %% Compute scanning parameters
+
+if isnan(focusPositionInImageZpix) && ~skipScanning
+    error('Please use one of the other demos to determine focusPositionInImageZpix before running this script');
+end
 
 % Check that sufficient ammount of gel is above the tissue for proper focus
 if (min(zToScan_mm)) > -100e-3
@@ -63,41 +71,52 @@ fprintf('%s Please adjust the OCT focus such that it is precisely at the interse
         'dispersionQuadraticTerm', dispersionQuadraticTerm, ...
         'skipHardware',skipScanning);
 
-%% Perform the scan
-volumeOutputFolder = [output_folder '/OCTVolume/'];
+%% Perform the scans
+tmpVolumeOutputFolder = [outputFolder '/OCTVolume/']; % This volume folder will be removed 
+tStart = tic();
 
-fprintf('%s Scanning Volume\n',datestr(datetime));
-scanParameters = yOCTScanTile (...
-    volumeOutputFolder, ...
-    xOverall_mm, ...
-    yOverall_mm, ...
-    'octProbePath', octProbePath, ...
-    'tissueRefractiveIndex', tissueRefractiveIndex, ...
-    'octProbeFOV_mm', octProbeFOV_mm, ...
-    'pixelSize_um', pixel_size_um, ...
-    'xOffset',   0, ...
-    'yOffset',   0, ... 
-    'zDepths',   zToScan_mm, ... [mm]
-    'oct2stageXYAngleDeg', oct2stageXYAngleDeg, ...
-    'skipHardware',skipScanning, ...
-    'v',true  ...
-    );
+for scanI = 1:scanTimeNumberOfIntervals
+    scanName = strrep(datestr(datetime),':','_');
 
-%% Find focus in the scan
-if isnan(focusPositionInImageZpix)
-    fprintf('%s Find focus position volume\n',datestr(datetime));
-    focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
-        'reconstructConfig',{'dispersionQuadraticTerm',dispersionQuadraticTerm},'verbose',true);
-end
+    fprintf('%s Scanning Volume\n',datestr(datetime));
+    scanParameters = yOCTScanTile (...
+        tmpVolumeOutputFolder, ...
+        xOverall_mm, ...
+        yOverall_mm, ...
+        'octProbePath', octProbePath, ...
+        'tissueRefractiveIndex', tissueRefractiveIndex, ...
+        'octProbeFOV_mm', octProbeFOV_mm, ...
+        'pixelSize_um', pixel_size_um, ...
+        'xOffset',   0, ...
+        'yOffset',   0, ... 
+        'zDepths',   zToScan_mm, ... [mm]
+        'oct2stageXYAngleDeg', oct2stageXYAngleDeg, ...
+        'skipHardware',skipScanning, ...
+        'v',true  ...
+        );
 	
-%% Process the scan
-fprintf('%s Processing\n',datestr(datetime));
-outputTiffFile = [output_folder '/Image.tiff'];
-yOCTProcessTiledScan(...
-    volumeOutputFolder, ... Input
-    {outputTiffFile},... Save only Tiff file as folder will be generated after smoothing
-    'focusPositionInImageZpix', focusPositionInImageZpix,... No Z scan filtering
-    'focusSigma',focusSigma,...
-    'dispersionQuadraticTerm',dispersionQuadraticTerm,... Use default
-    'interpMethod','sinc5', ...
-    'v',true);
+    %% Process the scan
+    fprintf('%s Processing\n',datestr(datetime));
+    outputTiffFile = [outputFolder '/' scanName '.tiff'];
+    if ~skipScanning
+        yOCTProcessTiledScan(...
+            tmpVolumeOutputFolder, ... Input
+            {outputTiffFile},... Save only Tiff file as folder will be generated after smoothing
+            'focusPositionInImageZpix', focusPositionInImageZpix,... No Z scan filtering
+            'focusSigma',focusSigma,...
+            'dispersionQuadraticTerm',dispersionQuadraticTerm,... Use default
+            'interpMethod','sinc5', ...
+            'v',true);
+    end
+
+    dt_min = toc(tStart)/60;
+    timeRemainingToWait_min = scanTimeInterval_min*scanI-dt_min;
+
+    if (timeRemainingToWait_min<0)
+        warning('Interval too short!');
+    else
+        fprintf('%s Waiting for %.0f min to complete %.0f min interval\n', ...
+            datestr(datetime), timeRemainingToWait_min, scanTimeInterval_min);
+        pause(timeRemainingToWait_min*60);
+    end
+end % Loop for the next scan
