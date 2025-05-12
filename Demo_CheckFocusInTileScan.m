@@ -97,7 +97,7 @@ for volumeIi = 1:length(volumeIs)
             dimensions.x.values, ...
             dimensions.y.values, ...
             planeToPlot);
-        clim([-5 +6]);
+        caxis([-5 +6]);
         colormap gray;
         xlabel(['X [' dimensions.x.units ']']);
         ylabel(['Y [' dimensions.y.units ']']);
