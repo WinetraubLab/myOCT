@@ -5,22 +5,30 @@ function yOCTSetLibraryPath(mode)
 % 'full' where path head is one folder above that and we include myOCT as
 % well as hashtag alignment
 
-%% Add to path
-% Get this file's path
+%% Check if running this function is needed or path has been added
+
+global yOCTSetLibraryPathRunOnce
+if isempty(yOCTSetLibraryPathRunOnce)
+    yOCTSetLibraryPathRunOnce = true;
+else
+    return; % This function ran before
+end
+
+%% Get this file's path
 p = mfilename('fullpath');
 pathparts = strsplit(p,filesep);
 pathparts(end) = [];
 
 % Generate myOCT/ folder path
-myOCTFolder = assemblepath(pathparts(1:(end-1)));
+myOCTFolder = assemblepath(pathparts(1:(end)));
 
-% Generate hashtag alginment path
-hashtagAlignmentFolder = assemblepath([pathparts(1:(end-2)) {'HashtagAlignmentRepo'}]);
+% Generate parent path
+parentFolder = assemblepath(pathparts(1:(end-1)));
 
-% Add to path as needed by user input
+%% Add to path as needed by user input
 addpath(genpath(myOCTFolder));
 if exist('mode','var') && strcmp(mode,'full')
-    addpath(genpath(hashtagAlignmentFolder));
+    addpath(genpath(parentFolder));
 end
 
 function s = assemblepath(pathparts)
