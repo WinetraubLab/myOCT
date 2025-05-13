@@ -46,8 +46,7 @@ skipScanning = false;
 focusPositionInImageZpix = NaN;
 
 % Time interval
-scanTimeInterval_min = 60; % How often to scan
-scanTimeNumberOfIntervals = 12; % How many times to repeat the interval
+scanTimeIntervals_min = (0:3:12)*60; % At what times to scan
 
 %% Compute scanning parameters
 
@@ -60,7 +59,9 @@ if (min(zToScan_mm)) > -100e-3
     warning('Because we use gel above tissue to find focus position. It is important to have at least one of the z-stacks in the gel. Consider having the minimum zToScan_mm to be -100e-3[mm]')
 end
 
-fprintf('First scan will be at t=0\nLast scan at t=%.1f Hr\n',scanTimeNumberOfIntervals*scanTimeInterval_min/60);
+fprintf('First scan will be at t=%0.f Hr\nLast scan at t=%.1f Hr\n',...
+    scanTimeIntervals_min(1)/60, ...
+    scanTimeIntervals_min(end)/60);
 
 %% Focus check
 fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
@@ -79,7 +80,22 @@ fprintf('%s Please adjust the OCT focus such that it is precisely at the interse
 tmpVolumeOutputFolder = [outputFolder '/OCTVolume/']; % This volume folder will be removed 
 tStart = tic();
 
-for scanI = 1:(scanTimeNumberOfIntervals+1)
+for scanI = 1:length(scanTimeIntervals_min)
+    %% Wait until it's time to scan
+
+    dt_min = toc(tStart)/60;
+    timeRemainingToWait_min = scanTimeIntervals_min(scanI) - dt_min;
+    timeRemainingToWait_sec = round(timeRemainingToWait_min*60+0.01);
+
+    if (timeRemainingToWait_sec<0)
+        warning('Interval too short!');
+    else
+        fprintf('%s Waiting for %.0f min to complete %.0f min interval\n', ...
+            datestr(datetime), timeRemainingToWait_sec/60, scanTimeInterval_min);
+        pause(timeRemainingToWait_sec);
+    end
+    
+    %% Scan
     scanName = strrep(datestr(datetime),':','_');
 
     fprintf('%s Scanning Volume\n',datestr(datetime));
@@ -111,20 +127,5 @@ for scanI = 1:(scanTimeNumberOfIntervals+1)
             'dispersionQuadraticTerm',dispersionQuadraticTerm,... Use default
             'interpMethod','sinc5', ...
             'v',true);
-    end
-
-    dt_min = toc(tStart)/60;
-    timeRemainingToWait_min = scanTimeInterval_min*scanI-dt_min;
-
-    if scanI == scanTimeNumberOfIntervals+1
-        continue; % This is the last interval, no need to wait.
-    end
-
-    if (timeRemainingToWait_min<0)
-        warning('Interval too short!');
-    else
-        fprintf('%s Waiting for %.0f min to complete %.0f min interval\n', ...
-            datestr(datetime), timeRemainingToWait_min, scanTimeInterval_min);
-        pause(timeRemainingToWait_min*60);
     end
 end % Loop for the next scan
