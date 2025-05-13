@@ -60,6 +60,8 @@ if (min(zToScan_mm)) > -100e-3
     warning('Because we use gel above tissue to find focus position. It is important to have at least one of the z-stacks in the gel. Consider having the minimum zToScan_mm to be -100e-3[mm]')
 end
 
+fprintf('First scan will be at t=0\nLast scan at t=%.1f Hr\n',scanTimeNumberOfIntervals*scanTimeInterval_min/60);
+
 %% Focus check
 fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
 
@@ -77,7 +79,7 @@ fprintf('%s Please adjust the OCT focus such that it is precisely at the interse
 tmpVolumeOutputFolder = [outputFolder '/OCTVolume/']; % This volume folder will be removed 
 tStart = tic();
 
-for scanI = 1:scanTimeNumberOfIntervals
+for scanI = 1:(scanTimeNumberOfIntervals+1)
     scanName = strrep(datestr(datetime),':','_');
 
     fprintf('%s Scanning Volume\n',datestr(datetime));
@@ -113,6 +115,10 @@ for scanI = 1:scanTimeNumberOfIntervals
 
     dt_min = toc(tStart)/60;
     timeRemainingToWait_min = scanTimeInterval_min*scanI-dt_min;
+
+    if scanI == scanTimeNumberOfIntervals+1
+        continue; % This is the last interval, no need to wait.
+    end
 
     if (timeRemainingToWait_min<0)
         warning('Interval too short!');
