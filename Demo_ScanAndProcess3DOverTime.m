@@ -90,8 +90,8 @@ for scanI = 1:length(scanTimeIntervals_min)
     if (timeRemainingToWait_sec<0)
         warning('Interval too short!');
     else
-        fprintf('%s Waiting for %.0f min to complete %.0f min interval\n', ...
-            datestr(datetime), timeRemainingToWait_sec/60, scanTimeInterval_min);
+        fprintf('%s Waiting for %.0f min to complete.\n', ...
+            datestr(datetime), timeRemainingToWait_sec/60);
         pause(timeRemainingToWait_sec);
     end
     
