@@ -3,8 +3,6 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 % the OCT image.
 %   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
 %   pixelSize_um: Pixel resolution for this analysis, default: 25 um.
-%   isVisualize: set to true to generate image heatmap visualization
-%       figure. Default is false
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
 %   octProbeFOV_mm: How much of the field of view to use from the probe during scans.
 %   temporaryFolder: Directory for temporary files. 
@@ -15,7 +13,8 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %   assertInFocusAcceptableRange_mm: how far can tissue surface be from 
 %       focus position to be considered "good enough". Default: 0.025mm, 
 %       set to [] to skip assertion.
-%   v: Verbose mode for debugging purposes, default is false.
+%   v: Verbose mode for debugging purposes and visualization default is 
+%       false.
 %   skipHardware: Set to true to skip hardware operation. Default: false.
 % OUTPUTS:
 %   - surfacePosition_mm - 2D matrix. dimensions are (y,x). What
@@ -27,7 +26,6 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 
 %% Parse inputs
 p = inputParser;
-addParameter(p,'isVisualize',false);
 addParameter(p,'xRange_mm',[-1 1]);
 addParameter(p,'yRange_mm',[-1 1]);
 addParameter(p,'pixelSize_um',25);
@@ -46,7 +44,6 @@ in = p.Results;
 xRange_mm = in.xRange_mm;
 yRange_mm = in.yRange_mm;
 pixelSize_um = in.pixelSize_um;
-isVisualize = in.isVisualize;
 octProbeFOV_mm = in.octProbeFOV_mm;
 octProbePath = in.octProbePath;
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
@@ -108,7 +105,7 @@ tSurface = tic;
 surfacePosition_mm = yOCTFindTissueSurface( ...
     logMeanAbs, ...
     dimensions, ...
-    'isVisualize', isVisualize, ...
+    'isVisualize', v, ...
     'octProbeFOV_mm', octProbeFOV_mm);
 
 x_mm=dimensions.x.values;
