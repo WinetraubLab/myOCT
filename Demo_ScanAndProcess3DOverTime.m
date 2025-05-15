@@ -13,7 +13,7 @@ yOCTSetLibraryPath(); % Set path
 % Define the 3D Volume
 pixel_size_um = 1; % x-y Pixel size in microns
 xOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
-yOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
+yOverall_mm = [-0.15 0.15]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
 % Uncomment below to scan one B-Scan.
 % yOverall_mm = 0;
 
@@ -36,7 +36,10 @@ tissueRefractiveIndex = 1.4; % Use either 1.33 or 1.4 depending on the results. 
 dispersionQuadraticTerm=-1.549e08;  % 40x, OCTP900
 
 % Where to save scan files
-outputFolder = '\';
+outputFolder = 'temp/';
+if (outputFolder(end) ~= '\' || outputFolder(end) ~= '/')
+    outputFolder(end+1) = '/';
+end
 
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
@@ -46,7 +49,7 @@ skipScanning = false;
 focusPositionInImageZpix = NaN;
 
 % Time interval
-scanTimeIntervals_min = (0:3:12)*60; % At what times to scan
+scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
 
 %% Compute scanning parameters
 
@@ -90,9 +93,12 @@ for scanI = 1:length(scanTimeIntervals_min)
     if (timeRemainingToWait_sec<0)
         warning('Interval too short!');
     else
-        fprintf('%s Waiting for %.0f min to complete %.0f min interval\n', ...
-            datestr(datetime), timeRemainingToWait_sec/60, scanTimeInterval_min);
-        pause(timeRemainingToWait_sec);
+        fprintf('%s Waiting for %.0f min to complete.\n', ...
+            datestr(datetime), timeRemainingToWait_sec/60);
+
+        if ~skipScanning % No need to wait if skipping scanning
+            pause(timeRemainingToWait_sec);
+        end
     end
     
     %% Scan
@@ -129,3 +135,35 @@ for scanI = 1:length(scanTimeIntervals_min)
             'v',true);
     end
 end % Loop for the next scan
+
+%% Load slices and generate projection
+
+% List the files in the folder
+filesInFolder = awsls(outputFolder(1:(end-1)));
+filesInFolder = [...
+    filesInFolder(endsWith(filesInFolder, '.tif', 'IgnoreCase', true)) ...
+    filesInFolder(endsWith(filesInFolder, '.tiff', 'IgnoreCase', true)) ...
+    ];
+filesInFolder = cellfun(@(x)([outputFolder x]),filesInFolder,'UniformOutput',false);
+
+% XZ slice of the center
+data = yOCTCreateTemporalSliceMovieFrom3DTiffs(...
+    filesInFolder,scanTimeIntervals_min, 'xz_middle.gif', ...
+    round(diff(yOverall_mm)/pixel_size_um*1e3)/2, ... Middle slice
+    'xz','minprojection', 5, [-24 14] ...
+    );
+
+zz = 600;
+figure(1);
+imagesc(squeeze(data(:,:,1)))
+colormap gray;
+hold on;
+yline(zz, 'r');
+hold off
+
+% XY slice, relatively close to the center
+yOCTCreateTemporalSliceMovieFrom3DTiffs(...
+    filesInFolder,scanTimeIntervals_min, 'xy.gif', ...
+    zz, ... some slice
+    'xy','average', 5, [-24 14] ...
+    );
