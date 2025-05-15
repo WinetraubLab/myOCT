@@ -3,8 +3,6 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 % the OCT image.
 %   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
 %   pixelSize_um: Pixel resolution for this analysis, default: 25 um.
-%   isVisualize: set to true to generate image heatmap visualization
-%       figure. Default is false
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
 %   octProbeFOV_mm: How much of the field of view to use from the probe during scans.
 %   temporaryFolder: Directory for temporary files. 
