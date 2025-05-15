@@ -25,7 +25,7 @@ function allData = yOCTCreateTemporalSliceMovieFrom3DTiffs(...
 
 %% Input checks
 
-gifSpeed = 5;
+gifSpeed = 20;
 
 if length(tiffFilePaths) ~= length(timePoints_min)
     error('Number of files doesn''t match time points');
