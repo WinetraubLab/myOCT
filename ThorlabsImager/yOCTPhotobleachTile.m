@@ -111,9 +111,10 @@ json.photobleachPlan = photobleachPlan;
 % Plot the plan
 if json.plotPattern
     % Estimate photobleach time
-    totalLineLength = sum(sum([photobleachPlan.lineLengths_mm{:}])); % mm
+    lenCells        = {photobleachPlan.lineLength_mm};   % Each cell is a vector
+    totalLineLength = sum([lenCells{:}]);                % Concatenate & sum
     estimatedPhotobleachTime_sec = totalLineLength*json.exposure; % sec
-   
+    
     yOCTPhotobleachTile_drawPlan(...
         photobleachPlan, json.FOV, estimatedPhotobleachTime_sec);
 end
