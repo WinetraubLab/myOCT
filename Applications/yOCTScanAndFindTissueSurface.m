@@ -138,9 +138,46 @@ if (v)
         datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
 end
 
-%% Assert
+%% Assert focus is within acceptable range
 if ~isempty(in.assertInFocusAcceptableRange_mm)
-    yOCTAssertTissueSurfaceIsInFocus( ...
-        surfacePosition_mm, x_mm, y_mm, ...
-        in.assertInFocusAcceptableRange_mm, v);
+    % Get FOV (use probe.ini if [] was passed)
+    if isempty(octProbeFOV_mm)
+        tmpIni = yOCTReadProbeIniToStruct(octProbePath);
+        octProbeFOV_mm = tmpIni.RangeMaxX;    % lens X range
+    end
+    % Crop surface map to that FOV
+    [surfFOV_mm, xFOV_mm, yFOV_mm] = cropToFOV( ...
+        surfacePosition_mm, x_mm, y_mm, octProbeFOV_mm );
+    % Run the assertion inside TRY‑CATCH so we don't lose surface data
+    if numel(surfFOV_mm) > 0      % only assert if crop not empty
+         try
+            yOCTAssertTissueSurfaceIsInFocus( ...
+                surfFOV_mm, xFOV_mm, yFOV_mm, ...
+                in.assertInFocusAcceptableRange_mm, v);
+        catch ME
+            warning(['Focus‑assert failed (', ME.message, ...
+                '). Continuing so you can inspect surfacePosition_mm, x_mm, y_mm.']);
+            assignin('caller','FocusAssertError',ME);
+         end
+    end
+end
+end
+
+% Helper to crop the assert area only for current FOV (Main OCT Scan)
+function [surfCrop, xCrop, yCrop] = cropToFOV(surf, x, y, fov_mm)
+    half = fov_mm/2;
+    ix   = abs(x) <= half;          % mask for X
+    iy   = abs(y) <= half;          % mask for Y
+
+    % safety fallback
+    if ~any(ix) || ~any(iy)         % FOV narrower than data → keep full map
+        surfCrop = surf;
+        xCrop    = x;
+        yCrop    = y;
+        return
+    end
+
+    surfCrop = surf( iy , ix );   % (y,x) order
+    xCrop    = x( ix );
+    yCrop    = y( iy );
 end

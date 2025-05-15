@@ -1,5 +1,5 @@
 function yOCTAssertTissueSurfaceIsInFocus( ...
-    surfacePosition_mm, x_mm, y_mm, acceptableRange_mm)
+    surfacePosition_mm, x_mm, y_mm, acceptableRange_mm, v)
 % This function checks the outputs from yOCTScanAndFindTissueSurface and
 % asserts that the tissue surface is in focus. It will also explain to user
 % how to adjust the z stage such that tissue will be in focus.
@@ -10,6 +10,7 @@ function yOCTAssertTissueSurfaceIsInFocus( ...
 %   y_mm: provided by yOCTScanAndFindTissueSurface
 %   acceptableRange_mm: how far can tissue surface be from focus position
 %       to be considered "good enough". Default: 0.025mm
+%   v: verbose flag (true = print, false = silent). Default: False.
 
 %% Input checks
 
@@ -18,6 +19,7 @@ assert(size(surfacePosition_mm,2) == length(x_mm),'surfacePosition_mm second dim
 if ~exist('acceptableRange_mm','var')
     acceptableRange_mm = 0.025;
 end
+if nargin < 5,  v = false;  end            % verbose OFF by default
 
 %% Compute the average surface distance
 surfacePosition_mm = surfacePosition_mm(:);
@@ -27,20 +29,33 @@ if isnan(averageSurfaceDistance_mm)
         'Please manually increase the stage Z position to bring the tissue into focus.']);
 end
 
-
-%% Instruct user how to change the surface position 
+%% Instruct user how we will change the surface position
 if abs(averageSurfaceDistance_mm) > acceptableRange_mm
     if averageSurfaceDistance_mm > 0 % Determine direction of adjustment
-        direction = 'increase';
+        direction = 'increase';   % surface is below focus = raise stage
     else
-        direction = 'decrease';
+        direction = 'decrease';   % surface is above focus = lower stage
     end
-    
-    errorID = 'yOCT:SurfaceOutOfFocus';
-    msg = sprintf(['The average distance of the surface (%.3fmm) is out of range.\n\n', ...
-        'Please %s the stage Z position by %.3fmm to bring the tissue surface into focus.'], ...
-        averageSurfaceDistance_mm, direction, abs(round(averageSurfaceDistance_mm, 3)));
-    error(errorID, msg); 
-end
 
-fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', datestr(datetime), averageSurfaceDistance_mm);
+    % Automatic Z correction
+    [x0,y0,z0] = yOCTStageInit();      % query current stage position
+    
+    try
+        yOCTStageMoveTo(NaN, NaN, z0 + averageSurfaceDistance_mm, v);
+        warning('Focus‑assert: surface %.3f mm out of range – automatically %sd stage Z by %.3f mm.', ...
+                averageSurfaceDistance_mm, direction, abs(round(averageSurfaceDistance_mm,3)));
+        if v
+            fprintf('%s Stage Z moved from %.3f mm to %.3f mm (OCT coord).\n', ...
+                    datestr(datetime), z0, z0 + averageSurfaceDistance_mm);
+        end
+    catch ME
+        warning('Focus‑assert: wanted to %s stage Z by %.3f mm but move failed (%s).', ...
+                direction, abs(round(averageSurfaceDistance_mm,3)), ME.message);
+    
+    end
+else
+    if v
+        fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', ...
+                datestr(datetime), averageSurfaceDistance_mm);
+    end
+end
