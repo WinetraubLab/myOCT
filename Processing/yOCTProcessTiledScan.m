@@ -228,7 +228,12 @@ if cropZAroundFocusArea
     end
 
     dimOutput_mm.z.values = zAll(:)';
+    dimOutput_mm.z.indexes = 1:length(zAll);
 end
+
+% Dimensions check
+assert(length(dimOutput_mm.z.values) == length(dimOutput_mm.z.index));
+assert(length(dimOutput_mm.x.values) == length(dimOutput_mm.x.index));
 
 %% Save some Y planes in a debug folder if needed
 if ~isempty(in.yPlanesOutputFolder) && in.howManyYPlanes > 0
