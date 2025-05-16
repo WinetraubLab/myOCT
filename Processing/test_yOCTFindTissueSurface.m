@@ -106,7 +106,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             
         end
 
-        function testSAssertTissueSurfaceInFocus(testCase)
+        function testAssertTissueSurfaceInFocus(testCase)
             % This test verifies the assertion functionality
 
             % Convert to mm to make calculations below easier
@@ -129,7 +129,66 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             testCase.verifyError(...
                 @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ+0.050,x,y),...
                 'yOCT:SurfaceOutOfFocus');
+
+            % This should fail, move 50um out of focus, in the other
+            % direction sure that function returns an error.
+            testCase.verifyError(...
+                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ-0.050,x,y),...
+                'yOCT:SurfaceOutOfFocus');
+        end
+
+        function testOnlyPartOfTissueIsInFocus(testCase)
+
+            % Where surface positoin should be (where we constructed it)
+            surfacePosition = zeros(100,100);
+            x = linspace(0,1,100);
+            y = linspace(0,1,100);
+
+            % Shift a small portion of the surface away from focus, make
+            % sure assertion passes (as this is a small part)
+            surfacePosition1 = surfacePosition;
+            surfacePosition1(1:10,1:10) = 1000;
+            yOCTAssertTissueSurfaceIsInFocus(surfacePosition1,x,y)
+
+            % Shift a large portion of the surface away from focus, make
+            % sure assertion fails
+            surfacePosition1 = surfacePosition;
+            surfacePosition1(1:50,:) = 1000;
+            try
+                yOCTAssertTissueSurfaceIsInFocus(surfacePosition1, x, y);
+                testCase.verifyFail('Expected an error, but none was thrown.');
+            catch ME
+                validErrorIds = {'yOCT:SurfaceOutOfFocus', 'yOCT:SurfaceCannotBeInFocus'};
+                testCase.verifyTrue(ismember(ME.identifier, validErrorIds), ...
+                    sprintf('Unexpected error ID: %s', ME.identifier));
+            end
+        end
+        
+        function testNoEstimationYieldsAssertError(testCase)
+            % Where surface positoin should be (where we constructed it)
+            surfacePosition = zeros(100,100);
+            x = linspace(0,1,100);
+            y = linspace(0,1,100);
+
+            % Make it such big potion of surface position is unknown
+            surfacePosition(1:100,:) = NaN;
+
+            testCase.verifyError(...
+                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition,x,y),...
+                'yOCT:SurfaceCannotBeEstimated');
+        end
+
+        function testUnevenSurfaceYieldsAssertError(testCase)
+            % Create a surface that on average is in focus, but in practice
+            % is very much out of focus
+            x = linspace(0,1,100);
+            y = linspace(0,1,100);
+            surfacePosition = x'*y; 
+            surfacePosition = surfacePosition - mean(surfacePosition);
+
+            testCase.verifyError(...
+                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition,x,y),...
+                'yOCT:SurfaceCannotBeInFocus');
         end
     end
-    
 end
