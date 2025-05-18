@@ -205,9 +205,20 @@ zPixelSizeByPolyFit_um = abs(p(1)*1e3);
 zPixelSizeFromDim_um = diff(dim.z.values(1:2));
 
 if abs(zPixelSizeFromDim_um/zPixelSizeByPolyFit_um-1) > 0.02
+    adjustedN = zPixelSizeFromDim_um/zPixelSizeByPolyFit_um*nIndexOfRefraction;
     warning('Index of refreaction is probably not %.2f.\nZ pixel size by fiting movement: %.2fum.\nZ pixel size by n: %.2fum.\nRecommended n=%.2f',...
         nIndexOfRefraction,zPixelSizeByPolyFit_um,zPixelSizeFromDim_um,...
-        zPixelSizeFromDim_um/zPixelSizeByPolyFit_um*nIndexOfRefraction);
+        adjustedN);
+
+    if in.v
+        figure(19)
+        plot(peakPixel,zDepths_mm*1e3,'o',peakPixel,polyval(p,peakPixel)*1e3,'-');
+        xlabel('Peak Z Position [pix]');
+        ylabel('Stage Z Position [um]');
+        legend('Data',sprintf('Fit, n=%.2f',adjustedN));
+        grid on;
+        title('Peak Position [pixels] vs Stage Position [um]');
+    end
 end
 
 %% Plot dispersion 
