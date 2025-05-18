@@ -153,6 +153,11 @@ scanMean(~zToInclude) = 0;
 % Focus is where the peak is achived
 [~,focusPositionInImageZpix] = max(scanMean);
 
+% Sanity check, make sure that Z doesn't change a lot along the scan
+% In theory, the scan should be very small thus z shouldn't change
+pos = alignZ(log(scanAtFocus));
+assert(max(abs(pos-focusPositionInImageZpix)) < 2, 'Check focusPositionInImageZpix against scan failed');
+
 %% Plot
 if ~in.v
     return; % No plotting needed
@@ -187,4 +192,24 @@ for ii = 1:length(zDepths_mm)
         set(gca, 'YTickLabel', []);
     end
 end
+end
+function pos = alignZ(scan)
+    zI = 1:size(scan,1); zI = zI(:);
+    
+    pos = zeros(1,size(scan,2));
+    for xI = 1:length(pos)
+        s = scan(:, xI);
+        [~, maxIdZ] = max(s);
+        maxIdZEnv = maxIdZ + (-10:10);
+
+        model = @(x)(x(1)*exp( -(zI(maxIdZEnv)-x(2)).^2/(2*x(3)^2) ) + x(4));
+        x0 = [max(s)-min(s(maxIdZEnv)),maxIdZ,1,min(s(maxIdZEnv))];
+        a = fminsearch(@(x)(mean( (model(x)-s(maxIdZEnv)).^2 )),x0);
+
+        %plot(zI(maxIdZEnv),[s(maxIdZEnv) model(a) model(x0)]);
+        
+        pos(xI) = a(2);
+    end
+
+    plot(pos);
 end
