@@ -211,4 +211,5 @@ function pos = alignZ(scan)
         pos(xI) = a(2);
     end
 
+    %plot(pos);
 end
