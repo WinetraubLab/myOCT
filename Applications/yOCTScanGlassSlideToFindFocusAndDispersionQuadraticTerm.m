@@ -167,7 +167,7 @@ title(sprintf('dispersionQuadraticTerm=%.4g, focusPositionInImageZpix=%d',...
 xlabel('x [pix]');
 ylabel('z [pix]');
 
-% Identify which is the focus position
+% Identify which z is at the focus position
 figure(224);
 for ii = 1:length(zDepths_mm)
     subplot(1,length(zDepths_mm),ii)
