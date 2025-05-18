@@ -162,8 +162,9 @@ if ~in.v
     return; % No plotting needed
 end
 
+% Plot final result
 figure(223)
-imagesc(log(squeeze(scan(:,:,1))));
+imagesc(log(scanAtFocus));
 colormap gray;
 yline(focusPositionInImageZpix, 'r--');
 title(sprintf('dispersionQuadraticTerm=%.4g, focusPositionInImageZpix=%d',...
@@ -171,4 +172,23 @@ title(sprintf('dispersionQuadraticTerm=%.4g, focusPositionInImageZpix=%d',...
 xlabel('x [pix]');
 ylabel('z [pix]');
 
+% Identify which is the focus position
+figure(224);
+for ii = 1:length(zDepths_mm)
+    subplot(1,length(zDepths_mm),ii)
+
+    imagesc(log(squeeze(scans(:,:,ii))));
+    colormap gray;
+    if ii == atFocusIndex
+        title(['Estimated' newline 'Focus']);
+    else
+        title(sprintf('%.0f\\mum',1e3*(zDepths_mm(ii)-zDepths_mm(atFocusIndex))));
+    end
+
+    % Turn off tick labels if not needed
+    set(gca, 'XTickLabel', []);
+    if ii ~= 1
+        set(gca, 'YTickLabel', []);
+    end
+end
 end
