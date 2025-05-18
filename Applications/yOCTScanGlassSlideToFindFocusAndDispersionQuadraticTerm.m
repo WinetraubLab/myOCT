@@ -35,7 +35,7 @@ if (tempFolder(end) ~= '\' &&  tempFolder(end) ~= '/')
     tempFolder(end+1) = '/';
 end
 
-%% Step #1: Scan multiple depths
+%% Scan multiple depths
 if (in.v)
     fprintf('%s Please adjust the OCT focus such that it is at the bottom of the glass silde.\n', datestr(datetime));
 end
