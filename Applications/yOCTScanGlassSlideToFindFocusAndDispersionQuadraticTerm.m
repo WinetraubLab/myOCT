@@ -37,7 +37,7 @@ end
 
 %% Step #1: Scan multiple depths
 if (in.v)
-    fprintf('%s Please adjust the OCT focus such that it is at the top of the glass silde.\n', datestr(datetime));
+    fprintf('%s Please adjust the OCT focus such that it is at the bottom of the glass silde.\n', datestr(datetime));
 end
 
 % Scan some options
