@@ -40,27 +40,22 @@ if (in.v)
     fprintf('%s Please adjust the OCT focus such that it is at the bottom of the glass silde.\n', datestr(datetime));
 end
 
-pixelSize_um = 1;
-yOCTScanTile (...
-    tempFolder, ...
-    0.05 * [-1, 1], ...
-    1e-3 * [-1, 1] * pixelSize_um, ...
-    'octProbePath', in.octProbePath, ...
-    'pixelSize_um', pixelSize_um, ...
-    'skipHardware', in.skipHardware, ...
-    'zDepths',1e-3*linspace( ...
-        -in.focusSearchSize_um, in.focusSearchSize_um, 5), ...
-    'v',in.v  ...
-    );
+% This helper function scans to find focus. It outputs interfs
+% (lambda,x,zDepth), and zDepths_mm for the positions that the scan was
+% conducted. atFocusIndex is the index of the focus.
+function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
+    % Parameters
+    pixelSize_um = 1;
+    bestZ_mm = 0; % Initialize to what the user set
+    nSamplesInRange = 8; % Use even number to prevent scanning the same spot
 
-% Load all the scans, find the scan that is in focus
-json = awsReadJSON([tempFolder 'ScanInfo.json']);
-function atFocusIndex = findScanInFocus()
-    atFocusIndex = NaN;
-    atFocusIntensity = 0;
-    for scanI = 1:length(json.octFolders)
-        interf = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}]);
-        score = mean(abs(interf(:)));
+    % Build range as a cascaede of zooming in options
+    range_um(1) = in.focusSearchSize_um;
+    step_um = @(range)(range*2/(nSamplesInRange-1)); 
+    while(step_um(step_um(range_um(end)))>1)
+        range_um(end+1) = round(step_um(range_um(end))*1.2); %#ok<AGROW>
+    end
+    range_um(end+1) = 1*(nSamplesInRange-1)/2;% Last range has 1um step size
     
     % Initalize collection
     zDepths_mm = [];
