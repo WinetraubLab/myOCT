@@ -40,7 +40,6 @@ if (in.v)
     fprintf('%s Please adjust the OCT focus such that it is at the bottom of the glass silde.\n', datestr(datetime));
 end
 
-% Scan some options
 pixelSize_um = 1;
 yOCTScanTile (...
     tempFolder, ...
@@ -63,20 +62,66 @@ function atFocusIndex = findScanInFocus()
         interf = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}]);
         score = mean(abs(interf(:)));
     
-        if score > atFocusIntensity
-            atFocusIntensity = score;
-            atFocusIndex = scanI;
-        end
-    end
-end
-atFocusIndex = findScanInFocus();
+    % Initalize collection
+    zDepths_mm = [];
+    interfs = [];
 
-%% Load the at focus scan
-[interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{atFocusIndex}]);
+    % Scan some options
+    for i=1:length(range_um)
+        if (in.v)
+            fprintf('Best Focus Positon: %.0fum. Scanning [%.1fum, %.1fum]\n', ...
+                bestZ_mm*1e3, -range_um(i), range_um(i));
+        end
+        yOCTScanTile (...
+            tempFolder, ...
+            0.05 * [-1, 1], ...
+            1e-3 * [-1, 1] * pixelSize_um, ...
+            'octProbePath', in.octProbePath, ...
+            'pixelSize_um', pixelSize_um, ...
+            'skipHardware', in.skipHardware, ...
+            'zDepths',bestZ_mm + 1e-3 * ...
+                linspace(-range_um(i),range_um(i), nSamplesInRange), ...
+            'v',in.v  ...
+            );
+        
+        % Load all the scans, find the scan that is in focus
+        json = awsReadJSON([tempFolder 'ScanInfo.json']);
+        atFocusIndex = NaN;
+        atFocusIntensity = 0;
+        for scanI = 1:length(json.octFolders)
+            [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}]);
+            score = mean(abs(interf(:)));
+            
+            % Collect data
+            if isempty(interfs)
+                interfs = interf(:,:,1);
+            else
+                interfs(:,:,size(interfs,3)+1) = interf(:,:,1); %#ok<AGROW>
+            end
+            zDepths_mm(end+1) = json.zDepths(scanI); %#ok<AGROW>
+        
+            if score > atFocusIntensity
+                atFocusIntensity = score;
+                atFocusIndex = size(interfs,3);
+            end
+        end
+
+        % Update best focus position
+        bestZ_mm = zDepths_mm(atFocusIndex);
+    end % Loop around
+
+    % Sort output
+    [~, ind] = sort(zDepths_mm);
+    zDepths_mm = zDepths_mm(ind);
+    interfs = interfs(:,:,ind);
+    atFocusIndex = find(bestZ_mm==zDepths_mm,1,'first');
+end
+[interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus();
+interfAtFocus = squeeze(interfs(:,:,atFocusIndex));
 
 %% Find dispersion
 function e = dispersionErrorFunction(d)
-    scan = yOCTInterfToScanCpx(interf, dim, ...
+    scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
         'dispersionQuadraticTerm', d);
 
     scan = mean(mean(abs(scan),3),2); % Average along x,y
@@ -85,10 +130,23 @@ end
 dispersionQuadraticTerm = fminsearch(...
     @dispersionErrorFunction,in.dispersionQuadraticTermInitialGuess);
 
-%% Find focus position
-scan = yOCTInterfToScanCpx(interf, dim, ...
+%% Convert all interfs to scans
+scans = [];
+for ii=1:length(zDepths_mm)
+    scan1 = yOCTInterfToScanCpx(interfs(:,:,ii), dim, ...
         'dispersionQuadraticTerm', dispersionQuadraticTerm);
-scanMean = mean(mean(abs(scan),3),2); % Average along x,y
+    scan1 = mean(abs(scan1),3);
+    if isempty(scans)
+        scans = scan1;
+    else
+        scans(:,:,end+1) = scan1; %#ok<AGROW>
+    end
+end
+scanAtFocus = squeeze(scans(:,:,atFocusIndex));
+
+
+%% Find focus position
+scanMean = mean(scanAtFocus,2); % Average along x,y
 
 % Remove z depths that are too far from the initial guess
 zToInclude = ones(size(scanMean),'logical');
