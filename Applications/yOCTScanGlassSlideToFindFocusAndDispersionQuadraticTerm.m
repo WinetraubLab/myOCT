@@ -166,7 +166,7 @@ figure(223)
 imagesc(log(squeeze(scan(:,:,1))));
 colormap gray;
 yline(focusPositionInImageZpix, 'r--');
-title(sprintf('dispersionQuadraticTerm=%.2g, focusPositionInImageZpix=%d',...
+title(sprintf('dispersionQuadraticTerm=%.4g, focusPositionInImageZpix=%d',...
     dispersionQuadraticTerm,focusPositionInImageZpix));
 xlabel('x [pix]');
 ylabel('z [pix]');
