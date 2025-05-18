@@ -12,6 +12,7 @@ function [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
 %   focusPositionInImageZpixInitialGuess: initial guess for Z position.
 %   focusSearchSize_um: We assume that the glass slide is not perfectly in
 %       focus, what range should we expect it to be within? Units: microns.
+%   tempFolder: path to temporary folder to save OCT volumes.
 %   skipHardware: set to true to skip hardware.
 %   v: verbose (and visualize) option.
 
@@ -23,17 +24,15 @@ addParameter(p,'dispersionQuadraticTermInitialGuess',-1.482e8,@isnumeric);
 addParameter(p,'focusPositionInImageZpixInitialGuess',400,@isnumeric);
 addParameter(p,'focusSearchSize_um',25,@(x)(isnumeric(x) & x>0));
 addParameter(p,'skipHardware',false,@islogical);
+addParameter(p,'tempFolder','./TmpOCTVolume/',@ischar);
 addParameter(p,'v',true,@islogical);
 
 parse(p,varargin{:});
 in = p.Results;
 
-tempFolder = './TmpOCTVolume/';
-
-if in.skipHardware
-    dispersionQuadraticTerm = in.dispersionQuadraticTermInitialGuess;
-    focusPositionInImageZpix = in.focusPositionInImageZpixInitialGuess;
-    return  
+tempFolder = in.tempFolder;
+if (tempFolder(end) ~= '\' &&  tempFolder(end) ~= '/')
+    tempFolder(end+1) = '/';
 end
 
 %% Step #1: Scan multiple depths
