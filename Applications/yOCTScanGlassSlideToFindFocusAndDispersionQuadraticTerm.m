@@ -158,7 +158,7 @@ scanMean(~zToInclude) = 0;
 pos = alignZ(log(scanAtFocus));
 assert(max(abs(pos-focusPositionInImageZpix)) < 2, 'Check focusPositionInImageZpix against scan failed');
 
-%% Plot
+%% Plot final plot
 if ~in.v
     return; % No plotting needed
 end
@@ -173,7 +173,7 @@ title(sprintf('dispersionQuadraticTerm=%.4g, focusPositionInImageZpix=%d',...
 xlabel('x [pix]');
 ylabel('z [pix]');
 
-% Identify which z is at the focus position
+%% Plot Identify which z is at the focus position
 figure(224);
 for ii = 1:length(zDepths_mm)
     subplot(1,length(zDepths_mm),ii)
@@ -192,24 +192,89 @@ for ii = 1:length(zDepths_mm)
         set(gca, 'YTickLabel', []);
     end
 end
+
+%% Plot dispersion 
+
+% Compute scans on a few dispersion values
+dValues = unique([dispersionQuadraticTerm, linspace(dispersionQuadraticTerm*0.96, dispersionQuadraticTerm*1.04,4)]);
+[~,ii] = sort(abs(dValues));
+dValues = dValues(ii);
+intensities = zeros(size(scans,1),length(dValues));
+for ii = 1:length(dValues)
+    scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
+        'dispersionQuadraticTerm', dValues(ii));
+    intensities(:,ii) = mean(mean(log(abs(scan)),3),2);
 end
-function pos = alignZ(scan)
+
+% Find key dispersion values
+iSame = find(dValues==dispersionQuadraticTerm,1,'first');
+
+% Asign color to each graph
+col = zeros(size(dValues));
+col(abs(dValues) > abs(dispersionQuadraticTerm)) = 1;
+col(abs(dValues) < abs(dispersionQuadraticTerm)) = -1;
+
+i1P = find(col==1,1,'first');
+i1N = find(col==-1,1,'last');
+
+% Align z to match
+[focusAlignment] = alignZ(intensities,intensities(:,iSame)); % Align z to template
+focusAlignment = focusAlignment-mean(focusAlignment);
+zI = 1:size(intensities,1);
+
+% Plot all options
+figure(225);
+plot(zI+focusAlignment(iSame),intensities(:,iSame),'r','LineWidth',2)
+hold on;
+plot(zI+focusAlignment(i1P),intensities(:,i1P),'g','LineWidth',2)
+plot(zI+focusAlignment(i1N),intensities(:,i1N),'b','LineWidth',2)
+for ii=find(col==1)
+    plot(zI+focusAlignment(ii),intensities(:,ii),'g')
+end
+for ii=find(col==-1)
+    plot(zI+focusAlignment(ii),intensities(:,ii),'b')
+end
+plot(zI+focusAlignment(iSame),intensities(:,iSame),'r','LineWidth',2)
+hold off;
+xlabel('Z [pix]');
+ylabel('Log Intensity');
+legend('Optimal Dispersion', 'Above Optimal Dispoersion', 'Below Optimal Dispersion');
+xlim(focusPositionInImageZpix + [-6 6]);
+grid on;
+if col(1) == 1
+    s1 = 'green';
+    s2 = 'blue';
+else
+    s1 = 'blue';
+    s2 = 'green';
+end
+title(sprintf('%.4g (%s) to %.4g (%s)',dValues(1),s1,dValues(end),s2));
+
+end
+
+function [pos, width] = alignZ(scan, template)
     zI = 1:size(scan,1); zI = zI(:);
     
     pos = zeros(1,size(scan,2));
+    width = pos;
     for xI = 1:length(pos)
         s = scan(:, xI);
         [~, maxIdZ] = max(s);
-        maxIdZEnv = maxIdZ + (-10:10);
+        maxIdZEnv = maxIdZ + (-5:5); maxIdZEnv=maxIdZEnv(:);
 
-        model = @(x)(x(1)*exp( -(zI(maxIdZEnv)-x(2)).^2/(2*x(3)^2) ) + x(4));
-        x0 = [max(s)-min(s(maxIdZEnv)),maxIdZ,1,min(s(maxIdZEnv))];
+        if ~exist('template','var') % Gaussian template
+            model = @(x)(x(1)*exp( -(zI(maxIdZEnv)-x(2)).^2/(2*x(3)^2) ) + x(4));
+            x0 = [max(s)-min(s(maxIdZEnv)),maxIdZ,1,min(s(maxIdZEnv))];
+        else
+            % Use the template vector
+            model = @(x)(interp1(zI, template, maxIdZEnv+x(2), 'linear'));
+            x0 = [0,0,0];
+        end
+        
         a = fminsearch(@(x)(mean( (model(x)-s(maxIdZEnv)).^2 )),x0);
-
-        %plot(zI(maxIdZEnv),[s(maxIdZEnv) model(a) model(x0)]);
         
         pos(xI) = a(2);
+        %plot(zI(maxIdZEnv),[s(maxIdZEnv) model(a)]);
     end
-
     %plot(pos);
 end
