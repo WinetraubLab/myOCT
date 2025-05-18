@@ -45,6 +45,7 @@ end
 % conducted. atFocusIndex is the index of the focus.
 function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
     % Parameters
+    nuberOfPixels = 100;
     bestZ_mm = 0; % Initialize to what the user set
     nSamplesInRange = 8; % Use even number to prevent scanning the same spot
 
@@ -68,6 +69,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
         end
         yOCTScanTile (...
             tempFolder, ...
+            1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
             1e-3 * [-1, 1] * pixelSize_um, ...
             'octProbePath', in.octProbePath, ...
             'pixelSize_um', pixelSize_um, ...
@@ -82,6 +84,8 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
         atFocusIndex = NaN;
         atFocusIntensity = 0;
         for scanI = 1:length(json.octFolders)
+            [interf, dim] = yOCTLoadInterfFromFile(...
+                [tempFolder json.octFolders{scanI}], 'YFramesToProcess',1);
             score = mean(abs(interf(:)));
             
             % Collect data
