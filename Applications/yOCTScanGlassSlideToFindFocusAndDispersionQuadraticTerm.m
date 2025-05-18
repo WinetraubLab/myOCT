@@ -27,6 +27,8 @@ addParameter(p,'skipHardware',false,@islogical);
 addParameter(p,'tempFolder','./TmpOCTVolume/',@ischar);
 addParameter(p,'v',true,@islogical);
 
+nIndexOfRefraction = 1.33;
+
 parse(p,varargin{:});
 in = p.Results;
 
@@ -119,7 +121,7 @@ interfAtFocus = squeeze(interfs(:,:,atFocusIndex));
 %% Find dispersion
 function e = dispersionErrorFunction(d)
     scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
-        'dispersionQuadraticTerm', d);
+        'dispersionQuadraticTerm', d, 'n', nIndexOfRefraction);
 
     scan = mean(mean(log(abs(scan)),3),2); % Average along x,y
     e = -max(scan(:)); % Closer the dispersion, the higher the peak.
@@ -130,8 +132,8 @@ dispersionQuadraticTerm = fminsearch(...
 %% Convert all interfs to scans
 scans = [];
 for ii=1:length(zDepths_mm)
-    scan1 = yOCTInterfToScanCpx(interfs(:,:,ii), dim, ...
-        'dispersionQuadraticTerm', dispersionQuadraticTerm);
+    [scan1,dim] = yOCTInterfToScanCpx(interfs(:,:,ii), dim, ...
+        'dispersionQuadraticTerm', dispersionQuadraticTerm, 'n', nIndexOfRefraction);
     scan1 = mean(abs(scan1),3);
     if isempty(scans)
         scans = scan1;
@@ -175,6 +177,7 @@ ylabel('z [pix]');
 
 %% Plot Identify which z is at the focus position
 figure(224);
+peakPixel = zeros(size(zDepths_mm));
 for ii = 1:length(zDepths_mm)
     subplot(1,length(zDepths_mm),ii)
 
@@ -191,6 +194,20 @@ for ii = 1:length(zDepths_mm)
     if ii ~= 1
         set(gca, 'YTickLabel', []);
     end
+
+    % Capture maximum pixel
+    [~,peakPixel(ii)] = max(mean(log(squeeze(scans(:,:,ii))),2));
+end
+
+% Compute the relationship between peakPixel position and depth
+p = polyfit(peakPixel,zDepths_mm,1);
+zPixelSizeByPolyFit_um = abs(p(1)*1e3);
+zPixelSizeFromDim_um = diff(dim.z.values(1:2));
+
+if abs(zPixelSizeFromDim_um/zPixelSizeByPolyFit_um-1) > 0.02
+    warning('Index of refreaction is probably not %.2f.\nZ pixel size by fiting movement: %.2fum.\nZ pixel size by n: %.2fum.\nRecommended n=%.2f',...
+        nIndexOfRefraction,zPixelSizeByPolyFit_um,zPixelSizeFromDim_um,...
+        zPixelSizeFromDim_um/zPixelSizeByPolyFit_um*nIndexOfRefraction);
 end
 
 %% Plot dispersion 
@@ -202,7 +219,7 @@ dValues = dValues(ii);
 intensities = zeros(size(scans,1),length(dValues));
 for ii = 1:length(dValues)
     scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
-        'dispersionQuadraticTerm', dValues(ii));
+        'dispersionQuadraticTerm', dValues(ii), 'n', nIndexOfRefraction);
     intensities(:,ii) = mean(mean(log(abs(scan)),3),2);
 end
 
