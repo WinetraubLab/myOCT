@@ -121,7 +121,7 @@ function e = dispersionErrorFunction(d)
     scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
         'dispersionQuadraticTerm', d);
 
-    scan = mean(mean(abs(scan),3),2); % Average along x,y
+    scan = mean(mean(log(abs(scan)),3),2); % Average along x,y
     e = -max(scan(:)); % Closer the dispersion, the higher the peak.
 end
 dispersionQuadraticTerm = fminsearch(...
@@ -141,9 +141,8 @@ for ii=1:length(zDepths_mm)
 end
 scanAtFocus = squeeze(scans(:,:,atFocusIndex));
 
-
 %% Find focus position
-scanMean = mean(scanAtFocus,2); % Average along x,y
+scanMean = mean(log(scanAtFocus),2); % Average along x,y
 
 % Remove z depths that are too far from the initial guess
 zToInclude = ones(size(scanMean),'logical');
