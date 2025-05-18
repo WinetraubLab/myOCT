@@ -45,6 +45,7 @@ end
 % conducted. atFocusIndex is the index of the focus.
 function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
     % Parameters
+    pixelSize_um = 0.1;
     nuberOfPixels = 100;
     bestZ_mm = 0; % Initialize to what the user set
     nSamplesInRange = 8; % Use even number to prevent scanning the same spot
