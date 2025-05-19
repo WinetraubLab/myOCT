@@ -38,3 +38,7 @@ fprintf('\nDone!\n');
 % Display the results
 disp(results);
 assert(all([results.Passed]),'Some test failed');
+
+% Present failed tests
+disp('Failed Tests')
+disp({results(~[results.Passed]).Name}')
