@@ -37,7 +37,7 @@ if (tempFolder(end) ~= '\' &&  tempFolder(end) ~= '/')
     tempFolder(end+1) = '/';
 end
 
-%% Scan multiple depths
+%% Scan multiple depths to find focus
 if (in.v)
     fprintf('%s Please adjust the OCT focus such that it is at glass silde interface, closest to the tissue.\n', datestr(datetime));
 end
