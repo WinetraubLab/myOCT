@@ -228,7 +228,7 @@ if cropZAroundFocusArea
     end
 
     dimOutput_mm.z.values = zAll(:)';
-    dimOutput_mm.z.indexes = 1:length(zAll);
+    dimOutput_mm.z.index = 1:length(zAll);
 end
 
 % Dimensions check
