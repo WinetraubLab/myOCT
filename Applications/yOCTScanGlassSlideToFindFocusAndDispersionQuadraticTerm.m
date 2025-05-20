@@ -127,7 +127,11 @@ function e = dispersionErrorFunction(d)
     e = -max(scan(:)); % Closer the dispersion, the higher the peak.
 end
 dispersionQuadraticTerm = fminsearch(...
-    @dispersionErrorFunction,in.dispersionQuadraticTermInitialGuess);
+    @dispersionErrorFunction, ...
+    in.dispersionQuadraticTermInitialGuess);
+if (in.v)
+    fprintf('dispersionQuadraticTerm = %.4g\n',dispersionQuadraticTerm)
+end
 
 %% Convert all interfs to scans
 scans = [];
