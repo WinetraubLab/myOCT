@@ -159,6 +159,10 @@ scanMean(~zToInclude) = 0;
 % Focus is where the peak is achived
 [~,focusPositionInImageZpix] = max(scanMean);
 
+if (in.v)
+    fprintf('focusPositionInImageZpix = %d\n',focusPositionInImageZpix)
+end
+
 % Sanity check, make sure that Z doesn't change a lot along the scan
 % In theory, the scan should be very small thus z shouldn't change
 pos = alignZ(log(scanAtFocus));
