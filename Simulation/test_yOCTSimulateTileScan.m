@@ -5,7 +5,8 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
     end
     
     methods(Test)
-        function testLoadSaveNoStitching(testCase)
+        function testLoadSaveNoStitchingNoFocus(testCase)
+            % Confirm that with no focus, three peaks show up at the right positions
             dummyData = zeros(1000,100,5)+1;
             pixel_size_um = 1; 
             outputFolder = 'tmp/';
@@ -13,8 +14,6 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             focusPositionInImageZpix = 1;
             focusSigma = 1000; % Very large focus, such that it has no effect
             dummyData([100, 200, 300],:,:) = 100;
-
-            %% Part 1, confirm that with no focus, three peaks show up at the right positions
 
             % Generate simulated data
             yOCTSimulateTileScan(dummyData,outputFolder,...
@@ -48,6 +47,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             % Verify three peaks are in the right position (intensity is
             % high)
             [~,i100] = min(abs(dim.z.values*1e3-100));
+            fprintf('100 microns is at pixel %.0f\n',i100)
             [~,i200] = min(abs(dim.z.values*1e3-200));
             [~,i300] = min(abs(dim.z.values*1e3-300));
             flatDat1 = mean(dat,[2 3]);
@@ -55,13 +55,17 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             assert(flatDat1(i200) > prctile(flatDat1,80));
             assert(flatDat1(i300) > prctile(flatDat1,80));
             %plot(dim.z.values*1e3,(mean(dat,[2 3])))
+        end
 
-            %% Step #2, with focus but return all z
-            % Now repeat the process while applying the focus position to
-            % be 69 pixels (corresponding to 100um). Un comment line to see
-            fprintf('100 microns is at pixel %.0f\n',i100)
-            focusPositionInImageZpix = 69;
-            focusSigma = 10; % Very large focus, such that it has no effect
+        function testLoadSaveNoStitchingWithFocus(testCase)
+            % Confirm that with focus (at 100um) we see one line
+            dummyData = zeros(1000,100,5)+1;
+            pixel_size_um = 1; 
+            outputFolder = 'tmp/';
+            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            focusPositionInImageZpix = 69; % 69 pixels (corresponding to 100um).
+            focusSigma = 10; % thighter focus 
+            dummyData([100, 200, 300],:,:) = 100; % Three lines, but only 100um is in focus.
 
             % Generate simulated data
             yOCTSimulateTileScan(dummyData,outputFolder,...
@@ -93,10 +97,29 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             [~,i0] = min(abs(dim.z.values*1e3));
             assert(flatDat2(i0) > prctile(flatDat2,80), 'Verify z=0 is in focus');
             %plot(dim.z.values*1e3,(mean(dat,[2 3])))
+        end
 
-            %% Step 3 With focus, and return only zs that were scanned
+        function testLoadSaveNoStitchingWithWrongFocus(testCase)
+            % Confirm that when selecting the wrong focus lines don't show
+            % up in focus
+            dummyData = zeros(1000,100,5)+1;
+            pixel_size_um = 1; 
+            outputFolder = 'tmp/';
+            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            focusPositionInImageZpix = 69; % 69 pixels (corresponding to 100um).
+            focusSigma = 10; % thighter focus 
+            dummyData([100, 200, 300],:,:) = 100; % Three lines, but only 100um is in focus.
 
-            % Load the generated simulated data
+            % Generate simulated data
+            yOCTSimulateTileScan(dummyData,outputFolder,...
+                'pixelSize_um', pixel_size_um, ...
+                'zDepths',      0, ... [mm]
+                'focusPositionInImageZpix', focusPositionInImageZpix,... No Z scan filtering
+                'focusSigma',focusSigma, ...
+                'octProbePath', octProbePath ...
+                );
+
+            % Load the generated simulated data - in focus
             yOCTProcessTiledScan(...
                 outputFolder, ... Input
                 {'tmp2.tif'},... 
@@ -106,11 +129,11 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
                 'interpMethod','sinc5', ...
                 'cropZAroundFocusArea',true ...
                 );
-            [dat, dim] = yOCTFromTif('tmp2.tif');
+            [dat, ~] = yOCTFromTif('tmp2.tif');
             datInFocus = mean(dat(:));
             delete tmp2.tif;
 
-            % Load the generated simulated data
+            % Load the generated simulated data - out of focus
             yOCTProcessTiledScan(...
                 outputFolder, ... Input
                 {'tmp2.tif'},... 
@@ -120,7 +143,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
                 'interpMethod','sinc5', ...
                 'cropZAroundFocusArea',true ...
                 );
-            [dat, dim] = yOCTFromTif('tmp2.tif');
+            [dat, ~] = yOCTFromTif('tmp2.tif');
             datOutFocus = mean(dat(:));
             delete tmp2.tif;
 
