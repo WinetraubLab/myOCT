@@ -1,3 +1,5 @@
+yOCTSetLibraryPath(); % Set path
+
 %% Initialize
 disp('Demo Using EC2 Connection');
 awsSetCredentials(1);

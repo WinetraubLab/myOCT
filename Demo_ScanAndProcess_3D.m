@@ -1,10 +1,12 @@
 % Run this demo to use Thorlabs system to scan a 3D OCT Volume and process
 % it.
-% Before running this script, make sure myOCT folder is in path for example
-% by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
 
 % The protocol for how to use this script can be found here:
 % https://docs.google.com/document/d/1aMgy00HvxrOlTXRINk-SvcvQSMU1VzT0U60hdChUVa0/edit
+
+% Before running this script, make sure myOCT folder is in path for example
+% by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
+yOCTSetLibraryPath(); % Set path
 
 %% Inputs
 
@@ -50,21 +52,21 @@ if (min(zToScan_mm)) > -100e-3
     warning('Because we use gel above tissue to find focus position. It is important to have at least one of the z-stacks in the gel. Consider having the minimum zToScan_mm to be -100e-3[mm]')
 end
 
+%% Focus check
+fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
+
 % Quick pre-scan to identify tissue surface and verify it is at OCT focus
-if ~skipScanning
-    [surfacePosition_mm, x_mm, y_mm, isSurfaceInFocus] = yOCTScanAndFindTissueSurface(... 
-            'xRange_mm', xOverall_mm,...
-            'yRange_mm', yOverall_mm,...
-            'octProbePath', octProbePath, ...
-            'pixel_size_um', 25,...
-            'focusPositionInImageZpix', focusPositionInImageZpix,...
-            'dispersionQuadraticTerm', dispersionQuadraticTerm);
-    assert(isSurfaceInFocus, 'Adjust the stage as needed and rerun the script.');
-end
+[surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(... 
+        'xRange_mm', xOverall_mm,...
+        'yRange_mm', yOverall_mm,...
+        'octProbePath', octProbePath, ...
+        'pixelSize_um', 25,...
+        'focusPositionInImageZpix', focusPositionInImageZpix,...
+        'dispersionQuadraticTerm', dispersionQuadraticTerm, ...
+        'skipHardware',skipScanning);
 
 %% Perform the scan
 volumeOutputFolder = [output_folder '/OCTVolume/'];
-fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
 
 fprintf('%s Scanning Volume\n',datestr(datetime));
 scanParameters = yOCTScanTile (...
