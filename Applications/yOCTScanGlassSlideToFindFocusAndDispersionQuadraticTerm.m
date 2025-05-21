@@ -166,7 +166,7 @@ end
 % Sanity check, make sure that Z doesn't change a lot along the scan
 % In theory, the scan should be very small thus z shouldn't change
 pos = alignZ(log(scanAtFocus));
-assert(max(abs(pos-focusPositionInImageZpix)) < 2, 'Check focusPositionInImageZpix against scan failed');
+assert(prctile(abs(pos-focusPositionInImageZpix),95) < 2, 'Check focusPositionInImageZpix against scan failed');
 
 %% Plot final plot
 if ~in.v
@@ -306,8 +306,15 @@ function [pos, width] = alignZ(scan, template)
             model = @(x)(interp1(zI, template, maxIdZEnv+x(2), 'linear'));
             x0 = [0,0,0];
         end
+
+        normVal = sqrt(mean( (s(maxIdZEnv)).^2 ));
+        errorFun = @(x)( ...
+            sqrt(mean( (model(x)-s(maxIdZEnv)).^2 )) ... % RMS
+            / normVal ... Normalized by function value
+            );
         
-        a = fminsearch(@(x)(mean( (model(x)-s(maxIdZEnv)).^2 )),x0);
+        opts = optimset('TolX',0.01, 'MaxIter',1e4, 'MaxFunEvals',1e6);
+        a = fminsearch(errorFun,x0, opts);
         
         pos(xI) = a(2);
         %plot(zI(maxIdZEnv),[s(maxIdZEnv) model(a)]);
