@@ -67,8 +67,8 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
     % Scan some options
     for i=1:length(range_um)
         if (in.v)
-            fprintf('Best Focus Positon: %.0fum. Scanning [%.1fum, %.1fum]\n', ...
-                bestZ_mm*1e3, bestZ_mm*1e3-range_um(i), bestZ_mm*1e3+range_um(i));
+            fprintf('Scanning [%.1fum, %.1fum]\n', ...
+                bestZ_mm*1e3-range_um(i), bestZ_mm*1e3+range_um(i));
         end
         yOCTScanTile (...
             tempFolder, ...
@@ -107,7 +107,14 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
 
         % Update best focus position
         bestZ_mm = zDepths_mm(atFocusIndex);
+
+        if (in.v)
+            fprintf('Best Focus Positon: %.0fum. ', bestZ_mm*1e3);
+        end
     end % Loop around
+    if (in.v)
+        fprintf('\n')
+    end
 
     % Sort output
     [~, ind] = sort(zDepths_mm);
