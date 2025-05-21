@@ -36,6 +36,7 @@ tempFolder = in.tempFolder;
 if (tempFolder(end) ~= '\' &&  tempFolder(end) ~= '/')
     tempFolder(end+1) = '/';
 end
+in.tempFolder = tempFolder;
 
 %% Scan multiple depths to find focus
 if (in.v)
@@ -154,18 +155,23 @@ for ii=1:length(zDepths_mm)
 end
 scanAtFocus = squeeze(scans(:,:,atFocusIndex));
 
-%% Find focus position
-scanMean = mean(log(scanAtFocus),2); % Average along x,y
+%% Find focus position for the scan in focus
+function focusZ_pix = findPeakPixel(scan, initialGuess)
+    scanMean = squeeze(mean(log(scan),2)); % Average along x,y
 
-% Remove z depths that are too far from the initial guess
-zToInclude = ones(size(scanMean),'logical');
-zToInclude(round(1:(in.focusPositionInImageZpixInitialGuess-200))) = 0;
-zToInclude(round((in.focusPositionInImageZpixInitialGuess+200):end)) = 0;
-scanMean(~zToInclude) = 0;
+    % Remove z depths that are too far from the initial guess
+    zToInclude = ones(size(scanMean),'logical');
+    zToInclude(round(1:(initialGuess-200))) = 0;
+    zToInclude(round((initialGuess+200):end)) = 0;
+    scanMean(~zToInclude) = 0;
 
-% Focus is where the peak is achived
-[~,focusPositionInImageZpix] = max(scanMean);
+    % Focus is where the peak is achived
+    [~,focusZ_pix] = max(scanMean);
+end
 
+% Focus position is the same as pixel position in the image that is in focus
+focusPositionInImageZpix = findPeakPixel(...
+    scans(:,:,atFocusIndex), in.focusPositionInImageZpixInitialGuess);
 if (in.v)
     fprintf('focusPositionInImageZpix = %d\n',focusPositionInImageZpix)
 end
@@ -174,6 +180,29 @@ end
 % In theory, the scan should be very small thus z shouldn't change
 pos = alignZ(log(scanAtFocus));
 assert(prctile(abs(pos-focusPositionInImageZpix),95) < 2, 'Check focusPositionInImageZpix against scan failed');
+
+%% Compute the slide interface pixel and depth scan
+% This relationship validates that z pixel size is the same.
+
+% Estimate peak position
+peakPosition_pix = zeros(size(zDepths_mm));
+for ii=1:length(peakPosition_pix)
+    peakPosition_pix(ii) = findPeakPixel(...
+        scans(:,:,ii), focusPositionInImageZpix);
+end
+
+% Linear fit to extract pixel size
+peakPositionVsDepthP = polyfit(peakPosition_pix,zDepths_mm,1);
+zPixelSizeByPolyFit_um = abs(peakPositionVsDepthP(1)*1e3);
+zPixelSizeFromDim_um = diff(dim.z.values(1:2));
+
+% Check the two figures match
+adjustedN = zPixelSizeFromDim_um/zPixelSizeByPolyFit_um*nIndexOfRefraction;
+if abs(zPixelSizeFromDim_um/zPixelSizeByPolyFit_um-1) > 0.05
+    warning('Index of refreaction is probably not %.2f.\nZ pixel size by fiting movement: %.2fum.\nZ pixel size by n: %.2fum.\nRecommended n=%.2f',...
+        nIndexOfRefraction,zPixelSizeByPolyFit_um,zPixelSizeFromDim_um,...
+        adjustedN);
+end
 
 %% Plot final plot
 if ~in.v
@@ -189,19 +218,20 @@ title(sprintf('dispersionQuadraticTerm=%.4g, focusPositionInImageZpix=%d',...
     dispersionQuadraticTerm,focusPositionInImageZpix));
 xlabel('x [pix]');
 ylabel('z [pix]');
+saveas(gcf, [in.tempFolder 'final_plot.png']);
 
 %% Plot Identify which z is at the focus position
 figure(224);
-peakPixel = zeros(size(zDepths_mm));
+set(gcf, 'Units', 'pixels', 'Position', [100 100 1600 400]);
 for ii = 1:length(zDepths_mm)
     subplot(1,length(zDepths_mm),ii)
 
     imagesc(log(squeeze(scans(:,:,ii))));
     colormap gray;
     if ii == atFocusIndex
-        title(['Estimated' newline 'Focus']);
+        title(sprintf('Estimated\nFocus\n%.0f\\mum',1e3*zDepths_mm(ii)));
     else
-        title(sprintf('%.0f\\mum',1e3*(zDepths_mm(ii)-zDepths_mm(atFocusIndex))));
+        title(sprintf('%.0f\\mum',1e3*zDepths_mm(ii)));
     end
 
     % Turn off tick labels if not needed
@@ -209,32 +239,19 @@ for ii = 1:length(zDepths_mm)
     if ii ~= 1
         set(gca, 'YTickLabel', []);
     end
-
-    % Capture maximum pixel
-    [~,peakPixel(ii)] = max(mean(log(squeeze(scans(:,:,ii))),2));
 end
+saveas(gcf, [in.tempFolder 'focus_position.png']);
 
-% Compute the relationship between peakPixel position and depth
-p = polyfit(peakPixel,zDepths_mm,1);
-zPixelSizeByPolyFit_um = abs(p(1)*1e3);
-zPixelSizeFromDim_um = diff(dim.z.values(1:2));
+figure(19)
+plot(peakPosition_pix,zDepths_mm*1e3,'o',...
+    peakPosition_pix,polyval(peakPositionVsDepthP,peakPosition_pix)*1e3,'-');
+xlabel('Peak Z Position [pix]');
+ylabel('Stage Z Position [um]');
+legend('Data',sprintf('Fit, n=%.2f',adjustedN));
+grid on;
+title('Peak Position [pixels] vs Stage Position [um]');
+saveas(gcf, [in.tempFolder 'pixel_size_estimation.png']);
 
-if abs(zPixelSizeFromDim_um/zPixelSizeByPolyFit_um-1) > 0.02
-    adjustedN = zPixelSizeFromDim_um/zPixelSizeByPolyFit_um*nIndexOfRefraction;
-    warning('Index of refreaction is probably not %.2f.\nZ pixel size by fiting movement: %.2fum.\nZ pixel size by n: %.2fum.\nRecommended n=%.2f',...
-        nIndexOfRefraction,zPixelSizeByPolyFit_um,zPixelSizeFromDim_um,...
-        adjustedN);
-
-    if in.v
-        figure(19)
-        plot(peakPixel,zDepths_mm*1e3,'o',peakPixel,polyval(p,peakPixel)*1e3,'-');
-        xlabel('Peak Z Position [pix]');
-        ylabel('Stage Z Position [um]');
-        legend('Data',sprintf('Fit, n=%.2f',adjustedN));
-        grid on;
-        title('Peak Position [pixels] vs Stage Position [um]');
-    end
-end
 
 %% Plot dispersion 
 
@@ -292,6 +309,7 @@ else
     s2 = 'green';
 end
 title(sprintf('%.4g (%s) to %.4g (%s)',dValues(1),s1,dValues(end),s2));
+saveas(gcf, [in.tempFolder 'dispersion_options.png']);
 
 end
 
@@ -320,7 +338,7 @@ function [pos, width] = alignZ(scan, template)
             / normVal ... Normalized by function value
             );
         
-        opts = optimset('TolX',0.01, 'MaxIter',1e4, 'MaxFunEvals',1e6);
+        opts = optimset('TolX',0.01, 'MaxIter',5e4, 'MaxFunEvals',1e6);
         a = fminsearch(errorFun,x0, opts);
         
         pos(xI) = a(2);
