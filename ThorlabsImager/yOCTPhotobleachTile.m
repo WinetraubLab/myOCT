@@ -14,7 +14,13 @@ function json = yOCTPhotobleachTile(varargin)
 % Photobleaching Parameters:
 %   z                       0               Photobleaching depth (compared to corrent position in mm). 
 %                                           Set to scallar to photobleach all lines in the same depth.
-%                                           Or set to array equal to n to specify depth for each line. 
+%                                           Or set to array equal to n to specify depth for each line.
+%   surfaceMap              []              A struct with three numeric fields representing the estimated tissue surface offsets:
+%                                               ├─ surfaceMap.surfacePosition_mm:  Z-offsets at each (X,Y)
+%                                               ├─ surfaceMap.surfaceX_mm:         Grid of X coordinates [mm]
+%                                               └─ surfaceMap.surfaceY_mm:         Grid of Y coordinates [mm]
+%                                           All three must be the same size. If empty like default [] no surface‑based 
+%                                           Z offset is applied and the stage uses only the user‑supplied depth(s) in z.
 %   exposure                15              How much time to expose each spot to laser light. Units sec/mm 
 %                                           Meaning for each 1mm, we will expose for exposurePerLine sec 
 %                                           If scanning at multiple depths, exposure will for each depth. Meaning two depths will be exposed twice as much. 
@@ -62,6 +68,8 @@ addParameter(p,'v',true);
 addParameter(p,'skipHardware',false);
 addParameter(p,'plotPattern',false);
 addParameter(p,'laserToggleMethod','OpticalSwitch');
+addParameter(p,'surfaceMap', [], @(x) isempty(x) || (isstruct(x) && ...
+    all(ismember({'surfacePosition_mm','surfaceX_mm','surfaceY_mm'}, fieldnames(x)))));
 
 parse(p,varargin{:});
 json = p.Results;
@@ -99,13 +107,68 @@ json.stagePauseBeforeMoving_sec = 0.5;
 % Check number of passes and exposure
 assert(isscalar(json.nPasses), 'Only 1 nPasses is permitted for all lines');
 assert(isscalar(json.exposure), 'Only 1 exposure is permitted for all lines');
+
+% If a surface map was provided, prepare function handle that returns the
+% Z‑offset (in mm) for any XY location. Otherwise fall back to original Z:
+
+if isempty(json.surfaceMap)
+    surfaceZ_fn_mm = @(xx,yy) 0;                % Fallback if no map provided
+else
+    S  = json.surfaceMap;
+    Zf = medfilt2(S.surfacePosition_mm,[3 3]);   % remove outliers
     
+    % Handle NaNs if applicable
+    nNaN = nnz(isnan(Zf));
+    if nNaN > 0
+        Zf(isnan(Zf)) = 0;               % replace with 0‑mm offset
+        if v
+            fprintf('%d points in the map are NaN: they will be set to 0 mm.\n', nNaN);
+        end
+    end
+
+    % Remove wild points
+    maxOffset_mm = 0.2;    % 200μm maximum expected surface variation
+    idxBig = abs(Zf) > maxOffset_mm;
+    nBig   = nnz(idxBig);
+    if nBig > 0
+        Zf(idxBig) = maxOffset_mm .* sign(Zf(idxBig));
+        if v
+            fprintf('%d points in the map exceeded %.1f mm → they will be limited.\n', ...
+                    nBig, maxOffset_mm);
+        end
+    end
+
+    % Build interpolation function handle
+    surfaceZ_fn_mm = @(xx,yy) interp2( ...
+        S.surfaceX_mm, S.surfaceY_mm, Zf, xx, yy, 'linear', 0);   % 0 mm outside map
+    if v
+        fprintf('[surfaceMap] map loaded – using median‑filtered, clipped data\n');
+    end
+end
+
 %% Pre processing, make a plan
 
 % Split lines to photobleach instructions by FOV
 photobleachPlan = yOCTPhotobleachTile_createPlan(...
     json.ptStart, json.ptEnd, json.z, json.FOV, json.minLineLength, ...
     json.bufferZoneWidth, json.enableZoneAccuracy, enableZone);
+
+% Add surfaceMap to adjust Z depth during photobleaching
+for iXY = 1:numel(photobleachPlan)
+    x_mm = photobleachPlan(iXY).stageCenterX_mm;
+    y_mm = photobleachPlan(iXY).stageCenterY_mm;
+
+    % Interpolate the surface map (0 mm if no map or out of bounds)
+    zSurf_mm = surfaceZ_fn_mm(x_mm, y_mm);
+    photobleachPlan(iXY).surfaceOffset_mm   = zSurf_mm;
+    photobleachPlan(iXY).stageCenterZ_mm    = photobleachPlan(iXY).stageCenterZ_mm ...
+                                            + zSurf_mm;
+end
+if v && ~isempty(photobleachPlan)
+    fprintf('[surfaceMap] Added Z Surface Depth Offsets (min %.1f µm, max %.1f µm)\n', ...
+            1e3*min([photobleachPlan.surfaceOffset_mm]), ...
+            1e3*max([photobleachPlan.surfaceOffset_mm]));
+end
 json.photobleachPlan = photobleachPlan;
 
 % Plot the plan
