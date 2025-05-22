@@ -256,60 +256,57 @@ saveas(gcf, [in.tempFolder 'pixel_size_estimation.png']);
 %% Plot dispersion 
 
 % Compute scans on a few dispersion values
-dValues = unique([dispersionQuadraticTerm, linspace(dispersionQuadraticTerm*0.96, dispersionQuadraticTerm*1.04,4)]);
+dValues = unique([dispersionQuadraticTerm, linspace(dispersionQuadraticTerm*0.95, dispersionQuadraticTerm*1.05,6)]);
 [~,ii] = sort(abs(dValues));
 dValues = dValues(ii);
-intensities = zeros(size(scans,1),length(dValues));
+scansDisp1 = zeros(size(scans,1),size(scans,2),length(dValues));
+scansDisp2 = scansDisp1;
 for ii = 1:length(dValues)
     scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
         'dispersionQuadraticTerm', dValues(ii), 'n', nIndexOfRefraction);
-    intensities(:,ii) = mean(mean(log(abs(scan)),3),2);
+    scansDisp1(:,:,ii) = mean(log(abs(scan)),3);
+
+    scan = yOCTInterfToScanCpx(squeeze(interfs(:,:,1)), dim, ...
+        'dispersionQuadraticTerm', dValues(ii), 'n', nIndexOfRefraction);
+    scansDisp2(:,:,ii) = mean(log(abs(scan)),3);
 end
 
-% Find key dispersion values
-iSame = find(dValues==dispersionQuadraticTerm,1,'first');
+figure(212);
+set(gcf, 'Units', 'pixels', 'Position', [100 100 1600 800]);
+for ii = 1:length(dValues)
+    subplot(2,length(dValues),ii)
 
-% Asign color to each graph
-col = zeros(size(dValues));
-col(abs(dValues) > abs(dispersionQuadraticTerm)) = 1;
-col(abs(dValues) < abs(dispersionQuadraticTerm)) = -1;
+    imagesc(squeeze(scansDisp1(:,:,ii)));
+    colormap gray;
+    ylim(focusPositionInImageZpix + [-80 80]);
+    if dValues(ii) == dispersionQuadraticTerm
+        title(sprintf('Estimated\nDispersion\n%.4g\\mum',dValues(ii)));
+    else
+        title(sprintf('%.4g',dValues(ii)));
+    end
 
-i1P = find(col==1,1,'first');
-i1N = find(col==-1,1,'last');
+    % Turn off tick labels if not needed
+    set(gca, 'XTickLabel', []);
+    if ii ~= 1
+        set(gca, 'YTickLabel', []);
+    else
+        ylabel('At Focus');
+    end
 
-% Align z to match
-[focusAlignment] = alignZ(intensities,intensities(:,iSame)); % Align z to template
-focusAlignment = focusAlignment-mean(focusAlignment);
-zI = 1:size(intensities,1);
+    subplot(2,length(dValues),ii+length(dValues));
+    imagesc(squeeze(scansDisp2(:,:,ii)));
+    colormap gray;
+    ylim(focusPositionInImageZpix + [-80 80]);
+    % Turn off tick labels if not needed
+    set(gca, 'XTickLabel', []);
+    if ii ~= 1
+        set(gca, 'YTickLabel', []);
+    else
+        ylabel('At First Position');
+    end
 
-% Plot all options
-figure(225);
-plot(zI+focusAlignment(iSame),intensities(:,iSame),'r','LineWidth',2)
-hold on;
-plot(zI+focusAlignment(i1P),intensities(:,i1P),'g','LineWidth',2)
-plot(zI+focusAlignment(i1N),intensities(:,i1N),'b','LineWidth',2)
-for ii=find(col==1)
-    plot(zI+focusAlignment(ii),intensities(:,ii),'g')
 end
-for ii=find(col==-1)
-    plot(zI+focusAlignment(ii),intensities(:,ii),'b')
-end
-plot(zI+focusAlignment(iSame),intensities(:,iSame),'r','LineWidth',2)
-hold off;
-xlabel('Z [pix]');
-ylabel('Log Intensity');
-legend('Optimal Dispersion', 'Above Optimal Dispoersion', 'Below Optimal Dispersion');
-xlim(focusPositionInImageZpix + [-6 6]);
-grid on;
-if col(1) == 1
-    s1 = 'green';
-    s2 = 'blue';
-else
-    s1 = 'blue';
-    s2 = 'green';
-end
-title(sprintf('%.4g (%s) to %.4g (%s)',dValues(1),s1,dValues(end),s2));
-saveas(gcf, [in.tempFolder 'dispersion_options.png']);
+saveas(gcf, [in.tempFolder 'dispersion.png']);
 
 end
 
