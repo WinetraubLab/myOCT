@@ -110,7 +110,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
         bestZ_mm = zDepths_mm(atFocusIndex);
 
         if (in.v)
-            fprintf('Best Focus Positon: %.0fum. ', bestZ_mm*1e3);
+            fprintf('Best Focus Positon: %.1fum. ', bestZ_mm*1e3);
         end
     end % Loop around
     if (in.v)
