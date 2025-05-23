@@ -19,18 +19,28 @@ if ~exist('acceptableRange_mm','var')
     acceptableRange_mm = 0.025;
 end
 
-%% Compute the average surface distance
+%% Compute surface position statistics
 surfacePosition_mm = surfacePosition_mm(:);
-averageSurfaceDistance_mm = mean(surfacePosition_mm(~isnan(surfacePosition_mm))); % Calculate the average surface distance
-if isnan(averageSurfaceDistance_mm)
-    error(['No tissue identification possible. Likely the tissue is out of focus below the detection range. ' ...
-        'Please manually increase the stage Z position to bring the tissue into focus.']);
+
+% Make sure we have enough surface position estimated
+assert(sum(isnan(surfacePosition_mm))/length(surfacePosition_mm) < 0.2, "yOCT:SurfaceCannotBeEstimated", "Lage part of the surface position cannot be estimated");
+surfacePosition_mm(isnan(surfacePosition_mm)) = [];
+
+% Represent the tissue 
+medianSurfacePosition_mm = median(surfacePosition_mm);
+
+% Make sure that tissue is flat enough that it can all be in focus.
+p = 80;
+distFromMedian_mm = prctile(...
+    abs(surfacePosition_mm-medianSurfacePosition_mm), p);
+if distFromMedian_mm>acceptableRange_mm
+    error('yOCT:SurfaceCannotBeInFocus', ...
+        "Tissue's shape is not flat, therefore it cannot all be in focus");
 end
 
-
 %% Instruct user how to change the surface position 
-if abs(averageSurfaceDistance_mm) > acceptableRange_mm
-    if averageSurfaceDistance_mm > 0 % Determine direction of adjustment
+if abs(medianSurfacePosition_mm) > acceptableRange_mm
+    if medianSurfacePosition_mm > 0 % Determine direction of adjustment
         direction = 'increase';
     else
         direction = 'decrease';
@@ -39,8 +49,8 @@ if abs(averageSurfaceDistance_mm) > acceptableRange_mm
     errorID = 'yOCT:SurfaceOutOfFocus';
     msg = sprintf(['The average distance of the surface (%.3fmm) is out of range.\n\n', ...
         'Please %s the stage Z position by %.3fmm to bring the tissue surface into focus.'], ...
-        averageSurfaceDistance_mm, direction, abs(round(averageSurfaceDistance_mm, 3)));
+        medianSurfacePosition_mm, direction, abs(round(medianSurfacePosition_mm, 3)));
     error(errorID, msg); 
 end
 
-fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', datestr(datetime), averageSurfaceDistance_mm);
+fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', datestr(datetime), medianSurfacePosition_mm);
