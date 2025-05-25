@@ -54,7 +54,8 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
     nSamplesInRange = 8; % Use even number to prevent scanning the same spot
 
     % Build range as a cascaede of zooming in options
-    range_um(1) = in.focusSearchSize_um;
+    range_um(1) = 0; % First range is just the user selected focus
+    range_um(2) = in.focusSearchSize_um;
     step_um = @(range)(range*2/(nSamplesInRange-1)); 
     while(step_um(step_um(range_um(end)))>1)
         range_um(end+1) = round(step_um(range_um(end))*1.2); %#ok<AGROW>
@@ -79,7 +80,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
             'pixelSize_um', pixelSize_um, ...
             'skipHardware', in.skipHardware, ...
             'zDepths',bestZ_mm + 1e-3 * ...
-                linspace(-range_um(i),range_um(i), nSamplesInRange), ...
+                unique(linspace(-range_um(i),range_um(i), nSamplesInRange)), ...
             'v',in.v  ...
             );
         
@@ -109,7 +110,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
         % Update best focus position
         bestZ_mm = zDepths_mm(atFocusIndex);
 
-        if (in.v)
+        if in.v && i >= 2
             fprintf('Best Focus Positon: %.1fum. ', bestZ_mm*1e3);
         end
     end % Loop around
