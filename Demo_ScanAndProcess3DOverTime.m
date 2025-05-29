@@ -28,12 +28,7 @@ zToScan_mm = unique([-100 (-30:scanZJump_um:400), 0])*1e-3; %[mm]
 focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 1
 
 % Other scanning parameters
-tissueRefractiveIndex = 1.4; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
-% dispersionQuadraticTerm is OBJECTIVE_DEPENDENT
-%dispersionQuadraticTerm=6.539e07; % 10x
-%dispersionQuadraticTerm=9.56e07;   % 40x
-%dispersionQuadraticTerm=-2.059e08;  % 10x, OCTP900
-dispersionQuadraticTerm=-1.549e08;  % 40x, OCTP900
+tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 
 % Where to save scan files
 outputFolder = 'temp/';
@@ -44,27 +39,34 @@ end
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
 
-% For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at.
-% If set to NaN, yOCTFindFocusTilledScan will be executed to request user to select focus position.
-focusPositionInImageZpix = NaN;
-
 % Time interval
 scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
 
 %% Compute scanning parameters
-
-if isnan(focusPositionInImageZpix) && ~skipScanning
-    error('Please use one of the other demos to determine focusPositionInImageZpix before running this script');
-end
 
 % Check that sufficient ammount of gel is above the tissue for proper focus
 if (min(zToScan_mm)) > -100e-3
     warning('Because we use gel above tissue to find focus position. It is important to have at least one of the z-stacks in the gel. Consider having the minimum zToScan_mm to be -100e-3[mm]')
 end
 
-fprintf('First scan will be at t=%0.f Hr\nLast scan at t=%.1f Hr\n',...
-    scanTimeIntervals_min(1)/60, ...
-    scanTimeIntervals_min(end)/60);
+fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
+
+% Estimate dispersionQuadraticTerm and focusPositionInImageZpix using the
+% glass slide.
+% dispersionQuadraticTerm: makes the image sharp. You can set it manually
+%   by running Demo_DispersionCorrectionManual.m
+% focusPositionInImageZpix: is the z pixel that the focus is in
+[dispersionQuadraticTerm, focusPositionInImageZpix] = ...
+    yOCTScanGlassSlideToFindFocusAndDispersionQuadraticTerm( ...
+    'octProbePath',yOCTGetProbeIniPath('40x','OCTP900'), ...
+    'tissueRefractiveIndex',tissueRefractiveIndex, ...
+    'skipHardware',skipScanning);
+
+% Uncomment below to set manually
+% dispersionQuadraticTerm=-1.549e08;
+% focusPositionInImageZpix = 200; % 
+% focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
+%   'reconstructConfig',{'dispersionQuadraticTerm',dispersionQuadraticTerm},'verbose',true);
 
 %% Focus check
 fprintf('%s Please adjust the OCT focus such that it is precisely at the intersection of the tissue and the coverslip.\n', datestr(datetime));
@@ -80,6 +82,11 @@ fprintf('%s Please adjust the OCT focus such that it is precisely at the interse
         'skipHardware',skipScanning);
 
 %% Perform the scans
+
+fprintf('First scan will be at t=%0.f Hr\nLast scan at t=%.1f Hr\n',...
+    scanTimeIntervals_min(1)/60, ...
+    scanTimeIntervals_min(end)/60);
+
 tmpVolumeOutputFolder = [outputFolder '/OCTVolume/']; % This volume folder will be removed 
 tStart = tic();
 
