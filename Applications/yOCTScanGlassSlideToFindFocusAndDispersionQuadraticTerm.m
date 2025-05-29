@@ -13,6 +13,7 @@ function [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
 %   focusSearchSize_um: We assume that the glass slide is not perfectly in
 %       focus, what range should we expect it to be within? Units: microns.
 %   tempFolder: path to temporary folder to save OCT volumes.
+%   tissueRefractiveIndex: Refractive index of tissue.
 %   skipHardware: set to true to skip hardware.
 %   v: verbose (and visualize) option.
 
@@ -24,10 +25,9 @@ addParameter(p,'dispersionQuadraticTermInitialGuess',-1.482e8,@isnumeric);
 addParameter(p,'focusPositionInImageZpixInitialGuess',400,@isnumeric);
 addParameter(p,'focusSearchSize_um',25,@(x)(isnumeric(x) & x>0));
 addParameter(p,'skipHardware',false,@islogical);
+addParameter(p,'tissueRefractiveIndex',1.4);
 addParameter(p,'tempFolder','./TmpOCTVolume/',@ischar);
 addParameter(p,'v',true,@islogical);
-
-nIndexOfRefraction = 1.33;
 
 parse(p,varargin{:});
 in = p.Results;
@@ -130,7 +130,7 @@ interfAtFocus = squeeze(interfs(:,:,atFocusIndex));
 %% Find dispersion
 function e = dispersionErrorFunction(d)
     scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
-        'dispersionQuadraticTerm', d, 'n', nIndexOfRefraction);
+        'dispersionQuadraticTerm', d, 'n', in.tissueRefractiveIndex);
 
     scan = mean(mean(log(abs(scan)),3),2); % Average along x,y
     e = -max(scan(:)); % Closer the dispersion, the higher the peak.
@@ -146,7 +146,7 @@ end
 scans = [];
 for ii=1:length(zDepths_mm)
     [scan1,dim] = yOCTInterfToScanCpx(interfs(:,:,ii), dim, ...
-        'dispersionQuadraticTerm', dispersionQuadraticTerm, 'n', nIndexOfRefraction);
+        'dispersionQuadraticTerm', dispersionQuadraticTerm, 'n', in.tissueRefractiveIndex);
     scan1 = mean(abs(scan1),3);
     if isempty(scans)
         scans = scan1;
@@ -198,10 +198,10 @@ zPixelSizeByPolyFit_um = abs(peakPositionVsDepthP(1)*1e3);
 zPixelSizeFromDim_um = diff(dim.z.values(1:2));
 
 % Check the two figures match
-adjustedN = zPixelSizeFromDim_um/zPixelSizeByPolyFit_um*nIndexOfRefraction;
+adjustedN = zPixelSizeFromDim_um/zPixelSizeByPolyFit_um*in.tissueRefractiveIndex;
 if abs(zPixelSizeFromDim_um/zPixelSizeByPolyFit_um-1) > 0.05
-    warning('Index of refreaction is probably not %.2f.\nZ pixel size by fiting movement: %.2fum.\nZ pixel size by n: %.2fum.\nRecommended n=%.2f',...
-        nIndexOfRefraction,zPixelSizeByPolyFit_um,zPixelSizeFromDim_um,...
+    warning('tissueRefractiveIndex is probably not %.2f.\nZ pixel size by fiting movement: %.2fum.\nZ pixel size by n: %.2fum.\nRecommended n=%.2f',...
+        in.tissueRefractiveIndex,zPixelSizeByPolyFit_um,zPixelSizeFromDim_um,...
         adjustedN);
 end
 
@@ -264,11 +264,11 @@ scansDisp1 = zeros(size(scans,1),size(scans,2),length(dValues));
 scansDisp2 = scansDisp1;
 for ii = 1:length(dValues)
     scan = yOCTInterfToScanCpx(interfAtFocus, dim, ...
-        'dispersionQuadraticTerm', dValues(ii), 'n', nIndexOfRefraction);
+        'dispersionQuadraticTerm', dValues(ii), 'n', in.tissueRefractiveIndex);
     scansDisp1(:,:,ii) = mean(log(abs(scan)),3);
 
     scan = yOCTInterfToScanCpx(squeeze(interfs(:,:,1)), dim, ...
-        'dispersionQuadraticTerm', dValues(ii), 'n', nIndexOfRefraction);
+        'dispersionQuadraticTerm', dValues(ii), 'n', in.tissueRefractiveIndex);
     scansDisp2(:,:,ii) = mean(log(abs(scan)),3);
 end
 
