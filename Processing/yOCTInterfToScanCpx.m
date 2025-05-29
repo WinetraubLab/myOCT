@@ -1,10 +1,10 @@
 function [scanCpx,dimensionsOut] = yOCTInterfToScanCpx (varargin)
-%This function takes the interferogram loaded from yOCTLoadInterfFromFile
-%and converts it to a complex scanCpx datastructure
+% This function takes the interferogram loaded from yOCTLoadInterfFromFile
+% and converts it to a complex scanCpx datastructure
 %
-%USAGE:
+% USAGE:
 %       scanCpx = yOCTInterfToBScanCpx (interferogram,dimensions [,param1,value1,...])
-%INPUTS
+% INPUTS
 %   - interferogram - as loaded by yOCTLoadInterfFromFile. dimensions
 %       should be (lambda,x,...)
 %   - dimensions - Dimensions structure as loaded by yOCTLoadInterfFromFile.
@@ -23,70 +23,71 @@ function [scanCpx,dimensionsOut] = yOCTInterfToScanCpx (varargin)
 %               For brain tissue, use 1.35. Reference: Srinivasan VJ, Radhakrishnan H, Jiang JY, Barry S, & Cable AE (2012) Optical coherence microscopy for deep tissue imaging of the cerebral cortex with intrinsic contrast. Opt Express 20(3):2220-2239.
 %		- 'peakOnly' - if set to true, only returns dimensions update. Default: false
 %			dimensions = yOCTInterfToScanCpx (varargin)
-%OUTPUT
+% OUTPUT
 %   scanCpx - 2D or 3D volume with dimensions (z,x,y). More if there is A/B
 %       scan averaging, see yOCTLoadInterfFromFile for more information
 %	dimensions - updated dimesions, adding dimesions for z
 %
-%Author: Yonatan W (Dec 27, 2017)
+% Author: Yonatan W (Dec 27, 2017)
 
 %% Hendle Inputs
 if (iscell(varargin{1}))
-    %the first varible contains a cell with the rest of the varibles, open it
+    % the first varible contains a cell with the rest of the varibles, open it
     varargin = varargin{1};
 end 
 
 interferogram = varargin{1};
 dimensionsIn = varargin{2};
 
-%Optional Parameters
-dispersionQuadraticTerm = 100; %Default Value
+% Optional Parameters
+dispersionQuadraticTerm = 100; % Default Value
 band = [];
-interpMethod = []; %Default
+interpMethod = []; % Default
 n = 1.33;
 peakOnly = false;
 for i=3:2:length(varargin)
-   eval([varargin{i} ' = varargin{i+1};']); %<-TBD - there should be a safer way
+   eval([varargin{i} ' = varargin{i+1};']); % <-TBD - there should be a safer way
 end
 
 if (peakOnly)
-	interferogram=interferogram(:,1,1,1,1,1); %In peak only mode only process one A Scan
+	interferogram=interferogram(:,1,1,1,1,1); % In peak only mode only process one A Scan
 end	
 
 %% Check if interferogram is equispaced. If not, equispace it before processing
 dimensions = yOCTChangeDimensionsStructureUnits(dimensionsIn,'nm');
 lambda = dimensions.lambda.values;
-k = 2*pi./(lambda); %Get wave lumber in [1/nm]
+k = 2*pi./(lambda); % Get wave lumber in [1/nm]
 
 if (abs((max(diff(k)) - min(diff(k)))/max(k)) > 1e-10)
-    %Not equispaced, equispacing needed
+    % Not equispaced, equispacing needed
     [interferogram,dimensions] = yOCTEquispaceInterf(interferogram,dimensions,interpMethod);
     
     lambda = dimensions.lambda.values;
-    k = 2*pi./(lambda); %Get wave lumber in [1/nm]
+    k = 2*pi./(lambda); % Get wave lumber in [1/nm]
 end
 s = size(interferogram);
 
 %% Filter bands
 filter = zeros(size(k));
 if ~isempty(band)
-    %Provide a warning if band is out of lambda range
+    % Provide a warning if band is out of lambda range
     if (band(1) < min(dimensions.lambda.values) || band(2) > max(dimensions.lambda.values))
         warning('Requested band is outside data borders, shrinking band size');
     end
     
-    %Band filter to select sub band
+    % Band filter to select sub band
     fLambda = linspace(band(1),band(2),length(dimensions.lambda.values));
     fVal = hann(length(fLambda)); 
     filter = interp1(fLambda,fVal,dimensions.lambda.values,'linear',0); %Extrapolation is 0 for values outside the filter
 else
-    %No band filter, so apply Hann filter on the entire sample
+    % No band filter, so apply Hann filter on the entire sample
     filter = hann(length(filter));
 end
 
-%Normalize filter
+% Normalize filter
 filter = filter(:);
-filter = filter * (length(filter)/sum(filter)); %Normalization
+intensityNorm = sqrt(mean(filter.^2)); % This factor makes sure that filter energy doesn't go to infinity
+filter = filter / intensityNorm; % Normalization
 
 %% Reshape interferogram for easy parallelization
 interf = reshape(interferogram,s(1),[]);
@@ -116,7 +117,10 @@ else
     error('Please define dispersionQuadraticTerm');
 end
 
+% Convert dispersion phase to a factor
 dispersionComp = exp(1i*dispersionPhase);
+
+%% Overall filter
 filterAll = repmat(dispersionComp.*filter,[1 size(interf,2)]);
 
 %% Generate Cpx 
@@ -128,13 +132,13 @@ scanCpx = reshape(scanCpx,[size(scanCpx,1) s(2:end)]);
 
 %% Update Dimensions
 dimensions.z.order = 1;
-lambda = mean(dimensions.lambda.values)/1000; %[um]
-dlambda = diff(dimensions.lambda.values([1 end]))/1000;%[um]
-N = length(dimensions.lambda.values);
-zStepSizeAir = 1/2*lambda^2/dlambda; %1/2 factor is because light goes back and forth
-zStepSizeMedium = zStepSizeAir/n;
-dimensions.z.values = linspace(0,zStepSizeMedium*N/2,N/2); 
+dimensions.z.values = yOCTInterfToScanCpx_getZ( ...
+    dimensions.lambda.values(1), ...
+    dimensions.lambda.values(end), ...
+    length(dimensions.lambda.values), n);
 dimensions.z.units = 'microns [in medium]';
+dimensions.z.origin = 'z=0 matches reference arm';
+dimensions.z.index = 1:length(dimensions.z.values);
 
 dimensionsOut = dimensionsIn;
 dimensionsOut.z = dimensions.z;

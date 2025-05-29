@@ -308,3 +308,11 @@ elseif isempty(frameIndex) && ~isempty(pixRegionX)
 else
     im = imread(imagePath,'index',frameIndex,'PixelRegion',{pixRegionY pixRegionX});
 end
+
+% Check output matrix color
+if (size(im,3) ~= 1)
+    if (isempty(frameIndex) || frameIndex==1) % Only warn one time
+        warning('%s is not a gray scale file, ignoring color channels',imagePath);
+    end
+    im = squeeze(im(:,:,1));
+end

@@ -212,7 +212,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             % Loop over all images and compare algorithm with ground truth
             for i=1:length(imageFilePath)
                 % Load OCT image
-                [oct, ~] = yOCTConvertAndReadTif2Png(imageFilePath{i});
+                oct = rgb2gray(imread(imageFilePath{i}));
 
                 % Create dimensions, assuming 1 micron per pixel
                 dim.x.order = 2;

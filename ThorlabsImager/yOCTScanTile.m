@@ -14,14 +14,14 @@ function [json] = yOCTScanTile(varargin)
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used.
 %   octProbeFOV_mm          []              Keep empty to use FOV frome probe, or set to override probe's value.
-%   pixelSize_um            1               What is the pixel size.
+%   pixelSize_um            1               What is the pixel size (in xy plane).
 %   oct2stageXYAngleDeg     0               The angle to convert OCT coordniate system to motor coordinate system, see yOCTStageInit.
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan.
 %   tissueRefractiveIndex   1.4             Refractive index of tissue.
 %   xOffset,yOffset         0               (0,0) means that the center of the tile scaned is at the center of the galvo range aka lens optical axis. 
 %                                           By appling offset, the center of the tile will be positioned differently.Units: mm
 %   nBScanAvg               1               How many B Scan Averaging to scan
-%   zDepths                 0               Scan depths to scan. Positive value is deeper). Units: mm
+%   zDepths                 0               Scan depths to scan. Positive value is deeper. Units: mm
 %	unzipOCTFile			true			Scan will scan .OCT file, if you would like to automatically unzip it set this to true.
 % Debug parameters:
 %   v                       true            verbose mode      

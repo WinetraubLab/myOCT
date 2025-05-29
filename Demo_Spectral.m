@@ -2,6 +2,8 @@ function Demo_Spectral
 %This demo demonstrates how to extract a single band from an inmage (spectral OCT)
 %this demo is for 2D but can be extanded for 3D
 
+yOCTSetLibraryPath(); % Set path
+
 %% Iputs
 %Ganymede
 filePath = ['\\171.65.17.174\MATLAB_Share\Jenkins\myOCT Build\TestVectors\' ...

@@ -5,6 +5,15 @@ function [dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(tiled
 %     dimOutput.z == 0 when the focus is at the estimated tissue surface
 %     dimOneTile.z == 0 when at the focus position (approximatly)
 % If focusPositionInImageZpix is not provided, we won't make the correction
+%
+% INPUTS:
+%   tiledScanInputFolder: data input folder
+%   focusPositionInImageZpix: focus position for each zDepths (or one
+%       number if focusPositionInImageZpix is the same for all depths).
+%
+% OUTPUTS:
+%   dimOneTile: dim structure for both a single tile.
+%   dimOutput: one overall dimensions structure for the entire stack.
 
 %% Search and Load JSON file from  the tiledScanInputFolder
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
@@ -17,7 +26,7 @@ end
 
 dimOneTile = yOCTLoadInterfFromFile(firstDataFolder,'OCTSystem',json.OCTSystem,'peakOnly',true);
 tmp = zeros(size(dimOneTile.lambda.values(:)));
-dimOneTile = yOCTInterfToScanCpx (tmp, dimOneTile, 'n', json.tissueRefractiveIndex, 'peakOnly',true);
+dimOneTile = yOCTInterfToScanCpx(tmp, dimOneTile, 'n', json.tissueRefractiveIndex, 'peakOnly',true);
 
 % Update dimensions to mm
 dimOneTile = yOCTChangeDimensionsStructureUnits(dimOneTile, 'mm');
@@ -36,16 +45,37 @@ else
 end
 dimOneTile.x.values(end) = [];
 dimOneTile.y.values(end) = [];
+dimOneTile.x.origin = "x=0 is under objective's principal";
+dimOneTile.y.origin = "y=0 is under objective's principal";
 
-%% Correct dimOneTile.z to adjsut for focus position
+%% Correct dimOneTile.z to adjust for focus position
 if ~exist('focusPositionInImageZpix','var') || any(isnan(focusPositionInImageZpix))
-    % No adjustment
-elseif length(focusPositionInImageZpix) == 1
-    % One value
-    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
+    % No adjustment because no focus info is provided
 else
-    % One value for each depth
-    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(json.zDepths == 0));
+    % Use value focusPositionInImageZpix provided by user to pinpoint focus.
+    % Adust dimOneTile.z == 0 when at the focus position (approximatly)
+
+    if length(focusPositionInImageZpix) == 1 %#ok<ISCL>
+        % Focus position is the same for all scans
+        dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
+    else
+        % Each scan has a different focus position
+        if std(focusPositionInImageZpix) ~= 0
+            % The situation where each focusPositionInImageZpix has a
+            % differnt zDepth is not implemented yet. The problem is that
+            % for each dimOneTile, z.values are different as they have
+            % different focus correction. This is a problem. 
+            % To solve this, we could return an array of dimOneTile instead
+            % of one dimOneTile, where each dimOneTile corresponds to one
+            % zDepth. But this is a big refactor for yOCTProcessTiledScan.
+            % We are not ready to do that yet.
+            error('This is not implemented yet. See comment above');
+        end
+        
+        dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(1));
+    end
+
+    dimOneTile.z.origin = 'z=0 is focus position';
 end
 
 %% Compute pixel size
@@ -92,13 +122,15 @@ end
 dimOutput.lambda = dimOneTile.lambda;
 dimOutput.z = dimOneTile.z; % Template, we will update it soon
 dimOutput.z.values = zAll_mm(:)';
-dimOutput.z.origin = 'z=0 is “user specified tissue interface”';
+dimOutput.z.origin = 'z=0 is tissue interface as specified by user';
+dimOutput.z.index = 1:length(dimOutput.z.values);
 dimOutput.x = dimOneTile.x;
-dimOutput.x.origin = 'x=0 is OCT scanner origin when xCenters=0 scan was taken';
+dimOutput.x.origin = 'x=0 is OCT scanner origin (under objective''s principal) when xCenters=0 scan was taken';
 dimOutput.x.values = xAll_mm(:)';
 dimOutput.x.index = 1:length(dimOutput.x.values);
 dimOutput.y = dimOneTile.y;
 dimOutput.y.values = yAll_mm(:)';
 dimOutput.y.index = 1:length(dimOutput.y.values);
-dimOutput.y.origin = 'y=0 is OCT scanner origin when yCenters=0 scan was taken';
+dimOutput.y.origin = 'y=0 is OCT scanner origin (under objective''s principal) when yCenters=0 scan was taken';
 dimOutput.aux = dimOneTile.aux;
+

@@ -11,7 +11,7 @@ function yOCTTurnOpticalSwitch(newState)
 tic
 %% Input Processing
 % Select COM, if doesn't exist use serialportlist to list all options
-com_chanel = 'COM4';  
+com_chanel = 'COM3';  
 
 %% Store com for fast activation
 persistent sp_structure;

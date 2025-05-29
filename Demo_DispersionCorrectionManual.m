@@ -1,6 +1,7 @@
 function Demo_DispersionCorrectionManual
 %Run this demo to find dispersionParameter, manually
 
+yOCTSetLibraryPath(); % Set path
 close all;
 
 %% Inputs
