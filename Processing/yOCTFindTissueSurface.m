@@ -1,25 +1,25 @@
-function [surfacePosition,x,y] = yOCTFindTissueSurface(varargin)
+function [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface(varargin)
 % This function processes OCT scan data to identify tissue surface from the
 % OCT image.
 % USAGE:
-%   [surfacePosition, x, y] = yOCTFindTissueSurface(logMeanAbs, dimensions, 'param', value, ...)
+%   [surfacePosition_mm, x_mm, y_mm] = yOCTFindTissueSurface(logMeanAbs, dimensions, 'param', value, ...)
 % INPUTS:
 %   Required:
 %       logMeanAbs, dimensions - data structures from yOCTProcessTiledScan.
 %   Optional: 
-%       'isVisualize'          set to true to generate image heatmap visualization figure. Default is false.
-%       'pixelSize_um'         pixel size in microns. If not given, we attempt to infer from 'dimensions'.
-%       'octProbeFOV_mm'       field of view in mm used in the scans
-%       'octProbePath'         path to .ini file for probe used to determine FOV if not provided
-%       'constantThreshold'    user previously identified intensity threshold for surface detection
+%       'isVisualize'          Set to true to generate image heatmap visualization figure. Default is false.
+%       'octProbeFOV_mm'       Field of View in mm used in the scans. If empty (default), X-axis tile 
+%                              count becomes undefined, set to 1 and detection quality may degrade.
+%       'constantThreshold'    User-supplied intensity threshold (overrides Otsu detection).
+%                              Keep it empty [] (default) to auto-detect this value with Otsu method.
 % OUTPUTS:
-%   - surfacePosition- 2D matrix. dimensions are (y,x). What
+%   - surfacePosition_mm- 2D matrix. dimensions are (y,x). What
 %       height is image surface. Height measured from “user specified
 %       tissue interface”, higher value means deeper. See: 
 %       https://docs.google.com/document/d/1aMgy00HvxrOlTXRINk-SvcvQSMU1VzT0U60hdChUVa0/
-%       physical dimensions of surfacePosition are the same as dimensions.z.units if provided
-%   - x,y are the x,y positions that corresponds to surfacePosition(y,x)
-%       Units are the same as dimensions.x.units if provided.
+%       physical dimensions of surfacePosition_mm are always returned in millimeters.
+%   - x_mm,y_mm are the x,y positions that corresponds to surfacePosition_mm(y,x)
+%       Units are always returned in millimeters, regardless of input units.
 
 
 %% Parse inputs
@@ -28,9 +28,7 @@ p = inputParser;
 addRequired(p,'logMeanAbs');
 addRequired(p,'dimensions');
 addParameter(p,'isVisualize',false,@(x) islogical(x) || isnumeric(x));
-addParameter(p,'pixelSize_um',[],@(x) isnumeric(x) || isempty(x));
-addParameter(p,'octProbeFOV_mm',[]);  % if empty, we try to read from .ini
-addParameter(p,'octProbePath','probe.ini', @ischar);
+addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p, 'constantThreshold', [], @(x) isnumeric(x) || isempty(x));
 
 parse(p,varargin{:});
@@ -39,14 +37,13 @@ in = p.Results;
 logMeanAbs = in.logMeanAbs;
 dim = in.dimensions;
 isVisualize = in.isVisualize;
-pixelSize_um = in.pixelSize_um;
 constantThreshold = in.constantThreshold;
 
 % Define Detection Parameters
 base_confirmations_required = 12; % Initial consecutive pixels required to confirm surface
-z_size_threshold = 800;           % Threshold to determine the starting depth based on image height
+z_size_threshold = 1000;           % Threshold to determine the starting depth based on image height
 low_z_start = 1;                  % Starting pixel for images with a small Z dimension
-high_z_start = 250;               % Starting pixel for images with a large Z dimension
+high_z_start = 300;               % Starting pixel for images with a large Z dimension
 sigma = 1.5;                      % Deviation for the Gaussian kernel
 
 [z_size, x_size, y_size] = size(logMeanAbs); % Retrieve total scan sizes
@@ -58,67 +55,55 @@ else
     start_depth = low_z_start;
 end
 
+% Validate provided dimensions
+isValid = isstruct(dim) && ...
+          isfield(dim,'z') && isfield(dim.z,'values') && ~isempty(dim.z.values) && ...
+          isfield(dim,'x') && isfield(dim.x,'values') && ~isempty(dim.x.values) && ...
+          isfield(dim,'y') && isfield(dim.y,'values') && ~isempty(dim.y.values);
+
+if ~isValid
+    error('yOCTFindTissueSurface:InvalidDimensions', ...
+          ['Valid dim.x/y/z values (with units) are required to map tissue ' ...
+           'surface depths to physical units.']);
+end
+
 
 %% Determine number of tiles stitched together
 
-% Determine pixel size in microns if possible
-if isempty(pixelSize_um) % Pixel size was not explicitly provided, so we try to infer from dimensions
-    if ~(isstruct(dim) && isfield(dim, 'x') && isfield(dim.x, 'values') && ...
-             isfield(dim.x,'units') && numel(dim.x.values) >= 2) % No valid dimensions
-        pixelSize_um = [];
-    else
-        if contains(dim.x.units, 'mm') || contains(dim.x.units, 'millimeter')
-            factor = 1e3;           % mm -> microns
-        elseif contains(dim.x.units, 'um') || contains(dim.x.units, 'micron') || contains(dim.x.units, 'micrometer')
-            factor = 1;             % already microns
-        elseif contains(dim.x.units, 'nm') || contains(dim.x.units, 'nanometer')
-            factor = 1e-3;          % nm -> microns
-        elseif contains(dim.x.units, 'meter') || strcmp(dim.x.units, 'm')
-            factor = 1e6;           % meters -> microns
-        else
-            error('Unknown unit type for dim.x.units: "%s". Please supply pixelSize_um or valid units.', dim.x.units);
-        end
-        pixelSize_um = abs(dim.x.values(2) - dim.x.values(1)) * factor; % Dimensions valid, infer pixel size to determine X axis tiles
-    end
-end
+% Each stitched tile is its own OCT frame and may have a slightly different
+% brightness/exposure profile. We call 'computeOtsuThreshold()' for every tile.
+% Otsu's method is an automatic way to pick a cut-off that best separates 
+% “background” pixels (air/noise) from “foreground” pixels (tissue) by 
+% maximising the contrast between those two groups. Using Otsu tile‑by‑tile
+% keeps the detection accurate even when tiles vary too much.
 
-% Determine octProbe Field of View if possible
-if ~isempty(in.octProbeFOV_mm)
-    octProbeFOV_mm = in.octProbeFOV_mm; % User explicitly provided FOV in mm
-else
-    if ~exist(in.octProbePath,'file') % No FOV Probe provided either
-    octProbeFOV_mm = [];
-    else
-        in.octProbe = yOCTReadProbeIniToStruct(in.octProbePath); % Probe file found: read default FOV
-        octProbeFOV_mm = in.octProbe.RangeMaxX;
-    end
+% Work out how many X-tiles were stitched in the scan so that, later on,
+% we can apply an intensity threshold per-tile instead of one global value.
+
+% Make sure output is always in 'mm'
+dim = yOCTChangeDimensionsStructureUnits(dim, 'mm');
+
+% Determine pixel size in mm
+pixelSize_mm = [];                       % init
+if isstruct(dim) && isfield(dim,'x') && isfield(dim.x,'values') ...
+        && numel(dim.x.values) >= 2
+    pixelSize_mm = abs(dim.x.values(2) - dim.x.values(1));  % mm per pixel
 end
 
 % Determine number of tiles along X dimension and width of each tile
-if ~isempty(octProbeFOV_mm) && ~isempty(pixelSize_um)
-    tileWidth_px = round((octProbeFOV_mm * 1000) / pixelSize_um);  % Width in pixels of each tile
-    numTilesX = max(1, floor(x_size / tileWidth_px));              % Number of tiles along X dimension
+octProbeFOV_mm = in.octProbeFOV_mm;  % expect it is passed in; may be []
+
+if ~isempty(octProbeFOV_mm) && ~isempty(pixelSize_mm)
+    tileWidth_px = round(octProbeFOV_mm / pixelSize_mm);   % width of one tile in px
+    numTilesX    = max(1, floor(x_size / tileWidth_px));   % tiles along X
 else
-   warning off backtrace
-   if isempty(octProbeFOV_mm) && isempty(pixelSize_um) % Both FOV & pixel size missing
-        warning(['No octProbeFOV_mm and no pixelSize_um were provided. ' newline newline ...
-                 'ACTION: We will assume there is only 1 tile in the X axis. ' newline newline ...
-                 'If multiple scans were performed in the X dimension and stitched together, ' ...
-                 ['please provide both the octProbeFOV_mm (or a valid probe file) and ' ...
-                 'the pixelSize_um (or valid dimensions) used for better tissue surface detection.'] newline]);
-    elseif isempty(octProbeFOV_mm) % Only FOV is missing
-        warning(['No octProbeFOV_mm provided and no valid probe file detected. ' newline newline ...
-                 'ACTION: We will assume there is only 1 tile in the X axis. ' newline newline ...
-                 ['If multiple scans were performed in the X dimension and stitched together, please provide' ...
-                 ' the octProbeFOV_mm used for better tissue surface detection.'] newline]);
-    else % Only pixelSize_um is missing
-        warning(['No pixelSize_um provided.' newline newline 'We will assume there is only 1 tile in the X axis. ' newline newline ...
-                 'If multiple scans were performed in the X dimension and stitched together, ' ...
-                 'please provide a valid pixelSize_um or valid dimensions for better tissue surface detection.' newline]);
-    end
-    warning on backtrace
-    tileWidth_px = x_size; % Fallback: 1 tile occupies the entire X dimension
+    tileWidth_px = x_size;   % fallback: whole X treated as one tile (might degrade detection)
     numTilesX    = 1;
+    fprintf(['%s octProbeFOV_mm or pixelSize_mm not provided or could not be determined. ', ...
+             'Assuming X_tiles = 1.\n', ...
+             '      Surface detection will treat the full X-range as a single tile, ', ...
+             'even if multiple tiles were stitched together.\n\n'], ...
+             datestr(datetime));
 end
 
 
@@ -166,34 +151,19 @@ smoothed_surface_depth = round(smoothed_surface_depth);  % Round smoothed values
 
 % Convert Depth found from Pixels to Units in dim.z.units like microns or mm
 surface_depth_pixels = smoothed_surface_depth.'; % Transpose for consistent global orientation system
-surfacePosition = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
+surfacePosition_mm = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
 
-% Check dimensions for z, x, y
-if ~(isstruct(dim) && ...
-     isfield(dim, 'z') && isfield(dim.z, 'values') && ~isempty(dim.z.values) && ...
-     isfield(dim, 'x') && isfield(dim.x, 'values') && ~isempty(dim.x.values) && ...
-     isfield(dim, 'y') && isfield(dim.y, 'values') && ~isempty(dim.y.values))
-    % Dimensions are invalid: warn & use pixel coordinates
-    warning(['No valid dimensions passed. SurfacePosition will be in pixel coordinates.']);
-    x = 1:size(surface_depth_pixels, 2); 
-    y = 1:size(surface_depth_pixels, 1); 
-    z = 1:max(surface_depth_pixels(:)); 
-    validDimensions = false;
-else
-    % Dimensions are valid: use them
-    x = dim.x.values(:);
-    y = dim.y.values(:);
-    z = dim.z.values(:);
-    validDimensions = true;
-end
+% Assign dimensions
+x_mm = dim.x.values(:);
+y_mm = dim.y.values(:);
+z = dim.z.values(:);
 
-% Map depth indices to actual depth measurements in surfacePosition
-if validDimensions
-    for i = 1:numel(surfacePosition)
-        index = surface_depth_pixels(i);
-        if ~isnan(index) && index >= 1 && index <= length(z)
-            surfacePosition(i) = z(index);
-        end
+% Map depth indices to actual depth measurements in surfacePosition_mm
+
+for i = 1:numel(surfacePosition_mm)
+    index = surface_depth_pixels(i);
+    if ~isnan(index) && index >= 1 && index <= length(z)
+        surfacePosition_mm(i) = z(index);
     end
 end
 
@@ -201,21 +171,12 @@ end
 %% Generate heatmap of the identified surface for user visualization
 
 if isVisualize
-    if validDimensions
-        figure;
-        imagesc(x, y, surfacePosition);
-        set(gca, 'YDir', 'normal');
-        xlabel(['X-axis (', dim.x.units, ')']);
-        ylabel(['Y-axis (', dim.y.units, ')']);
-        title(['Surface Position in ', dim.z.units, ' (View from the top)']);
-    else
-        figure;
-        imagesc(surface_depth_pixels);
-        set(gca, 'YDir', 'normal');
-        xlabel('X-axis (pixels)');
-        ylabel('Y-axis (pixels)');
-        title('Surface Position in Pixel Coordinates (no valid dimensions)');
-    end
+    figure;
+    imagesc(x_mm, y_mm, surfacePosition_mm);
+    set(gca,'YDir','normal');
+    xlabel(['X-axis (' dim.x.units ')']);
+    ylabel(['Y-axis (' dim.y.units ')']);
+    title(['Surface Position (' dim.z.units ') – view from top']);
     colormap(flipud(jet));
     colorbar;
 end
