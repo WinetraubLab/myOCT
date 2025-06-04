@@ -144,7 +144,7 @@ for iXY = 1:numel(photobleachPlan)
             zSurf_mm = median(selectedValues(:), 'omitnan');
             if isnan(zSurf_mm), zSurf_mm = 0; end
             
-            % Limit offset to 200 microns to prevent lens damage
+            % Limit offset to 100 microns to prevent lens damage
             if zSurf_mm > 0.1, zSurf_mm = 0.1; end
         end
     end
