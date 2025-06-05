@@ -1,5 +1,5 @@
-function yOCTAssertTissueSurfaceIsInFocus( ...
-    surfacePosition_mm, x_mm, y_mm, acceptableRange_mm)
+function medianSurfacePosition_mm = yOCTAssertTissueSurfaceIsInFocus( ...
+    surfacePosition_mm, x_mm, y_mm, acceptableRange_mm, assertInFocusAcceptableRangeXYArea_mm)
 % This function checks the outputs from yOCTScanAndFindTissueSurface and
 % asserts that the tissue surface is in focus. It will also explain to user
 % how to adjust the z stage such that tissue will be in focus.
@@ -10,6 +10,12 @@ function yOCTAssertTissueSurfaceIsInFocus( ...
 %   y_mm: provided by yOCTScanAndFindTissueSurface
 %   acceptableRange_mm: how far can tissue surface be from focus position
 %       to be considered "good enough". Default: 0.025mm
+%   assertInFocusAcceptableRangeXYArea_mm : XY area (in mm) where the tissue 
+%       surface must be in focus. This defines the region used to check 
+%       whether the surface is within the assertInFocusAcceptableRange_mm 
+%       to the focus plane. Accepted values:
+%         [] (default)   =  uses the entire scan area
+%         single number  =  centered square area. Example 0.5 makes it –0.25 to +0.25 mm
 
 %% Input checks
 
@@ -19,20 +25,36 @@ if ~exist('acceptableRange_mm','var')
     acceptableRange_mm = 0.025;
 end
 
+if ~exist('assertInFocusAcceptableRangeXYArea_mm','var') || isempty(assertInFocusAcceptableRangeXYArea_mm)
+    assertInFocusAcceptableRangeXYArea_mm = [];
+end
+
 %% Compute surface position statistics
-surfacePosition_mm = surfacePosition_mm(:);
+
+% Crop Region of Interest
+if isempty(assertInFocusAcceptableRangeXYArea_mm) % [] -> keep full area
+    surfROI_mm = surfacePosition_mm;
+
+else % single value provided: centered square of width
+    half = assertInFocusAcceptableRangeXYArea_mm/2;
+    ix   = (x_mm >= -half) & (x_mm <=  half);
+    iy   = (y_mm >= -half) & (y_mm <=  half);
+    surfROI_mm = surfacePosition_mm(iy,ix);
+end
+
+surfROI_mm = surfROI_mm(:);
 
 % Make sure we have enough surface position estimated
-assert(sum(isnan(surfacePosition_mm))/length(surfacePosition_mm) < 0.2, "yOCT:SurfaceCannotBeEstimated", "Lage part of the surface position cannot be estimated");
-surfacePosition_mm(isnan(surfacePosition_mm)) = [];
+assert(sum(isnan(surfROI_mm))/length(surfROI_mm) < 0.2, "yOCT:SurfaceCannotBeEstimated", "Large part of the surface position cannot be estimated");
+surfROI_mm(isnan(surfROI_mm)) = [];
 
 % Represent the tissue 
-medianSurfacePosition_mm = median(surfacePosition_mm);
+medianSurfacePosition_mm = median(surfROI_mm);
 
 % Make sure that tissue is flat enough that it can all be in focus.
 p = 80;
 distFromMedian_mm = prctile(...
-    abs(surfacePosition_mm-medianSurfacePosition_mm), p);
+    abs(surfROI_mm-medianSurfacePosition_mm), p);
 if distFromMedian_mm>acceptableRange_mm
     error('yOCT:SurfaceCannotBeInFocus', ...
         "Tissue's shape is not flat, therefore it cannot all be in focus");

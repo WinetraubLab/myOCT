@@ -21,9 +21,8 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %       to the focus plane. If it's out of range, the Z stage will be
 %       automatically adjusted to bring the tissue into focus via
 %       yOCTAssertTissueSurfaceIsInFocus. Accepted values:
-%         • []             → uses the entire scan area (default)
-%         • single number  → centered square. Example 0.5 → –0.25 to +0.25 mm
-%         • 4 numbers      → [xMin xMax yMin yMax] custom rectangle (mm)
+%         [] (default)   =  uses the entire scan area (default)
+%         single number  =  centered square area. Example 0.5 makes it –0.25 to +0.25 mm
 %   moveTissueToFocusIfNeeded: (Default = true) If skipHardware is false and
 %       the surface is out of focus, having this true automatically moves the 
 %       Z stage by the required amount. False will skip this movement.
@@ -51,7 +50,7 @@ addParameter(p,'assertInFocusAcceptableRangeXYArea_mm',[], ...
     @(x) isempty(x) || isnumeric(x));
 addParameter(p,'moveTissueToFocusIfNeeded',true,@islogical);
 addParameter(p,'v',false);
-addParameter(p,'skipHardware',false)
+addParameter(p,'skipHardware',false);
 
 parse(p,varargin{:});
 in = p.Results;
@@ -72,12 +71,8 @@ focusPositionInImageZpix = in.focusPositionInImageZpix;
 
 roi = in.assertInFocusAcceptableRangeXYArea_mm; % early roi validation
 if ~isempty(roi)
-    if isscalar(roi)
-        if roi <= 0
-            error('assertInFocusAcceptableRangeXYArea_mm scalar value must be positive (width in mm).');
-        end
-    elseif ~(numel(roi)==4)
-        error('assertInFocusAcceptableRangeXYArea_mm must be [] , a positive single number, or a 4‑element vector [xMin xMax yMin yMax].');
+    if ~(isscalar(roi) && roi>0)
+        error('assertInFocusAcceptableRangeXYArea_mm must be [] or a single positive number (square width in mm).');
     end
 end
 
@@ -142,79 +137,40 @@ if (v)
     fprintf('%s Surface identification completed in %.2f seconds.\n', datestr(datetime), elapsedTimeSurfaceDetection_sec);
 end
 
-%% Clean up temp data
-if ~isempty(temporaryFolder) && exist(temporaryFolder, 'dir')
-    rmdir(temporaryFolder, 's'); % Remove the output directory after processing
-end
-totalEndTime = datetime;  % Capture the ending time
-totalDuration = totalEndTime - totalStartTime;
-if (v)
-    fprintf('%s yOCTScanAndFindTissueSurface function evaluation completed in %s.\n', ...
-        datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
-end
-
 %% Assert
 if ~isempty(in.assertInFocusAcceptableRange_mm)
-    % Decide which XY pixels to include (Region of Interest)
-    if isempty(roi)          % [] -> keep full area
-        surfROI_mm = surfacePosition_mm;
-        xROI_mm    = x_mm;
-        yROI_mm    = y_mm;
 
-    elseif isscalar(roi)     % single value -> centered square of width
-        half = roi/2;
-        ix = (x_mm >= -half) & (x_mm <= half);
-        iy = (y_mm >= -half) & (y_mm <= half);
-
-        surfROI_mm = surfacePosition_mm(iy,ix);
-        xROI_mm    = x_mm(ix);
-        yROI_mm    = y_mm(iy);
-
-    else                    % 4‑element vector [xMin xMax yMin yMax]
-        ix = (x_mm >= roi(1)) & (x_mm <= roi(2));
-        iy = (y_mm >= roi(3)) & (y_mm <= roi(4));
-
-        surfROI_mm = surfacePosition_mm(iy,ix);
-        xROI_mm    = x_mm(ix);
-        yROI_mm    = y_mm(iy);
-    end
-
-    criticalFail  = false;
     outOfFocusErr = false;
+    medianSurfacePosition_mm = NaN;
 
     try
-        yOCTAssertTissueSurfaceIsInFocus(surfROI_mm, xROI_mm, yROI_mm, ...
-                                         in.assertInFocusAcceptableRange_mm);
+        % assert function returns median if everything is within range
+        medianSurfacePosition_mm = yOCTAssertTissueSurfaceIsInFocus( ...
+            surfacePosition_mm, x_mm, y_mm, in.assertInFocusAcceptableRange_mm, roi);
+
     catch ME
-        warning(ME.identifier, '%s', ME.message);
-        switch ME.identifier
-            case {'yOCT:SurfaceCannotBeEstimated', 'yOCT:SurfaceCannotBeInFocus'}
-                criticalFail = true;           % never move Z stage in these cases
-            case 'yOCT:SurfaceOutOfFocus'
-                outOfFocusErr = true;          % we MAY move Z stage
-            otherwise
-                % unexpected error -> treat as critical
-                criticalFail = true;
+        if strcmp(ME.identifier, 'yOCT:SurfaceOutOfFocus')
+            % Extract median shift embedded in the error message:
+            tokens = regexp(ME.message, 'surface \(([-+]?\d*\.?\d+)mm\)', 'tokens','once');
+            if ~isempty(tokens)
+                medianSurfacePosition_mm = str2double(tokens{1});
+            end
+            outOfFocusErr = true;           % we MAY auto move Z stage
+        else
+            rethrow(ME);                    % fatal error shown
         end
     end
-
-    roiVals = surfROI_mm(:);
-    roiVals = roiVals(~isnan(roiVals));  % drop NaNs
-    if isempty(roiVals)
-        medianSurfacePosition_mm = NaN;
-    else
-        maxStageShift_mm = 0.20; % safety cap for maximum Z move (200 um)
-        medianSurfacePosition_mm = median(roiVals);
-        if abs(medianSurfacePosition_mm) > maxStageShift_mm
-            medianSurfacePosition_mm = sign(medianSurfacePosition_mm) * maxStageShift_mm;
-        end
+    
+    maxStageShift_mm = 0.20;            % 200 micron safety cap
+    if ~isnan(medianSurfacePosition_mm) && ...
+         abs(medianSurfacePosition_mm) > maxStageShift_mm
+        medianSurfacePosition_mm = sign(medianSurfacePosition_mm) * maxStageShift_mm;
     end
 
     % Move Z in stage if required (all conditions must be met to move it)
-    needMove =  outOfFocusErr                                                       && ...  
-                ~criticalFail                                                       && ...  
-                ~isnan(medianSurfacePosition_mm)                                    && ...  
-                abs(medianSurfacePosition_mm) > in.assertInFocusAcceptableRange_mm  && ...  
+    needMove =  outOfFocusErr                                                       && ...
+                ~isnan(medianSurfacePosition_mm)                                    && ...
+                abs(medianSurfacePosition_mm) > in.assertInFocusAcceptableRange_mm  && ...
                 ~in.skipHardware                                                    && ...
                 in.moveTissueToFocusIfNeeded;
 
@@ -222,7 +178,7 @@ if ~isempty(in.assertInFocusAcceptableRange_mm)
         [~,~,z0] = yOCTStageInit();  % query current Z
         try
             yOCTStageMoveTo(NaN, NaN, z0 + medianSurfacePosition_mm, v);
-            warning('%s Stage auto‑moved by %.3f mm to refocus tissue surface.', ...
+            fprintf('%s Stage auto‑moved by %.3f mm to refocus tissue surface.\n', ...
                     datestr(datetime), medianSurfacePosition_mm);
 
             % keep surface map consistent with new focus
@@ -233,7 +189,18 @@ if ~isempty(in.assertInFocusAcceptableRange_mm)
                         datestr(datetime), z0, z0 + medianSurfacePosition_mm);
             end
         catch ME
-            warning(ME.identifier, 'Stage move failed: %s', ME.message);
+            error('yOCT:StageMoveFailed','Stage move failed: %s', ME.message);
         end
     end
+end
+
+%% Clean up temp data
+if ~isempty(temporaryFolder) && exist(temporaryFolder, 'dir')
+    rmdir(temporaryFolder, 's'); % Remove the output directory after processing
+end
+totalEndTime = datetime;  % Capture the ending time
+totalDuration = totalEndTime - totalStartTime;
+if (v)
+    fprintf('%s yOCTScanAndFindTissueSurface function evaluation completed in %s.\n', ...
+        datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
 end
