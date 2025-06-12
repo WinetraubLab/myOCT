@@ -8,8 +8,9 @@ function [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface(varargin)
 %       logMeanAbs, dimensions - data structures from yOCTProcessTiledScan.
 %   Optional: 
 %       'isVisualize'          Set to true to generate image heatmap visualization figure. Default is false.
-%       'octProbeFOV_mm'       Field of View in mm used in the scans. If empty (default), X-axis tile 
-%                              count becomes undefined, set to 1 and detection quality may degrade.
+%       'octProbeFOV_mm'       Physical FOV used (mm). If left empty (default), the code assumes 
+%                              all scans come from only one tile along X. This fallback works but might 
+%                              reduce surface detection accuracy for stitched volumes.
 %       'constantThreshold'    User-supplied intensity threshold (overrides Otsu detection).
 %                              Keep it empty [] (default) to auto-detect this value with Otsu method.
 % OUTPUTS:
@@ -21,13 +22,12 @@ function [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface(varargin)
 %   - x_mm,y_mm are the x,y positions that corresponds to surfacePosition_mm(y,x)
 %       Units are always returned in millimeters, regardless of input units.
 
-
 %% Parse inputs
 
 p = inputParser;
 addRequired(p,'logMeanAbs');
 addRequired(p,'dimensions');
-addParameter(p,'isVisualize',false,@(x) islogical(x) || isnumeric(x));
+addParameter(p,'isVisualize',false,@islogical);
 addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p, 'constantThreshold', [], @(x) isnumeric(x) || isempty(x));
 
