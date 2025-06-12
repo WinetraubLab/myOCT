@@ -121,54 +121,56 @@ photobleachPlan = yOCTPhotobleachTile_createPlan(...
     json.ptStart, json.ptEnd, json.z, json.FOV, json.minLineLength, ...
     json.bufferZoneWidth, json.enableZoneAccuracy, enableZone);
 
-% Adjust Z stage to make sure photobleaching happens in the tissue based on surface map
-halfFOVx = json.FOV(1)/2; % Half FOV in X 
-halfFOVy = json.FOV(2)/2; % Half FOV in Y too in case FOV is ever a rectangle
+% This function takes a photobleach plan, adjust it by Z according to the
+% surface map S
+function photobleachPlan = adjustPlanZ(S, photobleachPlan)
+    if isempty(S) % The case where tissue surface was not provided
+        % Make no adjustments
+        for iXY = 1:numel(photobleachPlan)
+            photobleachPlan(iXY).zOffsetDueToTissueSurface = 0;
+        end
 
-% surfaceMap sanity check
-S = json.surfaceMap; % may be empty
-
-if ~isempty(S)
+        return;
+    end
+    
+    % Check surface position dimensions
     assert(size(S.surfacePosition_mm,2) == length(S.surfaceX_mm), ...
         'surfaceMap.surfaceX_mm length must match surfacePosition_mm columns.');
     assert(size(S.surfacePosition_mm,1) == length(S.surfaceY_mm), ...
         'surfaceMap.surfaceY_mm length must match surfacePosition_mm rows.');
-end
-
-% Loop over each tile and compute Z offset per tile
-for iXY = 1:numel(photobleachPlan)
-    x_mm = photobleachPlan(iXY).stageCenterX_mm;
-    y_mm = photobleachPlan(iXY).stageCenterY_mm;
     
-    if isempty(S)
-        photobleachPlan(iXY).zOffsetDueToTissueSurface = 0;
-        % stageCenterZ_mm already contains user supplied depth
-        continue
-    end
-
+    % Loop over each tile and compute Z offset per tile
+    for iXY = 1:numel(photobleachPlan)
+        x_mm = photobleachPlan(iXY).stageCenterX_mm;
+        y_mm = photobleachPlan(iXY).stageCenterY_mm;
+    
         % Build ROI box for current tile [x y w h] (mm)
-        roiBox = [x_mm - halfFOVx, y_mm - halfFOVy, 2*halfFOVx, 2*halfFOVy];
-
+        roiBox = [...
+            x_mm - json.FOV(1)/2, y_mm - json.FOV(1)/2, ...
+            json.FOV(1), json.FOV(2)];
+    
         % Find offset inside that ROI
         [~, zSurf_mm] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
             S.surfacePosition_mm, S.surfaceX_mm, S.surfaceY_mm, ...
             'roiToCheckSurfacePosition',   roiBox, ...
             'throwErrorIfAssertionFails',  false, ...
             'v',                           v);
-
+    
         % Fallback if everything was NaN
         if isnan(zSurf_mm), zSurf_mm = 0; end
-
-    % Limit offset to 100 microns to prevent lens damage
-    zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
-
-    % Store the surface offset and apply it to the Z-stage
-    photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
-    photobleachPlan(iXY).stageCenterZ_mm = ...
-        photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
+    
+        % Limit offset to 100 microns to prevent lens damage
+        zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
+    
+        % Store the surface offset and apply it to the Z-stage
+        photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
+        photobleachPlan(iXY).stageCenterZ_mm = ...
+            photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
+    end
 end
+photobleachPlan = adjustPlanZ(json.surfaceMap, photobleachPlan);
 
-% Save the plan if user wants to return json
+% Save the plan in the json
 json.photobleachPlan = photobleachPlan;
 
 % Plot the plan
@@ -295,11 +297,10 @@ if (v)
     fprintf('%s Finalizing\n',datestr(datetime));
 end
 
-%Return stage to original position
+% Return stage to original position
 yOCTStageMoveTo(x0,y0,z0,v);
 
 ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
-
 
 %% Working with live laser
 function photobleach_lines(ptStart,ptEnd, exposures_sec, v, json)
@@ -357,4 +358,5 @@ if (v)
     end
     fprintf('%s \tTime Photodiode Switch Was On Without Drawing Line: %.1fms\n', ...
             datestr(datetime),time_photodiode_on_no_laser_ms);
+end
 end
