@@ -82,13 +82,13 @@ end
 % Assertion 3: focus offset
 if abs(surfacePositionOutput_mm) <= acceptableRange_mm % surface in focus
     isSurfaceInFocus = true; % We passed all tests
-    if v
+    if v && throwErrorIfAssertionFails
         fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', ...
                 datestr(datetime), surfacePositionOutput_mm);
     end
 else  % surface out of focus
     isSurfaceInFocus = false;
-    if v
+    if v && throwErrorIfAssertionFails
         if surfacePositionOutput_mm > 0
             direction = 'increase';
         else
