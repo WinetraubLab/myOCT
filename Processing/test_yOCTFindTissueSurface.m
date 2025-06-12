@@ -25,7 +25,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             testCase.dimensions  = dim;
         end
     end
-    
+
     methods(Test)
         function testDimensions(testCase)
             % This test verifies that output's size matches expectation. 
@@ -205,7 +205,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             % and tests that they pass
 
             % Load dataset
-            rfFolder = rfDownloadDataset('tissue-surface','outputFolder','./temp/');
+            rfFolder = rfDownloadDataset('tissue-surface','outputFolder','./temp/', 'version', 4);
             [imageFilePath, imageMaskPath, ~] = ...
                 rfListImagesAndSegmentationsInDataset(rfFolder,'above-tissue');
 
@@ -236,7 +236,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                     oct, dim);
 
                 % Convert surface position to pixel
-                surfacePosition_pix = surfacePosition_mm*1e-3;
+                surfacePosition_pix = surfacePosition_mm*1e+3;
 
                 % Load ground truth, surface is the bottom of the mask
                 bMask = imread(imageMaskPath{i});
