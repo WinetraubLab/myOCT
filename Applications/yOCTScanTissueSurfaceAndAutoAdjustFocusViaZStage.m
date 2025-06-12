@@ -1,6 +1,7 @@
-function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargin)
-% This function uses the OCT to scan and then identify tissue surface from 
-% the OCT image.
+function [surfacePosition_mm, x_mm, y_mm] = yOCTScanTissueSurfaceAndAutoAdjustFocusViaZStage(varargin)
+% This function uses the OCT to scan and identify the tissue surface from 
+% the OCT image, evaluates focus, and (if requested) automatically moves 
+% the Z-stage to bring the surface into focus.
 %   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
 %   pixelSize_um: Pixel resolution for this analysis, default: 25 um.
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
@@ -9,24 +10,18 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %       These files will be deleted after analysis is completed.
 %   dispersionQuadraticTerm: Dispersion compensation parameter.
 %   focusPositionInImageZpix: For all B-Scans, this parameter defines the 
-%       depth (Z, pixels) that the focus is located at. 
+%       depth (Z, pixels) that the focus is located at.
 %   assertInFocusAcceptableRange_mm: how far can tissue surface be from 
-%       focus position to be considered "good enough". Default: 0.025mm, 
-%       set to [] to skip assertion.
+%       focus position to be considered "good enough". Default: 0.025mm.
+%   throwErrorIfAssertionFails: Stop with a clear error if any assertion check fails
+%       when set to true (default).
+%   roiToCheckSurfacePosition: Region Of Interest [x, y, width, height] mm to test focus.
+%       Use [] to test the full scan area (default).
+%   moveTissueToFocus: Move the Z stage automatically when the surface is out of focus.
+%       (default = true; disabled if skipHardware = true)
+%   skipHardware: Set to true to skip hardware operation. Default: false.
 %   v: Verbose mode for debugging purposes and visualization default is 
 %       false.
-%   assertInFocusAcceptableRangeXYArea_mm : XY area (in mm) where the tissue 
-%       surface must be in focus. This defines the region used to check 
-%       whether the surface is within the assertInFocusAcceptableRange_mm 
-%       to the focus plane. If it's out of range, the Z stage will be
-%       automatically adjusted to bring the tissue into focus via
-%       yOCTAssertTissueSurfaceIsInFocus. Accepted values:
-%         [] (default)   =  uses the entire scan area (default)
-%         single number  =  centered square area. Example 0.5 makes it –0.25 to +0.25 mm
-%   moveTissueToFocusIfNeeded: (Default = true) If skipHardware is false and
-%       the surface is out of focus, having this true automatically moves the 
-%       Z stage by the required amount. False will skip this movement.
-%   skipHardware: Set to true to skip hardware operation. Default: false.
 % OUTPUTS:
 %   - surfacePosition_mm - 2D matrix. dimensions are (y,x). What
 %       height (mm) is image surface. Height measured from "user specified
@@ -46,11 +41,12 @@ addParameter(p,'temporaryFolder','./SurfaceAnalysisTemp/');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'assertInFocusAcceptableRange_mm',0.025);
-addParameter(p,'assertInFocusAcceptableRangeXYArea_mm',[], ... 
-    @(x) isempty(x) || isnumeric(x));
-addParameter(p,'moveTissueToFocusIfNeeded',true,@islogical);
-addParameter(p,'v',false);
+addParameter(p,'roiToCheckSurfacePosition',[], @(z) isempty(z) || ...
+         (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
+addParameter(p,'moveTissueToFocus',true,@islogical);
+addParameter(p,'throwErrorIfAssertionFails',true,@islogical); 
 addParameter(p,'skipHardware',false);
+addParameter(p,'v',false);
 
 parse(p,varargin{:});
 in = p.Results;
@@ -63,18 +59,34 @@ octProbePath            = in.octProbePath;
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
 temporaryFolder         = in.temporaryFolder;
 v                       = in.v;
+roi                     = in.roiToCheckSurfacePosition;
+acceptableRange         = in.assertInFocusAcceptableRange_mm;
+throwErrorIfAssertionFails  = in.throwErrorIfAssertionFails;
+
+% Return if skipHardware is true
+if in.skipHardware % No need to continue
+    
+    % How wide (X) and tall (Y) the requested scan area is:
+    spanX_mm = xRange_mm(2) - xRange_mm(1); % total width  in millimetres
+    spanY_mm = yRange_mm(2) - yRange_mm(1); % total height in millimetres
+
+    % How many pixels would the real scan have:
+    nX = ceil( spanX_mm * 1e3 / pixelSize_um ); % number of columns along X
+    nY = ceil( spanY_mm * 1e3 / pixelSize_um ); % number of rows    along Y
+
+    % Build coordinate vectors
+    x_mm = ( xRange_mm(1) + (0:nX-1) .* (pixelSize_um/1e3) ).';
+    y_mm = ( yRange_mm(1) + (0:nY-1) .* (pixelSize_um/1e3) ).';
+
+    % Empty surface map
+    surfacePosition_mm = NaN(nY, nX);
+    return;
+end
 
 if isnan(in.focusPositionInImageZpix)
     error('Please provide a valid "focusPositionInImageZpix". Use yOCTFindFocusTilledScan to estimate.');
 end
 focusPositionInImageZpix = in.focusPositionInImageZpix;
-
-roi = in.assertInFocusAcceptableRangeXYArea_mm; % early roi validation
-if ~isempty(roi)
-    if ~(isscalar(roi) && roi>0)
-        error('assertInFocusAcceptableRangeXYArea_mm must be [] or a single positive number (square width in mm).');
-    end
-end
 
 %% Scan
 totalStartTime = datetime;  % Capture the starting time
@@ -92,13 +104,6 @@ yOCTScanTile (...
     'v',               v,  ...
     'skipHardware',    in.skipHardware ...
     );
-
-if in.skipHardware % No need to continue
-    surfacePosition_mm = 0;
-    x_mm = 0;
-    y_mm = 0;
-    return;
-end
 
 %% Reconstruct OCT Image for Subsequent Surface Analysis
 if (v)
@@ -137,56 +142,44 @@ if (v)
     fprintf('%s Surface identification completed in %.2f seconds.\n', datestr(datetime), elapsedTimeSurfaceDetection_sec);
 end
 
-%% Assert
-if ~isempty(in.assertInFocusAcceptableRange_mm)
-
-    outOfFocusErr = false;
-    medianSurfacePosition_mm = NaN;
-
-    try
-        % assert function returns median if everything is within range
-        medianSurfacePosition_mm = yOCTAssertTissueSurfaceIsInFocus( ...
-            surfacePosition_mm, x_mm, y_mm, in.assertInFocusAcceptableRange_mm, roi);
-
-    catch ME
-        if strcmp(ME.identifier, 'yOCT:SurfaceOutOfFocus')
-            % Extract median shift embedded in the error message:
-            tokens = regexp(ME.message, 'surface \(([-+]?\d*\.?\d+)mm\)', 'tokens','once');
-            if ~isempty(tokens)
-                medianSurfacePosition_mm = str2double(tokens{1});
-            end
-            outOfFocusErr = true;           % we MAY auto move Z stage
-        else
-            rethrow(ME);                    % fatal error shown
-        end
-    end
+%% Bring tissue into focus
+if ~isempty(acceptableRange)
     
-    maxStageShift_mm = 0.20;            % 200 micron safety cap
-    if ~isnan(medianSurfacePosition_mm) && ...
-         abs(medianSurfacePosition_mm) > maxStageShift_mm
-        medianSurfacePosition_mm = sign(medianSurfacePosition_mm) * maxStageShift_mm;
+    % Compute Z Offset
+    [isSurfaceInFocus, surfacePositionOutput_mm] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
+    surfacePosition_mm, x_mm, y_mm, ...
+    'acceptableRange_mm',           acceptableRange, ...
+    'roiToCheckSurfacePosition',    roi, ...
+    'throwErrorIfAssertionFails',   throwErrorIfAssertionFails, ...
+    'v',                            v);
+    
+    % Set limits
+    maxMovementSafetyCap_mm = 0.10;  % 100 micron safety cap
+    if ~isnan(surfacePositionOutput_mm) && ...
+         abs(surfacePositionOutput_mm) > maxMovementSafetyCap_mm
+        surfacePositionOutput_mm = sign(surfacePositionOutput_mm) * maxMovementSafetyCap_mm;
     end
 
     % Move Z in stage if required (all conditions must be met to move it)
-    needMove =  outOfFocusErr                                                       && ...
-                ~isnan(medianSurfacePosition_mm)                                    && ...
-                abs(medianSurfacePosition_mm) > in.assertInFocusAcceptableRange_mm  && ...
+    needMove =  ~isSurfaceInFocus                                                   && ...
+                ~isnan(surfacePositionOutput_mm)                                    && ...
+                abs(surfacePositionOutput_mm) > acceptableRange                     && ...
                 ~in.skipHardware                                                    && ...
-                in.moveTissueToFocusIfNeeded;
+                in.moveTissueToFocus;
 
     if needMove
         [~,~,z0] = yOCTStageInit();  % query current Z
         try
-            yOCTStageMoveTo(NaN, NaN, z0 + medianSurfacePosition_mm, v);
+            yOCTStageMoveTo(NaN, NaN, z0 + surfacePositionOutput_mm, v);
             fprintf('%s Stage auto‑moved by %.3f mm to refocus tissue surface.\n', ...
-                    datestr(datetime), medianSurfacePosition_mm);
+                    datestr(datetime), surfacePositionOutput_mm);
 
             % keep surface map consistent with new focus
-            surfacePosition_mm = surfacePosition_mm - medianSurfacePosition_mm;
+            surfacePosition_mm = surfacePosition_mm - surfacePositionOutput_mm;
 
             if v
                 fprintf('%s Stage Z successfully MOVED from %.3f mm to %.3f mm (OCT coord).\n', ...
-                        datestr(datetime), z0, z0 + medianSurfacePosition_mm);
+                        datestr(datetime), z0, z0 + surfacePositionOutput_mm);
             end
         catch ME
             error('yOCT:StageMoveFailed','Stage move failed: %s', ME.message);
