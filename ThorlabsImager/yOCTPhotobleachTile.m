@@ -146,7 +146,7 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
     
         % Build ROI box for current tile [x y w h] (mm)
         roiBox = [...
-            x_mm - json.FOV(1)/2, y_mm - json.FOV(1)/2, ...
+            x_mm - json.FOV(1)/2, y_mm - json.FOV(2)/2, ...
             json.FOV(1), json.FOV(2)];
     
         % Find offset inside that ROI
@@ -360,3 +360,5 @@ if (v)
             datestr(datetime),time_photodiode_on_no_laser_ms);
 end
 end
+end
+
