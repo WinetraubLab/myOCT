@@ -65,7 +65,7 @@ addParameter(p,'v',true,@islogical);
 addParameter(p,'applyPathLengthCorrection',true); %TODO(yonatan) shift this parameter to ProcessScanFunction
 
 % Output file resolution
-addParameter(p,'outputFilePixelSize_um',1,@(x)(isnumeric(x) & x>0));
+addParameter(p,'outputFilePixelSize_um',1,@(x)(isempty(x) || (isnumeric(x) && isscalar(x) && x>0)));
 
 p.KeepUnmatched = true;
 if (~iscell(varargin{1}))
@@ -197,7 +197,7 @@ if ~isempty(in.outputFilePixelSize_um)
 
     % Change Z resolution
     dimOutput_mm.z.values = ...
-        (dimOutput_mm.z.values): ...
+        (dimOutput_mm.z.values(1)): ...
         (in.outputFilePixelSize_um*1e-3): ...
         max(dimOutput_mm.z.values);
     dimOutput_mm.z.index = 1:length(dimOutput_mm.z.values);
