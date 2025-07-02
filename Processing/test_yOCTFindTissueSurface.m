@@ -115,6 +115,28 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             assert(max(abs(y1(:)-y2(:)))==0, "Input units impact y")
         end
 
+        function testSurfacePositionPixels(testCase)
+            % This test verifies that yOCTFindTissueSurface is able to detect surface position of a simulated speckle field.
+            % In this test, we use simplest speckle field without coverslip
+            dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm'); % Ensure it's in mm
+            expectedSurfacePos_pix = dim.z.index(...
+                testCase.simulatedSurfacePositionZ_pix);
+
+            % Identify surface (always in mm)
+            [surfacePosition_pix,x_pix,y_pix] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, dim, 'outputUnits', 'pix');
+            
+            % Check surface position
+            assert(...
+                abs(mean(mean(surfacePosition_pix)) - ...  Average surface position in mm
+                expectedSurfacePos_pix) ...                Expected surface position in mm
+                < 2, 'Expecting surface position within few pixels');
+
+            % Check x,y
+            assert(mean(abs(x_pix(:) - dim.x.index(:))) < 1);
+            assert(mean(abs(y_pix(:) - dim.y.index(:))) < 1);
+        end
+
         function testAssertTissueSurfaceInFocus(testCase)
             % This test verifies the assertion functionality
 

@@ -1,4 +1,4 @@
-function [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface(varargin)
+function [surfacePositionOut,xOut,yOut] = yOCTFindTissueSurface(varargin)
 % This function processes OCT scan data to identify tissue surface from the
 % OCT image.
 % USAGE:
@@ -13,6 +13,7 @@ function [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface(varargin)
 %                              reduce surface detection accuracy for stitched volumes.
 %       'constantThreshold'    User-supplied intensity threshold (overrides Otsu detection).
 %                              Keep it empty [] (default) to auto-detect this value with Otsu method.
+%       'outputUnits'          Set to 'mm' (default), or to 'pix' to output in pixel index.   
 % OUTPUTS:
 %   - surfacePosition_mm- 2D matrix. dimensions are (y,x). What
 %       height is image surface. Height measured from “user specified
@@ -30,6 +31,7 @@ addRequired(p,'dimensions');
 addParameter(p,'isVisualize',false,@islogical);
 addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p, 'constantThreshold', [], @(x) isnumeric(x) || isempty(x));
+addParameter(p,'outputUnits','mm');
 
 parse(p,varargin{:});
 in = p.Results;
@@ -151,28 +153,38 @@ smoothed_surface_depth = round(smoothed_surface_depth);  % Round smoothed values
 
 % Convert Depth found from Pixels to Units in dim.z.units like microns or mm
 surface_depth_pixels = smoothed_surface_depth.'; % Transpose for consistent global orientation system
-surfacePosition_mm = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
+surfacePositionOut = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
 
-% Assign dimensions
-x_mm = dim.x.values(:);
-y_mm = dim.y.values(:);
-z = dim.z.values(:);
+%% Assign output units
 
-% Map depth indices to actual depth measurements in surfacePosition_mm
+switch(in.outputUnits)
+    case 'mm'
+        xOut = dim.x.values(:);
+        yOut = dim.y.values(:);
+        z = dim.z.values(:);
 
-for i = 1:numel(surfacePosition_mm)
-    index = surface_depth_pixels(i);
-    if ~isnan(index) && index >= 1 && index <= length(z)
-        surfacePosition_mm(i) = z(index);
-    end
+    case 'pix'
+        xOut = dim.x.index(:);
+        yOut = dim.y.index(:);
+        z = dim.z.index(:);
+
+    otherwise
+        error('Unknown output units: %s', in.outputUnits);
 end
 
+% Map depth indices to actual depth measurements in surfacePosition_mm
+for i = 1:numel(surfacePositionOut)
+    index = surface_depth_pixels(i);
+    if ~isnan(index) && index >= 1 && index <= length(z)
+        surfacePositionOut(i) = z(index);
+    end
+end
 
 %% Generate heatmap of the identified surface for user visualization
 
 if isVisualize
     figure;
-    imagesc(x_mm, y_mm, surfacePosition_mm);
+    imagesc(xOut, yOut, surfacePositionOut);
     set(gca,'YDir','normal');
     xlabel(['X-axis (' dim.x.units ')']);
     ylabel(['Y-axis (' dim.y.units ')']);
