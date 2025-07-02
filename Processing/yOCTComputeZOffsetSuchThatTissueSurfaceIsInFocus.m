@@ -82,21 +82,27 @@ end
 % Assertion 3: focus offset
 if abs(surfacePositionOutput_mm) <= acceptableRange_mm % surface in focus
     isSurfaceInFocus = true; % We passed all tests
-    if v && throwErrorIfAssertionFails
+    if v
         fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', ...
                 datestr(datetime), surfacePositionOutput_mm);
     end
 else  % surface out of focus
     isSurfaceInFocus = false;
-    if v && throwErrorIfAssertionFails
-        if surfacePositionOutput_mm > 0
-            direction = 'increase';
-        else
-            direction = 'decrease';
-        end
+    
+    if surfacePositionOutput_mm > 0
+        direction = 'increase'; 
+    else
+        direction = 'decrease';
+    end
+
+    if throwErrorIfAssertionFails % Throw error if out of focus
+        error('yOCT:SurfaceOutOfFocus', ...
+              'Surface out of focus by %.3f mm: please %s the stage Z position by %.3f mm to bring the tissue surface into focus.', ...
+              surfacePositionOutput_mm, direction, abs(round(surfacePositionOutput_mm,3)));
+    end
+    
+    if v && ~throwErrorIfAssertionFails
         fprintf('%s Surface out of focus by %.3f mm: please %s the stage Z position by %.3f mm to bring the tissue surface into focus.\n', ...
-                datestr(datetime), ...
-                surfacePositionOutput_mm, ...
-                direction, abs(round(surfacePositionOutput_mm,3)));
+                datestr(datetime), surfacePositionOutput_mm, direction, abs(round(surfacePositionOutput_mm,3)));
     end
 end
