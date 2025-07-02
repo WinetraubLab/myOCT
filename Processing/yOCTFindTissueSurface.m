@@ -40,8 +40,8 @@ isVisualize = in.isVisualize;
 constantThreshold = in.constantThreshold;
 
 % Define Detection Parameters
-base_confirmations_required = 12; % Initial consecutive pixels required to confirm surface
-z_size_threshold = 1000;           % Threshold to determine the starting depth based on image height
+confirmations_required_um   = 16; % Physical thickness in microns to confirm tissue surface
+z_size_threshold = 1000;          % Threshold to determine the starting depth based on image height
 low_z_start = 1;                  % Starting pixel for images with a small Z dimension
 high_z_start = 300;               % Starting pixel for images with a large Z dimension
 sigma = 1.5;                      % Deviation for the Gaussian kernel
@@ -97,17 +97,26 @@ if ~isempty(octProbeFOV_mm) && ~isempty(pixelSize_mm)
     tileWidth_px = round(octProbeFOV_mm / pixelSize_mm);   % width of one tile in px
     numTilesX    = max(1, floor(x_size / tileWidth_px));   % tiles along X
 else
+    % Surface detection will treat the full X-range as a single tile, even if multiple tiles were stitched together
     tileWidth_px = x_size;   % fallback: whole X treated as one tile (might degrade detection)
     numTilesX    = 1;
-    fprintf(['%s octProbeFOV_mm or pixelSize_mm not provided or could not be determined. ', ...
-             'Assuming X_tiles = 1.\n', ...
-             '      Surface detection will treat the full X-range as a single tile, ', ...
-             'even if multiple tiles were stitched together.\n\n'], ...
-             datestr(datetime));
 end
 
 
 %% Identify tissue surface
+% Determine confirmations required from Z-pixel size
+base_confirmations_required = confirmations_required_um; % fallback if we cannot infer Z-pixel size
+
+pixelSizeZ_um = NaN; % we'll try to find the Z size in the dimensions
+if isfield(dim,'z') && isfield(dim.z,'values') && numel(dim.z.values) >= 2
+    dz_mm = diff(dim.z.values);              % spacing in mm
+    if all(abs(dz_mm - mean(dz_mm)) < 1e-6)  % check uniform spacing
+        pixelSizeZ_um = mean(dz_mm) * 1e3;   % mm to microns
+    end
+end
+if ~isnan(pixelSizeZ_um) && pixelSizeZ_um > 0
+    base_confirmations_required = max(3, round(confirmations_required_um / pixelSizeZ_um)); % 3 pixel minimum
+end
 
 % Create a matrix to store the Surface Depth for each (x, y) coordinate
 surface_depth = zeros(x_size, y_size);
