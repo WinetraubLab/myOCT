@@ -222,19 +222,24 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 'yOCT:SurfaceCannotBeInFocus');
         end
 
-        function testRealworldDataset(testCase)
-            % This test loads a dataset from roboflow with real life cases
-            % and tests that they pass
+        function testRealWorldDataset(~)
+            % This test loads a dataset from the folder 'test_yOCTFindTissueSurface_testRealworldDataset'
+            % with real life cases and tests that they pass
+            
+            % Folder that holds the .tiff and .tif (OCT) files and matching .png masks
+            [thisMFileFolder, ~, ~] = fileparts(mfilename('fullpath'));
+            testDir = fullfile(thisMFileFolder,'test_yOCTFindTissueSurface_testRealworldDataset');
 
-            % Load dataset
-            rfFolder = rfDownloadDataset('tissue-surface','outputFolder','./temp/', 'version', 4);
-            [imageFilePath, imageMaskPath, ~] = ...
-                rfListImagesAndSegmentationsInDataset(rfFolder,'above-tissue');
+            % Get every .tif and .tiff files
+            inputImageFileNames = [dir(fullfile(testDir, '*.tif')); dir(fullfile(testDir, '*.tiff'))];
+            inputImageFileNames = {inputImageFileNames.name};
+            assert(~isempty(inputImageFileNames), 'No .tiff or .tif files found in %s', testDir);
 
             % Loop over all images and compare algorithm with ground truth
-            for i=1:length(imageFilePath)
+            for i = 1:length(inputImageFileNames)
                 % Load OCT image
-                oct = rgb2gray(imread(imageFilePath{i}));
+                octInputFilePath = fullfile(testDir, inputImageFileNames{i});
+                oct = yOCTFromTif(octInputFilePath);
 
                 % Create dimensions, assuming 1 micron per pixel
                 dim.x.order = 2;
@@ -261,10 +266,14 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 surfacePosition_pix = surfacePosition_mm*1e+3;
 
                 % Load ground truth, surface is the bottom of the mask
-                bMask = imread(imageMaskPath{i});
-                surfacePositionGT_pix = zeros(size(surfacePosition_pix));
+                [~, name] = fileparts(inputImageFileNames{i});
+                gtMaskOutputFilePath  = fullfile(testDir, [name '_mask.png']);
+                assert(exist(gtMaskOutputFilePath ,'file')==2, 'Mask not found for %s', octInputFilePath);
+                gtMask     = imread(gtMaskOutputFilePath);
+
+                surfacePositionGT_pix = nan(size(surfacePosition_pix));
                 for col = 1:length(surfacePosition_pix)
-                    f = find(bMask(:, col), 1, 'last');
+                    f = find(gtMask(:, col), 1, 'last');
                     if ~isempty(f)
                         surfacePositionGT_pix(col) = f;
                     else
@@ -273,9 +282,9 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                     end
                 end
 
-                % Compare 
+                % Compare
                 e_pix = abs(surfacePosition_pix - surfacePositionGT_pix);
-                errorText = sprintf('Error too high for "%s"',imageFilePath{i});
+                errorText = sprintf('Error too high for "%s"', inputImageFileNames{i});
                 assert(sum(isnan(e_pix))/length(e_pix)<0.1, errorText); % Make sure not too many nans
                 assert(mean(e_pix(~isnan(e_pix)))<10,errorText); % Make sure average error is not too high
                 assert(prctile(e_pix(~isnan(e_pix)),90)<40,errorText); % Make sure max error is not too high
