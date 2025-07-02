@@ -93,6 +93,59 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             assert(mean(abs(y_mm(:) - dim.y.values(:))) < 1e-3);
         end
 
+        function testCoverslipIsIgnoredForDifferentZPixelSizes(testCase)
+            % Confirms that a coverslip is skipped for any Z Pixel Size
+            % since confirmation for surface is in real world units, not pixels
+        
+            surfaceZ_pix = testCase.simulatedSurfacePositionZ_pix;
+            zSize  = 1024;   % Z dimension
+            xSize  = 100;    % X dimension
+            ySize  = 200;    % Y dimension
+            rng(1);          % reproducible noise
+        
+            % Scenario 1: 1 micron pixel size with a 10 pixel coverslip
+            pixelSizeZ_um   = 1;
+            coverslip_px    = 10;
+            runScenario;   % calls the nested helper below
+        
+            % Scenario 2: 0.5 microns pixel size with a 20 pixel coverslip
+            pixelSizeZ_um   = 0.5;
+            coverslip_px    = 20;
+            runScenario;
+
+            function runScenario
+                % Build speckle volume with a coverslip
+                coverslipStart = surfaceZ_pix - 120; % air gap above tissue
+                coverslipEnd   = coverslipStart + coverslip_px - 1;
+                speckle = zeros(zSize, xSize, ySize) + 10;
+                % tissue signal
+                speckle(surfaceZ_pix:end,:,:) = ...
+                    10 + 990*abs(randn(zSize - surfaceZ_pix + 1, xSize, ySize));
+                % coverslip signal
+                speckle(coverslipStart:coverslipEnd,:,:) = ...
+                    10 + 990*abs(randn(coverslip_px, xSize, ySize));
+
+                % OCT volume
+                [intf, dim] = yOCTSimulateInterferogram_core(speckle);
+                [cpx,  dim] = yOCTInterfToScanCpx(intf, dim);
+                data       = log(abs(cpx));
+
+                % Define pixel size and convert units to mm
+                dim.z.values = (0:zSize-1) * pixelSizeZ_um; % microns
+                dim          = yOCTChangeDimensionsStructureUnits(dim, 'mm');
+
+                % Identify surface
+                surfacePosition_mm = yOCTFindTissueSurface(data, dim);
+
+                % Check surface position
+                expectedSurfacePos_mm = dim.z.values(surfaceZ_pix);
+                assert( ...
+                    abs(mean(surfacePosition_mm,'all') - expectedSurfacePos_mm) < 2e-3, ...
+                    sprintf('Surface misdetected (%.1f micron Z pixel size, %d-px coverslip)', ...
+                            pixelSizeZ_um, coverslip_px));
+            end
+        end
+
         function testChangingDimensionsShouldntChangeOutputs(testCase)
             
             % Compute surface position with mm inputs
