@@ -1,6 +1,7 @@
-function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargin)
-% This function uses the OCT to scan and then identify tissue surface from 
-% the OCT image.
+function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
+% This function uses the OCT to scan and identify the tissue surface from 
+% the OCT image, evaluates focus, and (if requested) automatically moves 
+% the Z-stage to bring the surface into focus.
 %   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
 %   pixelSize_um: Pixel resolution for this analysis, default: 25 um.
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
@@ -9,13 +10,18 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTScanAndFindTissueSurface(varargi
 %       These files will be deleted after analysis is completed.
 %   dispersionQuadraticTerm: Dispersion compensation parameter.
 %   focusPositionInImageZpix: For all B-Scans, this parameter defines the 
-%       depth (Z, pixels) that the focus is located at. 
+%       depth (Z, pixels) that the focus is located at.
 %   assertInFocusAcceptableRange_mm: how far can tissue surface be from 
-%       focus position to be considered "good enough". Default: 0.025mm, 
-%       set to [] to skip assertion.
+%       focus position to be considered "good enough". Default: 0.025mm.
+%   throwErrorIfAssertionFails: Stop with a clear error if any assertion check fails
+%       when set to true (default).
+%   roiToCheckSurfacePosition: Region Of Interest [x, y, width, height] mm to test focus.
+%       Use [] to test the full scan area (default).
+%   moveTissueToFocus: Move the Z stage automatically when the surface is out of focus.
+%       (default = true; disabled if skipHardware = true)
+%   skipHardware: Set to true to skip hardware operation. Default: false.
 %   v: Verbose mode for debugging purposes and visualization default is 
 %       false.
-%   skipHardware: Set to true to skip hardware operation. Default: false.
 % OUTPUTS:
 %   - surfacePosition_mm - 2D matrix. dimensions are (y,x). What
 %       height (mm) is image surface. Height measured from "user specified
@@ -34,21 +40,48 @@ addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'temporaryFolder','./SurfaceAnalysisTemp/');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
-addParameter(p,'assertInFocusAcceptableRange_mm',0.025)
+addParameter(p,'assertInFocusAcceptableRange_mm',0.025);
+addParameter(p,'roiToCheckSurfacePosition',[], @(z) isempty(z) || ...
+         (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
+addParameter(p,'moveTissueToFocus',true,@islogical);
+addParameter(p,'throwErrorIfAssertionFails',true,@islogical); 
+addParameter(p,'skipHardware',false);
 addParameter(p,'v',false);
-addParameter(p,'skipHardware',false)
 
 parse(p,varargin{:});
 in = p.Results;
 
-xRange_mm = in.xRange_mm;
-yRange_mm = in.yRange_mm;
-pixelSize_um = in.pixelSize_um;
-octProbeFOV_mm = in.octProbeFOV_mm;
-octProbePath = in.octProbePath;
+xRange_mm               = in.xRange_mm;
+yRange_mm               = in.yRange_mm;
+pixelSize_um            = in.pixelSize_um;
+octProbeFOV_mm          = in.octProbeFOV_mm;
+octProbePath            = in.octProbePath;
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
-temporaryFolder = in.temporaryFolder;
-v = in.v;
+temporaryFolder         = in.temporaryFolder;
+v                       = in.v;
+roi                     = in.roiToCheckSurfacePosition;
+acceptableRange         = in.assertInFocusAcceptableRange_mm;
+throwErrorIfAssertionFails  = in.throwErrorIfAssertionFails;
+
+% Return if skipHardware is true
+if in.skipHardware % No need to continue
+    
+    % How wide (X) and tall (Y) the requested scan area is:
+    spanX_mm = xRange_mm(2) - xRange_mm(1); % total width  in millimetres
+    spanY_mm = yRange_mm(2) - yRange_mm(1); % total height in millimetres
+
+    % How many pixels would the real scan have:
+    nX = ceil( spanX_mm * 1e3 / pixelSize_um ); % number of columns along X
+    nY = ceil( spanY_mm * 1e3 / pixelSize_um ); % number of rows    along Y
+
+    % Build coordinate vectors
+    x_mm = ( xRange_mm(1) + (0:nX-1) .* (pixelSize_um/1e3) ).';
+    y_mm = ( yRange_mm(1) + (0:nY-1) .* (pixelSize_um/1e3) ).';
+
+    % Empty surface map
+    surfacePosition_mm = NaN(nY, nX);
+    return;
+end
 
 if isnan(in.focusPositionInImageZpix)
     error('Please provide a valid "focusPositionInImageZpix". Use yOCTFindFocusTilledScan to estimate.');
@@ -65,19 +98,12 @@ yOCTScanTile (...
     volumeOutputFolder, ...
     xRange_mm, ...
     yRange_mm, ...
-    'octProbeFOV_mm', octProbeFOV_mm, ...
-    'octProbePath', octProbePath, ...
-    'pixelSize_um', pixelSize_um, ...
-    'v',v,  ...
-    'skipHardware', in.skipHardware ...
+    'octProbeFOV_mm',  octProbeFOV_mm, ...
+    'octProbePath',    octProbePath, ...
+    'pixelSize_um',    pixelSize_um, ...
+    'v',               v,  ...
+    'skipHardware',    in.skipHardware ...
     );
-
-if in.skipHardware % No need to continue
-    surfacePosition_mm = 0;
-    x_mm = 0;
-    y_mm = 0;
-    return;
-end
 
 %% Reconstruct OCT Image for Subsequent Surface Analysis
 if (v)
@@ -87,10 +113,12 @@ outputTiffFile = [temporaryFolder '\surface_analysis.tiff'];
 yOCTProcessTiledScan(...
     volumeOutputFolder, ... Input
     {outputTiffFile},... Save only Tiff file as folder will be generated after smoothing
-    'focusPositionInImageZpix',focusPositionInImageZpix,...
-    'dispersionQuadraticTerm',dispersionQuadraticTerm,...
-    'cropZAroundFocusArea', false,...
-    'v',v);
+    'focusPositionInImageZpix', focusPositionInImageZpix, ...
+    'dispersionQuadraticTerm',  dispersionQuadraticTerm, ...
+    'outputFilePixelSize_um',   pixelSize_um,...
+    'cropZAroundFocusArea',     false, ...
+    'outputFilePixelSize_um',   [],...
+    'v',                        v);
 [logMeanAbs, dimensions, ~] = yOCTFromTif(outputTiffFile);
 dimensions = yOCTChangeDimensionsStructureUnits(dimensions,'millimeters'); % Make sure dimensions in mm
 if (v)
@@ -115,7 +143,52 @@ if (v)
     fprintf('%s Surface identification completed in %.2f seconds.\n', datestr(datetime), elapsedTimeSurfaceDetection_sec);
 end
 
-%% Clean up
+%% Bring tissue into focus
+if ~isempty(acceptableRange)
+    
+    % Compute Z Offset
+    [isSurfaceInFocus, surfacePositionOutput_mm] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
+    surfacePosition_mm, x_mm, y_mm, ...
+    'acceptableRange_mm',           acceptableRange, ...
+    'roiToCheckSurfacePosition',    roi, ...
+    'throwErrorIfAssertionFails',   throwErrorIfAssertionFails, ...
+    'v',                            v);
+    
+    % Set limits
+    maxMovementSafetyCap_mm = 0.10;  % 100 micron safety cap
+    if ~isnan(surfacePositionOutput_mm) && ...
+         abs(surfacePositionOutput_mm) > maxMovementSafetyCap_mm
+        surfacePositionOutput_mm = sign(surfacePositionOutput_mm) * maxMovementSafetyCap_mm;
+    end
+
+    % Move Z in stage if required (all conditions must be met to move it)
+    needMove =  ~isSurfaceInFocus                                                   && ...
+                ~isnan(surfacePositionOutput_mm)                                    && ...
+                abs(surfacePositionOutput_mm) > acceptableRange                     && ...
+                ~in.skipHardware                                                    && ...
+                in.moveTissueToFocus;
+
+    if needMove
+        [~,~,z0] = yOCTStageInit();  % query current Z
+        try
+            yOCTStageMoveTo(NaN, NaN, z0 + surfacePositionOutput_mm, v);
+            fprintf('%s Stage auto‑moved by %.3f mm to refocus tissue surface.\n', ...
+                    datestr(datetime), surfacePositionOutput_mm);
+
+            % keep surface map consistent with new focus
+            surfacePosition_mm = surfacePosition_mm - surfacePositionOutput_mm;
+
+            if v
+                fprintf('%s Stage Z successfully MOVED from %.3f mm to %.3f mm (OCT coord).\n', ...
+                        datestr(datetime), z0, z0 + surfacePositionOutput_mm);
+            end
+        catch ME
+            error('yOCT:StageMoveFailed','Stage move failed: %s', ME.message);
+        end
+    end
+end
+
+%% Clean up temp data
 if ~isempty(temporaryFolder) && exist(temporaryFolder, 'dir')
     rmdir(temporaryFolder, 's'); % Remove the output directory after processing
 end
@@ -124,11 +197,4 @@ totalDuration = totalEndTime - totalStartTime;
 if (v)
     fprintf('%s yOCTScanAndFindTissueSurface function evaluation completed in %s.\n', ...
         datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
-end
-
-%% Assert
-if ~isempty(in.assertInFocusAcceptableRange_mm)
-    yOCTAssertTissueSurfaceIsInFocus( ...
-        surfacePosition_mm, x_mm, y_mm, ...
-        in.assertInFocusAcceptableRange_mm, v);
 end
