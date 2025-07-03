@@ -15,7 +15,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 %       focus position to be considered "good enough". Default: 0.025mm.
 %   throwErrorIfAssertionFails: Stop with a clear error if any assertion check fails
 %       when set to true (default).
-%   roiToCheckSurfacePosition: Region Of Interest [x, y, width, height] mm to test focus.
+%   roiToAssertFocus: Region Of Interest [x, y, width, height] mm to assert focus.
 %       Use [] to test the full scan area (default).
 %   moveTissueToFocus: Move the Z stage automatically when the surface is out of focus.
 %       (default = true; disabled if skipHardware = true)
@@ -41,7 +41,7 @@ addParameter(p,'temporaryFolder','./SurfaceAnalysisTemp/');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'assertInFocusAcceptableRange_mm',0.025);
-addParameter(p,'roiToCheckSurfacePosition',[], @(z) isempty(z) || ...
+addParameter(p,'roiToAssertFocus',[], @(z) isempty(z) || ...
          (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
 addParameter(p,'moveTissueToFocus',true,@islogical);
 addParameter(p,'throwErrorIfAssertionFails',true,@islogical); 
@@ -59,7 +59,7 @@ octProbePath            = in.octProbePath;
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
 temporaryFolder         = in.temporaryFolder;
 v                       = in.v;
-roi                     = in.roiToCheckSurfacePosition;
+roi                     = in.roiToAssertFocus;
 acceptableRange         = in.assertInFocusAcceptableRange_mm;
 throwErrorIfAssertionFails  = in.throwErrorIfAssertionFails;
 
