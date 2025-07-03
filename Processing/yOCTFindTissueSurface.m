@@ -45,7 +45,7 @@ constantThreshold = in.constantThreshold;
 confirmations_required_um   = 16; % Physical thickness in microns to confirm tissue surface
 z_size_threshold = 1000;          % Threshold to determine the starting depth based on image height
 low_z_start = 1;                  % Starting pixel for images with a small Z dimension
-high_z_start = 300;               % Starting pixel for images with a large Z dimension
+high_z_start = 100;               % Starting pixel for images with a large Z dimension
 sigma = 1.5;                      % Deviation for the Gaussian kernel
 
 [z_size, x_size, y_size] = size(logMeanAbs); % Retrieve total scan sizes
