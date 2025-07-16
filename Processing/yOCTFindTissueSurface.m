@@ -1,4 +1,4 @@
-function [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface(varargin)
+function [surfacePositionOut,xOut,yOut] = yOCTFindTissueSurface(varargin)
 % This function processes OCT scan data to identify tissue surface from the
 % OCT image.
 % USAGE:
@@ -13,6 +13,7 @@ function [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface(varargin)
 %                              reduce surface detection accuracy for stitched volumes.
 %       'constantThreshold'    User-supplied intensity threshold (overrides Otsu detection).
 %                              Keep it empty [] (default) to auto-detect this value with Otsu method.
+%       'outputUnits'          Set to 'mm' (default), or to 'pix' to output in pixel index.   
 % OUTPUTS:
 %   - surfacePosition_mm- 2D matrix. dimensions are (y,x). What
 %       height is image surface. Height measured from “user specified
@@ -30,6 +31,7 @@ addRequired(p,'dimensions');
 addParameter(p,'isVisualize',false,@islogical);
 addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p, 'constantThreshold', [], @(x) isnumeric(x) || isempty(x));
+addParameter(p,'outputUnits','mm');
 
 parse(p,varargin{:});
 in = p.Results;
@@ -40,10 +42,10 @@ isVisualize = in.isVisualize;
 constantThreshold = in.constantThreshold;
 
 % Define Detection Parameters
-base_confirmations_required = 12; % Initial consecutive pixels required to confirm surface
-z_size_threshold = 1000;           % Threshold to determine the starting depth based on image height
+confirmations_required_um   = 16; % Physical thickness in microns to confirm tissue surface
+z_size_threshold = 1000;          % Threshold to determine the starting depth based on image height
 low_z_start = 1;                  % Starting pixel for images with a small Z dimension
-high_z_start = 300;               % Starting pixel for images with a large Z dimension
+high_z_start = 100;               % Starting pixel for images with a large Z dimension
 sigma = 1.5;                      % Deviation for the Gaussian kernel
 
 [z_size, x_size, y_size] = size(logMeanAbs); % Retrieve total scan sizes
@@ -97,17 +99,26 @@ if ~isempty(octProbeFOV_mm) && ~isempty(pixelSize_mm)
     tileWidth_px = round(octProbeFOV_mm / pixelSize_mm);   % width of one tile in px
     numTilesX    = max(1, floor(x_size / tileWidth_px));   % tiles along X
 else
+    % Surface detection will treat the full X-range as a single tile, even if multiple tiles were stitched together
     tileWidth_px = x_size;   % fallback: whole X treated as one tile (might degrade detection)
     numTilesX    = 1;
-    fprintf(['%s octProbeFOV_mm or pixelSize_mm not provided or could not be determined. ', ...
-             'Assuming X_tiles = 1.\n', ...
-             '      Surface detection will treat the full X-range as a single tile, ', ...
-             'even if multiple tiles were stitched together.\n\n'], ...
-             datestr(datetime));
 end
 
 
 %% Identify tissue surface
+% Determine confirmations required from Z-pixel size
+base_confirmations_required = confirmations_required_um; % fallback if we cannot infer Z-pixel size
+
+pixelSizeZ_um = NaN; % we'll try to find the Z size in the dimensions
+if isfield(dim,'z') && isfield(dim.z,'values') && numel(dim.z.values) >= 2
+    dz_mm = diff(dim.z.values);              % spacing in mm
+    if all(abs(dz_mm - mean(dz_mm)) < 1e-6)  % check uniform spacing
+        pixelSizeZ_um = mean(dz_mm) * 1e3;   % mm to microns
+    end
+end
+if ~isnan(pixelSizeZ_um) && pixelSizeZ_um > 0
+    base_confirmations_required = max(3, round(confirmations_required_um / pixelSizeZ_um)); % 3 pixel minimum
+end
 
 % Create a matrix to store the Surface Depth for each (x, y) coordinate
 surface_depth = zeros(x_size, y_size);
@@ -151,28 +162,38 @@ smoothed_surface_depth = round(smoothed_surface_depth);  % Round smoothed values
 
 % Convert Depth found from Pixels to Units in dim.z.units like microns or mm
 surface_depth_pixels = smoothed_surface_depth.'; % Transpose for consistent global orientation system
-surfacePosition_mm = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
+surfacePositionOut = NaN(size(surface_depth_pixels)); % Output matrix with NaNs
 
-% Assign dimensions
-x_mm = dim.x.values(:);
-y_mm = dim.y.values(:);
-z = dim.z.values(:);
+%% Assign output units
 
-% Map depth indices to actual depth measurements in surfacePosition_mm
+switch(in.outputUnits)
+    case 'mm'
+        xOut = dim.x.values(:);
+        yOut = dim.y.values(:);
+        z = dim.z.values(:);
 
-for i = 1:numel(surfacePosition_mm)
-    index = surface_depth_pixels(i);
-    if ~isnan(index) && index >= 1 && index <= length(z)
-        surfacePosition_mm(i) = z(index);
-    end
+    case 'pix'
+        xOut = dim.x.index(:);
+        yOut = dim.y.index(:);
+        z = dim.z.index(:);
+
+    otherwise
+        error('Unknown output units: %s', in.outputUnits);
 end
 
+% Map depth indices to actual depth measurements in surfacePosition_mm
+for i = 1:numel(surfacePositionOut)
+    index = surface_depth_pixels(i);
+    if ~isnan(index) && index >= 1 && index <= length(z)
+        surfacePositionOut(i) = z(index);
+    end
+end
 
 %% Generate heatmap of the identified surface for user visualization
 
 if isVisualize
     figure;
-    imagesc(x_mm, y_mm, surfacePosition_mm);
+    imagesc(xOut, yOut, surfacePositionOut);
     set(gca,'YDir','normal');
     xlabel(['X-axis (' dim.x.units ')']);
     ylabel(['Y-axis (' dim.y.units ')']);

@@ -93,6 +93,59 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             assert(mean(abs(y_mm(:) - dim.y.values(:))) < 1e-3);
         end
 
+        function testCoverslipIsIgnoredForDifferentZPixelSizes(testCase)
+            % Confirms that a coverslip is skipped for any Z Pixel Size
+            % since confirmation for surface is in real world units, not pixels
+        
+            surfaceZ_pix = testCase.simulatedSurfacePositionZ_pix;
+            zSize  = 1024;   % Z dimension
+            xSize  = 100;    % X dimension
+            ySize  = 200;    % Y dimension
+            rng(1);          % reproducible noise
+        
+            % Scenario 1: 1 micron pixel size with a 10 pixel coverslip
+            pixelSizeZ_um   = 1;
+            coverslip_px    = 10;
+            runScenario;   % calls the nested helper below
+        
+            % Scenario 2: 0.5 microns pixel size with a 20 pixel coverslip
+            pixelSizeZ_um   = 0.5;
+            coverslip_px    = 20;
+            runScenario;
+
+            function runScenario
+                % Build speckle volume with a coverslip
+                coverslipStart = surfaceZ_pix - 120; % air gap above tissue
+                coverslipEnd   = coverslipStart + coverslip_px - 1;
+                speckle = zeros(zSize, xSize, ySize) + 10;
+                % tissue signal
+                speckle(surfaceZ_pix:end,:,:) = ...
+                    10 + 990*abs(randn(zSize - surfaceZ_pix + 1, xSize, ySize));
+                % coverslip signal
+                speckle(coverslipStart:coverslipEnd,:,:) = ...
+                    10 + 990*abs(randn(coverslip_px, xSize, ySize));
+
+                % OCT volume
+                [intf, dim] = yOCTSimulateInterferogram_core(speckle);
+                [cpx,  dim] = yOCTInterfToScanCpx(intf, dim);
+                data       = log(abs(cpx));
+
+                % Define pixel size and convert units to mm
+                dim.z.values = (0:zSize-1) * pixelSizeZ_um; % microns
+                dim          = yOCTChangeDimensionsStructureUnits(dim, 'mm');
+
+                % Identify surface
+                surfacePosition_mm = yOCTFindTissueSurface(data, dim);
+
+                % Check surface position
+                expectedSurfacePos_mm = dim.z.values(surfaceZ_pix);
+                assert( ...
+                    abs(mean(surfacePosition_mm,'all') - expectedSurfacePos_mm) < 2e-3, ...
+                    sprintf('Surface misdetected (%.1f micron Z pixel size, %d-px coverslip)', ...
+                            pixelSizeZ_um, coverslip_px));
+            end
+        end
+
         function testChangingDimensionsShouldntChangeOutputs(testCase)
             
             % Compute surface position with mm inputs
@@ -113,6 +166,28 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 "Input units impact surfacePosition")
             assert(max(abs(x1(:)-x2(:)))==0, "Input units impact x")
             assert(max(abs(y1(:)-y2(:)))==0, "Input units impact y")
+        end
+
+        function testSurfacePositionPixels(testCase)
+            % This test verifies that yOCTFindTissueSurface is able to detect surface position of a simulated speckle field.
+            % In this test, we use simplest speckle field without coverslip
+            dim = yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm'); % Ensure it's in mm
+            expectedSurfacePos_pix = dim.z.index(...
+                testCase.simulatedSurfacePositionZ_pix);
+
+            % Identify surface (always in mm)
+            [surfacePosition_pix,x_pix,y_pix] = yOCTFindTissueSurface( ...
+                testCase.logMeanAbs, dim, 'outputUnits', 'pix');
+            
+            % Check surface position
+            assert(...
+                abs(mean(mean(surfacePosition_pix)) - ...  Average surface position in mm
+                expectedSurfacePos_pix) ...                Expected surface position in mm
+                < 2, 'Expecting surface position within few pixels');
+
+            % Check x,y
+            assert(mean(abs(x_pix(:) - dim.x.index(:))) < 1);
+            assert(mean(abs(y_pix(:) - dim.y.index(:))) < 1);
         end
 
         function testAssertTissueSurfaceInFocus(testCase)
@@ -212,19 +287,24 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 'yOCT:SurfaceCannotBeInFocus');
         end
 
-        function testRealworldDataset(testCase)
-            % This test loads a dataset from roboflow with real life cases
-            % and tests that they pass
+        function testRealWorldDataset(~)
+            % This test loads a dataset from the folder 'test_yOCTFindTissueSurface_testRealworldDataset'
+            % with real life cases and tests that they pass
+            
+            % Folder that holds the .tiff and .tif (OCT) files and matching .png masks
+            [thisMFileFolder, ~, ~] = fileparts(mfilename('fullpath'));
+            testDir = fullfile(thisMFileFolder,'test_yOCTFindTissueSurface_testRealworldDataset');
 
-            % Load dataset
-            rfFolder = rfDownloadDataset('tissue-surface','outputFolder','./temp/', 'version', 4);
-            [imageFilePath, imageMaskPath, ~] = ...
-                rfListImagesAndSegmentationsInDataset(rfFolder,'above-tissue');
+            % Get every .tif and .tiff files
+            inputImageFileNames = [dir(fullfile(testDir, '*.tif')); dir(fullfile(testDir, '*.tiff'))];
+            inputImageFileNames = {inputImageFileNames.name};
+            assert(~isempty(inputImageFileNames), 'No .tiff or .tif files found in %s', testDir);
 
             % Loop over all images and compare algorithm with ground truth
-            for i=1:length(imageFilePath)
+            for i = 1:length(inputImageFileNames)
                 % Load OCT image
-                oct = rgb2gray(imread(imageFilePath{i}));
+                octInputFilePath = fullfile(testDir, inputImageFileNames{i});
+                oct = yOCTFromTif(octInputFilePath);
 
                 % Create dimensions, assuming 1 micron per pixel
                 dim.x.order = 2;
@@ -251,10 +331,14 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 surfacePosition_pix = surfacePosition_mm*1e+3;
 
                 % Load ground truth, surface is the bottom of the mask
-                bMask = imread(imageMaskPath{i});
-                surfacePositionGT_pix = zeros(size(surfacePosition_pix));
+                [~, name] = fileparts(inputImageFileNames{i});
+                gtMaskOutputFilePath  = fullfile(testDir, [name '_mask.png']);
+                assert(exist(gtMaskOutputFilePath ,'file')==2, 'Mask not found for %s', octInputFilePath);
+                gtMask     = imread(gtMaskOutputFilePath);
+
+                surfacePositionGT_pix = nan(size(surfacePosition_pix));
                 for col = 1:length(surfacePosition_pix)
-                    f = find(bMask(:, col), 1, 'last');
+                    f = find(gtMask(:, col), 1, 'last');
                     if ~isempty(f)
                         surfacePositionGT_pix(col) = f;
                     else
@@ -263,9 +347,9 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                     end
                 end
 
-                % Compare 
+                % Compare
                 e_pix = abs(surfacePosition_pix - surfacePositionGT_pix);
-                errorText = sprintf('Error too high for "%s"',imageFilePath{i});
+                errorText = sprintf('Error too high for "%s"', inputImageFileNames{i});
                 assert(sum(isnan(e_pix))/length(e_pix)<0.1, errorText); % Make sure not too many nans
                 assert(mean(e_pix(~isnan(e_pix)))<10,errorText); % Make sure average error is not too high
                 assert(prctile(e_pix(~isnan(e_pix)),90)<40,errorText); % Make sure max error is not too high
