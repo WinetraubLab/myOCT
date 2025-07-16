@@ -1,6 +1,6 @@
 function [isSurfaceInFocus, surfacePositionOutput_mm] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
     surfacePosition_mm, x_mm, y_mm, varargin)
-% This function checks the outputs from yOCTScanAndFindTissueSurface and
+% This function checks the outputs from yOCTTissueSurfaceAutofocus and
 % asserts that the tissue surface is in focus. It will also explain to user
 % how to adjust the z stage such that tissue will be in focus.
 %
