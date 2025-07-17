@@ -13,8 +13,6 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 %       depth (Z, pixels) that the focus is located at.
 %   assertInFocusAcceptableRange_mm: how far can tissue surface be from 
 %       focus position to be considered "good enough". Default: 0.025mm.
-%   throwErrorIfAssertionFails: Stop with a clear error if any assertion check fails
-%       when set to true (default).
 %   roiToAssertFocus: Region Of Interest [x, y, width, height] mm to assert focus.
 %       Use [] to test the full scan area (default).
 %   moveTissueToFocus: Move the Z stage automatically when the surface is out of focus.
@@ -44,7 +42,6 @@ addParameter(p,'assertInFocusAcceptableRange_mm',0.025);
 addParameter(p,'roiToAssertFocus',[], @(z) isempty(z) || ...
          (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
 addParameter(p,'moveTissueToFocus',true,@islogical);
-addParameter(p,'throwErrorIfAssertionFails',true,@islogical); 
 addParameter(p,'skipHardware',false);
 addParameter(p,'v',false);
 
@@ -61,11 +58,11 @@ temporaryFolder         = in.temporaryFolder;
 v                       = in.v;
 roi                     = in.roiToAssertFocus;
 acceptableRange         = in.assertInFocusAcceptableRange_mm;
-throwErrorIfAssertionFails  = in.throwErrorIfAssertionFails;
+
 
 % Return if skipHardware is true
 if in.skipHardware % No need to continue
-    
+
     % How wide (X) and tall (Y) the requested scan area is:
     spanX_mm = xRange_mm(2) - xRange_mm(1); % total width  in millimetres
     spanY_mm = yRange_mm(2) - yRange_mm(1); % total height in millimetres
@@ -145,42 +142,37 @@ end
 
 %% Bring tissue into focus
 if ~isempty(acceptableRange)
-    
+
     % Compute Z Offset
-    [isSurfaceInFocus, surfacePositionOutput_mm] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
+    [roiAverageSurface_mm, isSurfaceInFocus] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
     surfacePosition_mm, x_mm, y_mm, ...
     'acceptableRange_mm',           acceptableRange, ...
     'roiToCheckSurfacePosition',    roi, ...
-    'throwErrorIfAssertionFails',   throwErrorIfAssertionFails, ...
+    'moveTissueToFocus',            in.moveTissueToFocus,...
     'v',                            v);
     
     % Set limits
     maxMovementSafetyCap_mm = 0.10;  % 100 micron safety cap
-    if ~isnan(surfacePositionOutput_mm) && ...
-         abs(surfacePositionOutput_mm) > maxMovementSafetyCap_mm
-        surfacePositionOutput_mm = sign(surfacePositionOutput_mm) * maxMovementSafetyCap_mm;
+    if ~isnan(roiAverageSurface_mm) && ...
+         abs(roiAverageSurface_mm) > maxMovementSafetyCap_mm
+        roiAverageSurface_mm = sign(roiAverageSurface_mm) * maxMovementSafetyCap_mm;
     end
 
-    % Move Z in stage if required (all conditions must be met to move it)
-    needMove =  ~isSurfaceInFocus                                                   && ...
-                ~isnan(surfacePositionOutput_mm)                                    && ...
-                abs(surfacePositionOutput_mm) > acceptableRange                     && ...
-                ~in.skipHardware                                                    && ...
-                in.moveTissueToFocus;
-
+    % Move Z in stage if required
+    needMove = ~isSurfaceInFocus && in.moveTissueToFocus;
     if needMove
         [~,~,z0] = yOCTStageInit();  % query current Z
         try
-            yOCTStageMoveTo(NaN, NaN, z0 + surfacePositionOutput_mm, v);
+            yOCTStageMoveTo(NaN, NaN, z0 + roiAverageSurface_mm, v);
             fprintf('%s Stage auto‑moved by %.3f mm to refocus tissue surface.\n', ...
-                    datestr(datetime), surfacePositionOutput_mm);
+                    datestr(datetime), roiAverageSurface_mm);
 
-            % keep surface map consistent with new focus
-            surfacePosition_mm = surfacePosition_mm - surfacePositionOutput_mm;
+            % keep surface map consistent with new focus after movement
+            surfacePosition_mm = surfacePosition_mm - roiAverageSurface_mm;
 
             if v
                 fprintf('%s Stage Z successfully MOVED from %.3f mm to %.3f mm (OCT coord).\n', ...
-                        datestr(datetime), z0, z0 + surfacePositionOutput_mm);
+                        datestr(datetime), z0, z0 + roiAverageSurface_mm);
             end
         catch ME
             error('yOCT:StageMoveFailed','Stage move failed: %s', ME.message);
