@@ -201,24 +201,35 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 testCase.logMeanAbs, ...
                 dim);
 
-            % Where surface positoin should be (where we constructed it)
+            % Where surface position should be (where we constructed it)
             surfaceZ = dim.z.values(testCase.simulatedSurfacePositionZ_pix);
 
             % Artificially move surface position such that focus is at
             % surface, this function should pass:
-            yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ,x,y);
+            [dz, isSurfaceInFocus] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus(surfacePosition - surfaceZ, x, y, 'moveTissueToFocus', false);
+            testCase.verifyTrue(isSurfaceInFocus);
+            testCase.verifyLessThan(abs(dz), 5e-3);   % no offset
 
-            % This should fail, move 50um out of focus, make sure that
-            % function returns an error.
-            testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ+0.050,x,y),...
+            % Move 50um out of focus to make sure that function
+            % returns an error
+            testCase.verifyError(@() ...
+                yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
+                    surfacePosition - surfaceZ + 0.050, x, y, 'moveTissueToFocus', false), ...
                 'yOCT:SurfaceOutOfFocus');
 
-            % This should fail, move 50um out of focus, in the other
-            % direction sure that function returns an error.
-            testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ-0.050,x,y),...
+            % Move 50um out of focus in the other direction
+            % make sure that function returns an error
+            testCase.verifyError(@() ...
+                yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
+                    surfacePosition - surfaceZ - 0.050, x, y, 'moveTissueToFocus', false), ...
                 'yOCT:SurfaceOutOfFocus');
+
+            % Out of focus but allows fixing the stage automatically if required
+            [dz2, isSurfaceInFocus2] = ...
+                yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
+                    surfacePosition - surfaceZ + 0.050, x, y);
+            testCase.verifyFalse(isSurfaceInFocus2);
+            testCase.verifyEqual(dz2, 0.050, 'AbsTol', 5e-3);
         end
 
         function testOnlyPartOfTissueIsInFocus(testCase)
@@ -232,14 +243,14 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             % sure assertion passes (as this is a small part)
             surfacePosition1 = surfacePosition;
             surfacePosition1(1:10,1:10) = 1000;
-            yOCTAssertTissueSurfaceIsInFocus(surfacePosition1,x,y)
+            yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus(surfacePosition1,x,y)
 
             % Shift a large portion of the surface away from focus, make
             % sure assertion fails
             surfacePosition1 = surfacePosition;
             surfacePosition1(1:50,:) = 1000;
             try
-                yOCTAssertTissueSurfaceIsInFocus(surfacePosition1, x, y);
+                yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus(surfacePosition1, x, y);
                 testCase.verifyFail('Expected an error, but none was thrown.');
             catch ME
                 validErrorIds = {'yOCT:SurfaceOutOfFocus', 'yOCT:SurfaceCannotBeInFocus'};
@@ -258,7 +269,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             surfacePosition(1:100,:) = NaN;
 
             testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition,x,y),...
+                @()yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus(surfacePosition,x,y),...
                 'yOCT:SurfaceCannotBeEstimated');
         end
 
@@ -271,7 +282,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             surfacePosition = surfacePosition - mean(surfacePosition);
 
             testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition,x,y),...
+                @()yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus(surfacePosition,x,y),...
                 'yOCT:SurfaceCannotBeInFocus');
         end
 
