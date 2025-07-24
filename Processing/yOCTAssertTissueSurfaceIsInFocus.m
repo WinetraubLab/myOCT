@@ -1,56 +1,95 @@
-function yOCTAssertTissueSurfaceIsInFocus( ...
-    surfacePosition_mm, x_mm, y_mm, acceptableRange_mm)
-% This function checks the outputs from yOCTScanAndFindTissueSurface and
-% asserts that the tissue surface is in focus. It will also explain to user
-% how to adjust the z stage such that tissue will be in focus.
-%
+function [isSurfaceInFocus, zOffsetCorrection_mm] = yOCTAssertFocusAndComputeZOffset( ...
+    surfacePosition_mm, x_mm, y_mm, varargin)
+% This function takes the outputs from yOCTTissueSurfaceAutofocus to
+% compute the Z offset between the tissue surface and the current focus
+% position and assert that the tissue surface is in focus. It will also explain
+% to the user how to adjust the Z stage such that tissue will be in focus.
 % INPUTS:
-%   surfacePosition_mm: provided by yOCTScanAndFindTissueSurface
-%   x_mm: provided by yOCTScanAndFindTissueSurface
-%   y_mm: provided by yOCTScanAndFindTissueSurface
-%   acceptableRange_mm: how far can tissue surface be from focus position
+%   surfacePosition_mm: provided by yOCTTissueSurfaceAutofocus
+%   x_mm: provided by yOCTTissueSurfaceAutofocus
+%   y_mm: provided by yOCTTissueSurfaceAutofocus
+%   acceptableRange_mm: How far can tissue surface be from focus position
 %       to be considered "good enough". Default: 0.025mm
+%   roiToCheckSurfacePosition: Region Of Interest [x, y, width, height] mm to compute 
+%       average surface and validate focus. Use [] to use the full scan area (default).
+%   throwErrorIfOutOfFocus: When set to true, the function will throw an error 
+%       if the surface is out of focus. When set to false, it will not throw an error,
+%       but will return the Z offset and print instructions for correction. Default is true.
+%   v: Verbose mode for debugging purposes and visualization default is false.
+% OUTPUTS:
+%   isSurfaceInFocus: Resulting evaluation indicating whether the tissue surface is within 
+%       the acceptable range of the current focus position. Returns true if in focus, false otherwise.
+%   zOffsetCorrection_mm: Average Z distance between the current focus and the estimated 
+%       tissue surface in the specified ROI. It can be used to move the Z stage and 
+%       bring the tissue into focus. A positive value means the stage needs to move up;
+%       a negative value means it should move down.
 
 %% Input checks
 
+p = inputParser;
+addParameter(p,'acceptableRange_mm',0.025,@isnumeric);
+addParameter(p,'roiToCheckSurfacePosition',[],@(z) isempty(z) || ...
+             (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
+addParameter(p,'throwErrorIfOutOfFocus',true,@islogical);
+addParameter(p,'v',false,@islogical);
+parse(p,varargin{:});
+in = p.Results;
+
+acceptableRange_mm      = in.acceptableRange_mm;
+roiToCheck              = in.roiToCheckSurfacePosition;
+throwErrorIfOutOfFocus  = in.throwErrorIfOutOfFocus;
+v                       = in.v;
+
 assert(size(surfacePosition_mm,1) == length(y_mm),'surfacePosition_mm first dimension should match y_mm')
 assert(size(surfacePosition_mm,2) == length(x_mm),'surfacePosition_mm second dimension should match x_mm')
-if ~exist('acceptableRange_mm','var')
-    acceptableRange_mm = 0.025;
+
+% Compute Z offset correction to bring tissue into focus and extract ROI from the surface map
+[zOffsetCorrection_mm, roiSurfaceMap_mm] = yOCTComputeZOffsetToFocusFromSurfaceROI( ...
+        surfacePosition_mm, x_mm, y_mm, ...
+        'roiToCheckSurfacePosition', roiToCheck, ...
+        'v', v);
+roiSurfaceVec_mm = roiSurfaceMap_mm(:); % flatten surface map for numeric checks
+
+% Assertion 1: Make sure we have enough surface position estimated
+surfNaNs = mean(isnan(roiSurfaceVec_mm));
+if surfNaNs >= 0.2
+    error('yOCT:SurfaceCannotBeEstimated', ...
+          'Large part of the surface position cannot be estimated.');
 end
+roiSurfaceVec_mm(isnan(roiSurfaceVec_mm)) = [];
 
-%% Compute surface position statistics
-surfacePosition_mm = surfacePosition_mm(:);
-
-% Make sure we have enough surface position estimated
-assert(sum(isnan(surfacePosition_mm))/length(surfacePosition_mm) < 0.2, "yOCT:SurfaceCannotBeEstimated", "Lage part of the surface position cannot be estimated");
-surfacePosition_mm(isnan(surfacePosition_mm)) = [];
-
-% Represent the tissue 
-medianSurfacePosition_mm = median(surfacePosition_mm);
-
-% Make sure that tissue is flat enough that it can all be in focus.
+% Assertion 2: Make sure that tissue is flat enough that it can all be in focus.
 p = 80;
-distFromMedian_mm = prctile(...
-    abs(surfacePosition_mm-medianSurfacePosition_mm), p);
-if distFromMedian_mm>acceptableRange_mm
+distFromSurface_mm = prctile(abs(roiSurfaceVec_mm - zOffsetCorrection_mm),p);
+if distFromSurface_mm > acceptableRange_mm
     error('yOCT:SurfaceCannotBeInFocus', ...
         "Tissue's shape is not flat, therefore it cannot all be in focus");
 end
 
-%% Instruct user how to change the surface position 
-if abs(medianSurfacePosition_mm) > acceptableRange_mm
-    if medianSurfacePosition_mm > 0 % Determine direction of adjustment
-        direction = 'increase';
+% Assertion 3: focus offset
+if abs(zOffsetCorrection_mm) <= acceptableRange_mm % surface in focus
+    isSurfaceInFocus = true; % We passed all tests
+    if v
+        fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', ...
+                datestr(datetime), zOffsetCorrection_mm);
+    end
+else  % surface out of focus
+    isSurfaceInFocus = false;
+
+    if zOffsetCorrection_mm > 0
+        direction = 'increase'; 
     else
         direction = 'decrease';
     end
-    
-    errorID = 'yOCT:SurfaceOutOfFocus';
-    msg = sprintf(['The average distance of the surface (%.3fmm) is out of range.\n\n', ...
-        'Please %s the stage Z position by %.3fmm to bring the tissue surface into focus.'], ...
-        medianSurfacePosition_mm, direction, abs(round(medianSurfacePosition_mm, 3)));
-    error(errorID, msg); 
-end
 
-fprintf('%s The average distance of the surface (%.3f mm) is within the acceptable range.\n', datestr(datetime), medianSurfacePosition_mm);
+    if throwErrorIfOutOfFocus % Throw error with instructions if autofocus is not allowed
+        error('yOCT:SurfaceOutOfFocus', ...
+              'Surface out of focus by %.3f mm: please %s the stage Z position by %.3f mm to bring the tissue surface into focus.', ...
+              zOffsetCorrection_mm, direction, abs(round(zOffsetCorrection_mm,3)));
+    end
+    
+    if v  % Provide instructions to user if verbose mode is enabled and no error was thrown
+        fprintf('%s Surface out of focus by %.3f mm: please %s the stage Z position by %.3f mm to bring the tissue surface into focus.\n', ...
+                datestr(datetime), zOffsetCorrection_mm, direction, abs(round(zOffsetCorrection_mm,3)));
+    end
+end
