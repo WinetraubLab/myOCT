@@ -15,8 +15,9 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 %       focus position to be considered "good enough". Default: 0.025mm.
 %   roiToAssertFocus: Region Of Interest [x, y, width, height] mm to assert focus.
 %       Use [] to test the full scan area (default).
-%   moveTissueToFocus: Move the Z stage automatically when the surface is out of focus.
-%       (default = true; disabled if skipHardware = true)
+%   moveTissueToFocus: When set to true, it will move the Z stage automatically when the surface is out of focus.
+%       When set to false, it will not move stage, but will notify user how to move stage back to focus.
+%       Default is true. If skipHardware is set to true then moveTissueToFocus is forced to false.
 %   skipHardware: Set to true to skip hardware operation. Default: false.
 %   v: Verbose mode for debugging purposes and visualization default is 
 %       false.
@@ -57,11 +58,16 @@ dispersionQuadraticTerm = in.dispersionQuadraticTerm;
 temporaryFolder         = in.temporaryFolder;
 v                       = in.v;
 roi                     = in.roiToAssertFocus;
-acceptableRange         = in.assertInFocusAcceptableRange_mm;
+acceptableRange_mm      = in.assertInFocusAcceptableRange_mm;
 
+if in.skipHardware % make sure we are moving the stage only if we don't skip hardware
+    moveTissueToFocus = false;
+else
+    moveTissueToFocus = in.moveTissueToFocus;
+end
 
 % Return if skipHardware is true
-if in.skipHardware % No need to continue
+if in.skipHardware % No need to continue, we can't scan because hardware is skipped
 
     % How wide (X) and tall (Y) the requested scan area is:
     spanX_mm = xRange_mm(2) - xRange_mm(1); % total width  in millimetres
@@ -112,7 +118,6 @@ yOCTProcessTiledScan(...
     {outputTiffFile},... Save only Tiff file as folder will be generated after smoothing
     'focusPositionInImageZpix', focusPositionInImageZpix, ...
     'dispersionQuadraticTerm',  dispersionQuadraticTerm, ...
-    'outputFilePixelSize_um',   pixelSize_um,...
     'cropZAroundFocusArea',     false, ...
     'outputFilePixelSize_um',   [],...
     'v',                        v);
@@ -141,38 +146,42 @@ if (v)
 end
 
 %% Bring tissue into focus
-if ~isempty(acceptableRange)
-
-    % Compute Z Offset
-    [roiAverageSurface_mm, isSurfaceInFocus] = yOCTComputeZOffsetSuchThatTissueSurfaceIsInFocus( ...
-    surfacePosition_mm, x_mm, y_mm, ...
-    'acceptableRange_mm',           acceptableRange, ...
-    'roiToCheckSurfacePosition',    roi, ...
-    'moveTissueToFocus',            in.moveTissueToFocus,...
-    'v',                            v);
+if ~isempty(acceptableRange_mm) % If acceptableRange_mm is empty, then no need to compute how stage should move
     
-    % Set limits
-    maxMovementSafetyCap_mm = 0.10;  % 100 micron safety cap
-    if ~isnan(roiAverageSurface_mm) && ...
-         abs(roiAverageSurface_mm) > maxMovementSafetyCap_mm
-        roiAverageSurface_mm = sign(roiAverageSurface_mm) * maxMovementSafetyCap_mm;
-    end
+    % Assert focus and calculate Z offset correction to bring tissue into focus.
+    % If the surface is out of focus and the user doesn't allow autofocus
+    % (moveTissueToFocus is false), an error will be thrown with instructions 
+    % for the user on how to manually adjust the Z stage
+    [isSurfaceInFocus, zOffsetCorrection_mm] = yOCTAssertFocusAndComputeZOffset( ...
+        surfacePosition_mm, x_mm, y_mm, ...
+        'acceptableRange_mm',           acceptableRange_mm, ...
+        'roiToCheckSurfacePosition',    roi, ...
+        'throwErrorIfOutOfFocus',       ~moveTissueToFocus,...
+        'v',                            v);
 
-    % Move Z in stage if required
-    needMove = ~isSurfaceInFocus && in.moveTissueToFocus;
+    % Move the stage in Z if surface is out of focus, user wants to move and it's not a simulation
+    needMove = ~isSurfaceInFocus && moveTissueToFocus && ~in.skipHardware;
+    
+    % Cap movement to safety limits only if need to move the stage
+    maxMovementSafetyCap_mm = 0.10;  % 100 micron safety cap
+    if needMove && ~isnan(zOffsetCorrection_mm) && ...
+         abs(zOffsetCorrection_mm) > maxMovementSafetyCap_mm
+        zOffsetCorrection_mm = sign(zOffsetCorrection_mm) * maxMovementSafetyCap_mm;
+    end
+    
+    % Move the stage to bring tissue into focus if needed
     if needMove
         [~,~,z0] = yOCTStageInit();  % query current Z
         try
-            yOCTStageMoveTo(NaN, NaN, z0 + roiAverageSurface_mm, v);
-            fprintf('%s Stage auto‑moved by %.3f mm to refocus tissue surface.\n', ...
-                    datestr(datetime), roiAverageSurface_mm);
+            % Move the stage
+            yOCTStageMoveTo(NaN, NaN, z0 + zOffsetCorrection_mm, v);
 
-            % keep surface map consistent with new focus after movement
-            surfacePosition_mm = surfacePosition_mm - roiAverageSurface_mm;
+            % Correct surface map by updating it with the new positions after movement
+            surfacePosition_mm = surfacePosition_mm - zOffsetCorrection_mm;
 
             if v
-                fprintf('%s Stage Z successfully MOVED from %.3f mm to %.3f mm (OCT coord).\n', ...
-                        datestr(datetime), z0, z0 + roiAverageSurface_mm);
+                fprintf('%s Stage Z successfully MOVED from %.3f mm to %.3f mm to refocus tissue surface.\n', ...
+                        datestr(datetime), z0, z0 + zOffsetCorrection_mm);
             end
         catch ME
             error('yOCT:StageMoveFailed','Stage move failed: %s', ME.message);
