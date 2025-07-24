@@ -32,7 +32,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             [surfacePosition,x,y] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, ...
                 testCase.dimensions);
-            
+
             % Make sure x and y are unit vectors
             assert(size(x,2) == 1);
             assert(size(y,2) == 1);
@@ -56,7 +56,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             % Identify surface (always in mm)
             [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, dim);
-            
+
             % Check surface position
             assert(...
                 abs(mean(mean(surfacePosition_mm)) - ...  Average surface position in mm
@@ -74,20 +74,20 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             dim.z.values = dim.z.values + 0.1; % Shift by 100 microns
             dim.x.values = dim.x.values + 0.1; % Shift by 100 microns
             dim.y.values = dim.y.values + 0.1; % Shift by 100 microns
-            
+
             expectedSurfacePos_mm = dim.z.values(...
                 testCase.simulatedSurfacePositionZ_pix);
-            
+
             % Identify surface (always in mm)
             [surfacePosition_mm,x_mm,y_mm] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, dim);
-            
+
             % Check surface position
             assert( ...
                 abs(mean(mean(surfacePosition_mm)) - ...  Average surface position in mm
                 expectedSurfacePos_mm) ...                Expected surface position in mm
                 < 2e-3 );
-            
+
             % Check x,y
             assert(mean(abs(x_mm(:) - dim.x.values(:))) < 1e-3);
             assert(mean(abs(y_mm(:) - dim.y.values(:))) < 1e-3);
@@ -96,18 +96,18 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
         function testCoverslipIsIgnoredForDifferentZPixelSizes(testCase)
             % Confirms that a coverslip is skipped for any Z Pixel Size
             % since confirmation for surface is in real world units, not pixels
-        
+
             surfaceZ_pix = testCase.simulatedSurfacePositionZ_pix;
             zSize  = 1024;   % Z dimension
             xSize  = 100;    % X dimension
             ySize  = 200;    % Y dimension
             rng(1);          % reproducible noise
-        
+
             % Scenario 1: 1 micron pixel size with a 10 pixel coverslip
             pixelSizeZ_um   = 1;
             coverslip_px    = 10;
             runScenario;   % calls the nested helper below
-        
+
             % Scenario 2: 0.5 microns pixel size with a 20 pixel coverslip
             pixelSizeZ_um   = 0.5;
             coverslip_px    = 20;
@@ -147,17 +147,17 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
         end
 
         function testChangingDimensionsShouldntChangeOutputs(testCase)
-            
+
             % Compute surface position with mm inputs
             [surfacePosition1,x1,y1] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, ...
                 yOCTChangeDimensionsStructureUnits(testCase.dimensions,'mm'));
- 
+
             % Compute surface position with microns inputs
             [surfacePosition2,x2,y2] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, ...
                 yOCTChangeDimensionsStructureUnits(testCase.dimensions,'microns'));
- 
+
             % Make sure that changing the inputs doesn't impact the output
             % units. According to yOCTScanAndFindTissueSurface
             % documentation, output is allways in mm
@@ -178,7 +178,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             % Identify surface (always in mm)
             [surfacePosition_pix,x_pix,y_pix] = yOCTFindTissueSurface( ...
                 testCase.logMeanAbs, dim, 'outputUnits', 'pix');
-            
+
             % Check surface position
             assert(...
                 abs(mean(mean(surfacePosition_pix)) - ...  Average surface position in mm
@@ -201,28 +201,39 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 testCase.logMeanAbs, ...
                 dim);
 
-            % Where surface positoin should be (where we constructed it)
+            % Where surface position should be (where we constructed it)
             surfaceZ = dim.z.values(testCase.simulatedSurfacePositionZ_pix);
 
             % Artificially move surface position such that focus is at
             % surface, this function should pass:
-            yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ,x,y);
+            [isSurfaceInFocus, zOffset_mm] = yOCTAssertFocusAndComputeZOffset(surfacePosition - surfaceZ, x, y);
+            testCase.verifyTrue(isSurfaceInFocus);
+            testCase.verifyLessThan(abs(zOffset_mm), 5e-3);   % no offset
 
             % This should fail, move 50um out of focus, make sure that
             % function returns an error.
-            testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ+0.050,x,y),...
+            testCase.verifyError(@() ...
+                yOCTAssertFocusAndComputeZOffset( ...
+                    surfacePosition - surfaceZ + 0.050, x, y), ...
                 'yOCT:SurfaceOutOfFocus');
 
-            % This should fail, move 50um out of focus, in the other
-            % direction sure that function returns an error.
-            testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition-surfaceZ-0.050,x,y),...
+            % This should fail, move 50um out of focus in the other
+            % direction, make sure that function returns an error.
+
+            testCase.verifyError(@() ...
+                yOCTAssertFocusAndComputeZOffset( ...
+                    surfacePosition - surfaceZ - 0.050, x, y), ...
                 'yOCT:SurfaceOutOfFocus');
+
+            % Out of focus but allows fixing the stage automatically if required
+            [isSurfaceInFocus2, zOffset_mm2] = ...
+                yOCTAssertFocusAndComputeZOffset( ...
+                    surfacePosition - surfaceZ + 0.050, x, y, 'throwErrorIfOutOfFocus', false);
+            testCase.verifyFalse(isSurfaceInFocus2);
+            testCase.verifyEqual(zOffset_mm2, 0.050, 'AbsTol', 5e-3);
         end
 
         function testOnlyPartOfTissueIsInFocus(testCase)
-
             % Where surface positoin should be (where we constructed it)
             surfacePosition = zeros(100,100);
             x = linspace(0,1,100);
@@ -232,14 +243,14 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             % sure assertion passes (as this is a small part)
             surfacePosition1 = surfacePosition;
             surfacePosition1(1:10,1:10) = 1000;
-            yOCTAssertTissueSurfaceIsInFocus(surfacePosition1,x,y)
+            yOCTAssertFocusAndComputeZOffset(surfacePosition1,x,y)
 
             % Shift a large portion of the surface away from focus, make
             % sure assertion fails
             surfacePosition1 = surfacePosition;
             surfacePosition1(1:50,:) = 1000;
             try
-                yOCTAssertTissueSurfaceIsInFocus(surfacePosition1, x, y);
+                yOCTAssertFocusAndComputeZOffset(surfacePosition1, x, y);
                 testCase.verifyFail('Expected an error, but none was thrown.');
             catch ME
                 validErrorIds = {'yOCT:SurfaceOutOfFocus', 'yOCT:SurfaceCannotBeInFocus'};
@@ -258,7 +269,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             surfacePosition(1:100,:) = NaN;
 
             testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition,x,y),...
+                @()yOCTAssertFocusAndComputeZOffset(surfacePosition,x,y),...
                 'yOCT:SurfaceCannotBeEstimated');
         end
 
@@ -271,7 +282,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
             surfacePosition = surfacePosition - mean(surfacePosition);
 
             testCase.verifyError(...
-                @()yOCTAssertTissueSurfaceIsInFocus(surfacePosition,x,y),...
+                @()yOCTAssertFocusAndComputeZOffset(surfacePosition,x,y),...
                 'yOCT:SurfaceCannotBeInFocus');
         end
 
