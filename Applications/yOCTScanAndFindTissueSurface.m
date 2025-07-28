@@ -13,7 +13,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 %       depth (Z, pixels) that the focus is located at.
 %   assertInFocusAcceptableRange_mm: how far can tissue surface be from 
 %       focus position to be considered "good enough". Default: 0.025mm.
-%   roiToAssertFocus: Region Of Interest [x, y, width, height] mm to assert focus.
+%   roiToAssertFocus_mm: Region Of Interest [x, y, width, height] mm to assert focus.
 %       Use [] to test the full scan area (default).
 %   moveTissueToFocus: When set to true, it will move the Z stage automatically when the surface is out of focus.
 %       When set to false, it will not move stage, but will notify user how to move stage back to focus.
@@ -40,7 +40,7 @@ addParameter(p,'temporaryFolder','./SurfaceAnalysisTemp/');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'assertInFocusAcceptableRange_mm',0.025);
-addParameter(p,'roiToAssertFocus',[], @(z) isempty(z) || ...
+addParameter(p,'roiToAssertFocus_mm',[], @(z) isempty(z) || ...
          (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
 addParameter(p,'moveTissueToFocus',true,@islogical);
 addParameter(p,'skipHardware',false);
@@ -57,7 +57,7 @@ octProbePath            = in.octProbePath;
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
 temporaryFolder         = in.temporaryFolder;
 v                       = in.v;
-roi                     = in.roiToAssertFocus;
+roi_mm                  = in.roiToAssertFocus_mm;
 acceptableRange_mm      = in.assertInFocusAcceptableRange_mm;
 
 if in.skipHardware % make sure we are moving the stage only if we don't skip hardware
@@ -155,8 +155,8 @@ if ~isempty(acceptableRange_mm) % If acceptableRange_mm is empty, then no need t
     [isSurfaceInFocus, zOffsetCorrection_mm] = yOCTAssertFocusAndComputeZOffset( ...
         surfacePosition_mm, x_mm, y_mm, ...
         'acceptableRange_mm',           acceptableRange_mm, ...
-        'roiToCheckSurfacePosition',    roi, ...
-        'throwErrorIfOutOfFocus',       ~moveTissueToFocus,...
+        'roiToCheckSurfacePosition',    roi_mm, ...
+        'throwErrorIfOutOfFocus',       ~moveTissueToFocus,... Will throw an error if tissue is out of focus explaining the user how to move it back to focus
         'v',                            v);
 
     % Move the stage in Z if surface is out of focus, user wants to move and it's not a simulation
