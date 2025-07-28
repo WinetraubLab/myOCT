@@ -12,9 +12,9 @@ function [isSurfaceInFocus, zOffsetCorrection_mm] = yOCTAssertFocusAndComputeZOf
 %       to be considered "good enough". Default: 0.025mm
 %   roiToCheckSurfacePosition: Region Of Interest [x, y, width, height] mm to compute 
 %       average surface and validate focus. Use [] to use the full scan area (default).
-%   throwErrorIfOutOfFocus: When set to true, the function will throw an error 
+%   throwErrorIfOutOfFocus: When set to true (default), the function will throw an error 
 %       if the surface is out of focus. When set to false, it will not throw an error,
-%       but will return the Z offset and print instructions for correction. Default is true.
+%       but will return the Z offset and print instructions for correction.
 %   v: Verbose mode for debugging purposes and visualization default is false.
 % OUTPUTS:
 %   isSurfaceInFocus: Resulting evaluation indicating whether the tissue surface is within 
