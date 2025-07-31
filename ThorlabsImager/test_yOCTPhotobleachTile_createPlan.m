@@ -1,4 +1,4 @@
-classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
+classdef test_yOCTPhotobleachTile < matlab.unittest.TestCase
 
     properties
         
