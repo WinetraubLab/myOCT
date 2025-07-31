@@ -27,6 +27,9 @@ function json = yOCTPhotobleachTile(varargin)
 %                                                   surfaceMap.surfacePosition_mm = surfacePosition_mm;
 %                                                   surfaceMap.surfaceX_mm        = surfaceX_mm;
 %                                                   surfaceMap.surfaceY_mm        = surfaceY_mm;
+%   uniformSurfaceOffset    true             If true, every tile is given the exact same zOffsetDueToTissueSurface taken from a single
+%                                            reference tile (central one at X=0 ,Y=0 or the one closest to it). This keeps the focal plane 
+%                                            uniform across the whole mosaic.
 %   exposure                15              How much time to expose each spot to laser light. Units sec/mm 
 %                                           Meaning for each 1mm, we will expose for exposurePerLine sec 
 %                                           If scanning at multiple depths, exposure will for each depth. Meaning two depths will be exposed twice as much. 
@@ -76,6 +79,7 @@ addParameter(p,'plotPattern',false);
 addParameter(p,'laserToggleMethod','OpticalSwitch');
 addParameter(p,'surfaceMap', [], @(x) isempty(x) || (isstruct(x) && ...
     all(ismember({'surfacePosition_mm','surfaceX_mm','surfaceY_mm'}, fieldnames(x)))));
+addParameter(p,'uniformSurfaceOffset',true,@islogical);
 
 parse(p,varargin{:});
 json = p.Results;
@@ -169,6 +173,41 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
     end
 end
 photobleachPlan = adjustPlanZ(json.surfaceMap, photobleachPlan);
+
+function photobleachPlan = applyUniformSurfaceOffset(photobleachPlan, json, v)
+% This function makes all tiles share one tissue-surface Z offset (identified
+% from the central scan). It is executed only when uniformSurfaceOffset == true
+
+    if ~json.uniformSurfaceOffset
+        return;                     % Keep original per-tile offsets
+    end
+
+    % Find the tile whose stageCenter (X,Y) is closest to (0,0).           
+    % That tile supplies the reference offset zRef.
+    [~,idx0] = min( hypot([photobleachPlan.stageCenterX_mm], ...
+                           [photobleachPlan.stageCenterY_mm]) ); % Locate reference tile (closest to 0,0)
+    zRef = photobleachPlan(idx0).zOffsetDueToTissueSurface; % Reference Offset
+    
+    % Propagate reference offset to all tiles to be photobleached
+    for k = 1:numel(photobleachPlan)
+        if k == idx0
+            continue; % it's already correct here
+        end
+        
+        % Apply the applied offsets
+        dZ = zRef - photobleachPlan(k).zOffsetDueToTissueSurface;
+        photobleachPlan(k).zOffsetDueToTissueSurface = zRef;
+        photobleachPlan(k).stageCenterZ_mm           = photobleachPlan(k).stageCenterZ_mm + dZ;
+    end
+
+    if v  % Print adjustments in verbose mode
+        fprintf('%s applyUniformSurfaceOffset: uniform zOffset used = %.4f mm\n', ...
+                datestr(datetime), zRef);
+    end
+end
+
+% Apply Uniform Z Offset if requested
+photobleachPlan = applyUniformSurfaceOffset(photobleachPlan, json, v);
 
 % Save the plan in the json
 json.photobleachPlan = photobleachPlan;
@@ -361,4 +400,3 @@ if (v)
 end
 end
 end
-
