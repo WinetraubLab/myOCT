@@ -38,6 +38,24 @@ plot(0,0);
 for planI = 1:length(photobleachPlan)
     ppStep = photobleachPlan(planI);
 
+    % Draw ROI in red with an "X" where we skip photobleaching
+    if isfield(ppStep,'zOffsetDueToTissueSurface') && isnan(ppStep.zOffsetDueToTissueSurface)
+        roiBox = [ ...
+                -FOV_mm(1)/2 + ppStep.stageCenterX_mm, ...
+                -FOV_mm(2)/2 + ppStep.stageCenterY_mm, ...
+                 FOV_mm(1), ...
+                 FOV_mm(2)];
+                
+        % Draw a red tile rectangle (edge of ROI)
+        rectangle('Position', roiBox, 'EdgeColor', [1 0 0], 'LineWidth', 2); 
+
+        % Draw a centered "X" inside the ROI
+        cx = ppStep.stageCenterX_mm; cy = ppStep.stageCenterY_mm;
+        dx = FOV_mm(1)/4;            dy = FOV_mm(2)/4;
+        plot([cx-dx, cx+dx], [cy-dy, cy+dy], 'r', 'LineWidth', 2);
+        plot([cx-dx, cx+dx], [cy+dy, cy-dy], 'r', 'LineWidth', 2);
+    end
+
     % Draw the phtobleach panel
     rectangle('Position',[...
         -FOV_mm(1)/2+ppStep.stageCenterX_mm ...
