@@ -206,7 +206,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
 
             % Artificially move surface position such that focus is at
             % surface, this function should pass:
-            [isSurfaceInFocus, zOffset_mm] = yOCTAssertFocusAndComputeZOffset(surfacePosition - surfaceZ, x, y);
+            [zOffset_mm, isSurfaceInFocus] = yOCTAssertFocusAndComputeZOffset(surfacePosition - surfaceZ, x, y);
             testCase.verifyTrue(isSurfaceInFocus);
             testCase.verifyLessThan(abs(zOffset_mm), 5e-3);   % no offset
 
@@ -226,7 +226,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 'yOCT:SurfaceOutOfFocus');
 
             % Out of focus but allows fixing the stage automatically if required
-            [isSurfaceInFocus2, zOffset_mm2] = ...
+            [zOffset_mm2, isSurfaceInFocus2] = ...
                 yOCTAssertFocusAndComputeZOffset( ...
                     surfacePosition - surfaceZ + 0.050, x, y, 'throwErrorIfOutOfFocus', false);
             testCase.verifyFalse(isSurfaceInFocus2);

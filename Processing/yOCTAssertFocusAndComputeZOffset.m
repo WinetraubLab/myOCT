@@ -1,4 +1,4 @@
-function [isSurfaceInFocus, zOffsetCorrection_mm] = yOCTAssertFocusAndComputeZOffset( ...
+function [zOffsetCorrection_mm, isSurfaceInFocus] = yOCTAssertFocusAndComputeZOffset( ...
     surfacePosition_mm, x_mm, y_mm, varargin)
 % This function takes the outputs from yOCTTissueSurfaceAutofocus to
 % compute the Z offset between the tissue surface and the current focus
@@ -17,12 +17,11 @@ function [isSurfaceInFocus, zOffsetCorrection_mm] = yOCTAssertFocusAndComputeZOf
 %       but will return the Z offset and print instructions for correction.
 %   v: Verbose mode for debugging purposes and visualization default is false.
 % OUTPUTS:
-%   isSurfaceInFocus: Resulting evaluation indicating whether the tissue surface is within 
-%       the acceptable range of the current focus position. Returns true if in focus, false otherwise.
 %   zOffsetCorrection_mm: Average Z distance between the current focus and the estimated 
 %       tissue surface in the specified ROI. It can be used to move the Z stage and 
 %       bring the tissue into focus. A positive value means the stage needs to move up;
 %       a negative value means it should move down.
+%   isSurfaceInFocus: Is tissue surface close to the focus position (within acceptableRange_mm).
 
 %% Input checks
 
@@ -44,11 +43,23 @@ assert(size(surfacePosition_mm,1) == length(y_mm),'surfacePosition_mm first dime
 assert(size(surfacePosition_mm,2) == length(x_mm),'surfacePosition_mm second dimension should match x_mm')
 
 % Compute Z offset correction to bring tissue into focus and extract ROI from the surface map
-[zOffsetCorrection_mm, roiSurfaceMap_mm] = yOCTComputeZOffsetToFocusFromSurfaceROI( ...
-        surfacePosition_mm, x_mm, y_mm, ...
-        'roiToCheckSurfacePosition', roiToCheck, ...
-        'v', v);
-roiSurfaceVec_mm = roiSurfaceMap_mm(:); % flatten surface map for numeric checks
+if isempty(roiToCheck)  % if empty [] we use the whole surface area to check focus
+    roiSurfaceMap_mm = surfacePosition_mm;
+else % Trim the surface position to only include the provided ROI
+    x0 = roiToCheck(1);
+    y0 = roiToCheck(2);
+    w  = roiToCheck(3);
+    h  = roiToCheck(4);
+    ix = (x_mm >= x0)     & (x_mm <= x0 + w);
+    iy = (y_mm >= y0)     & (y_mm <= y0 + h);
+    roiSurfaceMap_mm = surfacePosition_mm(iy,ix);
+end
+
+% Compute average surface position of the provided surfaceMap ROI
+zOffsetCorrection_mm = median(roiSurfaceMap_mm(:), 'omitnan');
+
+% Flatten surface map for numeric checks
+roiSurfaceVec_mm = roiSurfaceMap_mm(:);
 
 % Assertion 1: Make sure we have enough surface position estimated
 surfNaNs = mean(isnan(roiSurfaceVec_mm));
