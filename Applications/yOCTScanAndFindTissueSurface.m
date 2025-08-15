@@ -72,10 +72,22 @@ yOCTScanTile (...
     'skipHardware', in.skipHardware ...
     );
 
-if in.skipHardware % No need to continue
-    surfacePosition_mm = 0;
-    x_mm = 0;
-    y_mm = 0;
+if in.skipHardware % No need to continue, we can't scan because hardware is skipped
+
+    % How wide (X) and tall (Y) the requested scan area is:
+    spanX_mm = xRange_mm(2) - xRange_mm(1); % total width  in millimetres
+    spanY_mm = yRange_mm(2) - yRange_mm(1); % total height in millimetres
+
+    % How many pixels would the real scan have:
+    nX = ceil( spanX_mm * 1e3 / pixelSize_um ); % number of columns along X
+    nY = ceil( spanY_mm * 1e3 / pixelSize_um ); % number of rows    along Y
+
+    % Build coordinate vectors
+    x_mm = ( xRange_mm(1) + (0:nX-1) .* (pixelSize_um/1e3) ).';
+    y_mm = ( yRange_mm(1) + (0:nY-1) .* (pixelSize_um/1e3) ).';
+
+    % Empty surface map
+    surfacePosition_mm = zeros(nY, nX);
     return;
 end
 
