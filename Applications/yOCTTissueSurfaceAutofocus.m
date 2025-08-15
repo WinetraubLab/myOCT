@@ -82,7 +82,7 @@ if in.skipHardware % No need to continue, we can't scan because hardware is skip
     y_mm = ( yRange_mm(1) + (0:nY-1) .* (pixelSize_um/1e3) ).';
 
     % Empty surface map
-    surfacePosition_mm = NaN(nY, nX);
+    surfacePosition_mm = zeros(nY, nX);
     return;
 end
 
@@ -107,25 +107,6 @@ yOCTScanTile (...
     'v',               v,  ...
     'skipHardware',    in.skipHardware ...
     );
-
-if in.skipHardware % No need to continue, we can't scan because hardware is skipped
-
-    % How wide (X) and tall (Y) the requested scan area is:
-    spanX_mm = xRange_mm(2) - xRange_mm(1); % total width  in millimetres
-    spanY_mm = yRange_mm(2) - yRange_mm(1); % total height in millimetres
-
-    % How many pixels would the real scan have:
-    nX = ceil( spanX_mm * 1e3 / pixelSize_um ); % number of columns along X
-    nY = ceil( spanY_mm * 1e3 / pixelSize_um ); % number of rows    along Y
-
-    % Build coordinate vectors
-    x_mm = ( xRange_mm(1) + (0:nX-1) .* (pixelSize_um/1e3) ).';
-    y_mm = ( yRange_mm(1) + (0:nY-1) .* (pixelSize_um/1e3) ).';
-
-    % Empty surface map
-    surfacePosition_mm = zeros(nY, nX);
-    return;
-end
 
 %% Reconstruct OCT Image for Subsequent Surface Analysis
 if (v)
@@ -215,6 +196,6 @@ end
 totalEndTime = datetime;  % Capture the ending time
 totalDuration = totalEndTime - totalStartTime;
 if (v)
-    fprintf('%s yOCTScanAndFindTissueSurface function evaluation completed in %s.\n', ...
+    fprintf('%s yOCTTissueSurfaceAutofocus function evaluation completed in %s.\n', ...
         datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
 end
