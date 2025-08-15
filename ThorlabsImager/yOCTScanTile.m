@@ -128,9 +128,9 @@ in.gridZcc = in.gridZcc(:);
 in.scanOrder = 1:length(in.gridZcc);
 in.octFolders = arrayfun(@(x)(sprintf('Data%02d',x)),in.scanOrder,'UniformOutput',false);
 
-%% Figure out number of pixels in each direction
-in.nXPixels = ceil(in.tileRangeX_mm/(in.pixelSize_um/1e3));
-in.nYPixels = ceil(in.tileRangeY_mm/(in.pixelSize_um/1e3));
+%% Figure out number of pixels in each direction in one tile
+in.nXPixelsInEachTile = ceil(in.tileRangeX_mm/(in.pixelSize_um/1e3));
+in.nYPixelsInEachTile = ceil(in.tileRangeY_mm/(in.pixelSize_um/1e3));
 
 %% Initialize hardware
 if in.skipHardware
