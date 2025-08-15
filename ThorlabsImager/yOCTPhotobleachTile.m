@@ -149,8 +149,8 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
             x_mm - json.FOV(1)/2, y_mm - json.FOV(2)/2, ...
             json.FOV(1), json.FOV(2)];
 
-        % Assert detected surface and find Z offset inside that ROI
         try
+            % Get Z offset for this tile
             zSurf_mm = yOCTAssertFocusAndComputeZOffset( ...
                 S.surfacePosition_mm, S.surfaceX_mm, S.surfaceY_mm, ...
                 'roiToCheckSurfacePosition', roiBox, ...
@@ -159,6 +159,7 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
         catch ME
             switch ME.identifier
                 case {'yOCT:SurfaceCannotBeEstimated','yOCT:SurfaceCannotBeInFocus'}
+                    % Offset failed due to surface detection issues, don't photobleach the tile
                     zSurf_mm = NaN;
                     photobleachPlan(iXY).performTilePhotobleaching = false; % This tile will not be photobleached
                     if v

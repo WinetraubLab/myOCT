@@ -38,7 +38,7 @@ plot(0,0);
 for planI = 1:length(photobleachPlan)
     ppStep = photobleachPlan(planI);
 
-    % Draw ROI in red with an "X" where we skip photobleaching
+    % Draw tile in red with an "X" where we skip photobleaching
     if ~ppStep.performTilePhotobleaching
         roiBox = [ ...
                 -FOV_mm(1)/2 + ppStep.stageCenterX_mm, ...
