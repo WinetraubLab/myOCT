@@ -159,7 +159,7 @@ classdef test_yOCTFindTissueSurface < matlab.unittest.TestCase
                 yOCTChangeDimensionsStructureUnits(testCase.dimensions,'microns'));
 
             % Make sure that changing the inputs doesn't impact the output
-            % units. According to yOCTScanAndFindTissueSurface
+            % units. According to yOCTTissueSurfaceAutofocus
             % documentation, output is allways in mm
             assert(...
                 max(abs(surfacePosition1(:)-surfacePosition2(:)))==0, ... 

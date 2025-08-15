@@ -16,7 +16,7 @@ function json = yOCTPhotobleachTile(varargin)
 %                                           Set to scallar to photobleach all lines in the same depth.
 %                                           Or set to array equal to n to specify depth for each line.
 %   surfaceMap              []              struct containing surfacePosition_mm, surfaceX_mm and surfaceY_mm which are outputs 
-%                                           from yOCTScanAndFindTissueSurface representing the estimated tissue surface:
+%                                           from yOCTTissueSurfaceAutofocus representing the estimated tissue surface:
 %                                               surfaceMap.surfacePosition_mm:  Z offsets at each (Y,X)
 %                                               surfaceMap.surfaceX_mm:         X coordinates vector corresponding to surfacePosition_mm
 %                                               surfaceMap.surfaceY_mm:         Y coordinates vector corresponding to surfacePosition_mm

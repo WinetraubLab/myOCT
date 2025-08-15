@@ -215,6 +215,6 @@ end
 totalEndTime = datetime;  % Capture the ending time
 totalDuration = totalEndTime - totalStartTime;
 if (v)
-    fprintf('%s yOCTScanAndFindTissueSurface function evaluation completed in %s.\n', ...
+    fprintf('%s yOCTTissueSurfaceAutofocus function evaluation completed in %s.\n', ...
         datestr(datetime), datestr(totalDuration, 'HH:MM:SS'));
 end
