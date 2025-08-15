@@ -1,4 +1,4 @@
-function [zOffsetCorrection_mm, isSurfaceInFocus, roiSurfaceMap_mm] = yOCTAssertFocusAndComputeZOffset( ...
+function [zOffsetCorrection_mm, isSurfaceInFocus] = yOCTAssertFocusAndComputeZOffset( ...
     surfacePosition_mm, x_mm, y_mm, varargin)
 % This function takes the outputs from yOCTTissueSurfaceAutofocus to
 % compute the Z offset between the tissue surface and the current focus
@@ -21,7 +21,7 @@ function [zOffsetCorrection_mm, isSurfaceInFocus, roiSurfaceMap_mm] = yOCTAssert
 %       tissue surface in the specified ROI. It can be used to move the Z stage and 
 %       bring the tissue into focus. A positive value means the stage needs to move up;
 %       a negative value means it should move down.
-%   isSurfaceInFocus: Is tissue surface closed to the focus position.
+%   isSurfaceInFocus: Is tissue surface close to the focus position (within acceptableRange_mm).
 
 %% Input checks
 
@@ -45,7 +45,7 @@ assert(size(surfacePosition_mm,2) == length(x_mm),'surfacePosition_mm second dim
 % Compute Z offset correction to bring tissue into focus and extract ROI from the surface map
 if isempty(roiToCheck)  % if empty [] we use the whole surface area to check focus
     roiSurfaceMap_mm = surfacePosition_mm;
-else % 4-element [x y w h]
+else % Trim the surface position to only include the provided ROI
     x0 = roiToCheck(1);
     y0 = roiToCheck(2);
     w  = roiToCheck(3);
