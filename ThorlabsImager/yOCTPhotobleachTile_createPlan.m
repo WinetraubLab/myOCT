@@ -178,6 +178,7 @@ for i=1:length(xcc)
         ppStep.ptStartInFOV_mm = ptStartcc{i}(1:2,linesInThisDepthI) - [xcc(i);ycc(i)];
         ppStep.ptEndInFOV_mm = ptEndcc{i}(1:2,linesInThisDepthI) - [xcc(i);ycc(i)];
         ppStep.lineLength_mm = lineLengths{i}(linesInThisDepthI);
+        ppStep.performTilePhotobleaching = true;
 
         if ~exist('photobleachPlan','var')
             photobleachPlan = ppStep;

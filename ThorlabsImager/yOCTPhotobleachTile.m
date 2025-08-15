@@ -148,24 +148,40 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
         roiBox = [...
             x_mm - json.FOV(1)/2, y_mm - json.FOV(2)/2, ...
             json.FOV(1), json.FOV(2)];
-    
-        % Find offset inside that ROI
-        zSurf_mm = yOCTComputeZOffsetToFocusFromSurfaceROI( ...
-            S.surfacePosition_mm, S.surfaceX_mm, S.surfaceY_mm, ...
-            'roiToCheckSurfacePosition',   roiBox, ...
-            'throwErrorIfAssertionFails',  false, ...
-            'v',                           v);
-    
-        % Fallback if everything was NaN
-        if isnan(zSurf_mm), zSurf_mm = 0; end
-    
-        % Limit offset to 100 microns to prevent lens damage
-        zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
-    
+
+        try
+            % Get Z offset for this tile
+            zSurf_mm = yOCTAssertFocusAndComputeZOffset( ...
+                S.surfacePosition_mm, S.surfaceX_mm, S.surfaceY_mm, ...
+                'roiToCheckSurfacePosition', roiBox, ...
+                'throwErrorIfOutOfFocus',    false, ...
+                'v',                         v);
+        catch ME
+            switch ME.identifier
+                case {'yOCT:SurfaceCannotBeEstimated','yOCT:SurfaceCannotBeInFocus'}
+                    % Offset failed due to surface detection issues, don't photobleach the tile
+                    zSurf_mm = NaN;
+                    photobleachPlan(iXY).performTilePhotobleaching = false; % This tile will not be photobleached
+                    if v
+                        fprintf('%s Tile centered at (x=%.3f, y=%.3f) cannot be photobleached, skipping. Reason: (%s) \n', ...
+                            datestr(datetime), x_mm, y_mm, ME.identifier);
+                    end
+                otherwise
+                    rethrow(ME);
+            end
+        end
+        
         % Store the surface offset and apply it to the Z-stage
-        photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
-        photobleachPlan(iXY).stageCenterZ_mm = ...
-            photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
+        if ~isnan(zSurf_mm)
+            % Limit offset to 100 microns to prevent lens damage
+            zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
+
+            photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
+            photobleachPlan(iXY).stageCenterZ_mm = ...
+                photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
+        else
+            photobleachPlan(iXY).zOffsetDueToTissueSurface = NaN;
+        end
     end
 end
 photobleachPlan = adjustPlanZ(json.surfaceMap, photobleachPlan);
@@ -249,6 +265,11 @@ fprintf('%s Laser Diode is On\n',datestr(datetime));
 % Go over plan
 for i=1:length(photobleachPlan)
     ppStep = photobleachPlan(i);
+
+    % Skip tiles vetted by the assertions
+    if ~ppStep.performTilePhotobleaching
+        continue; % Don't move the stage or photobleach this tile
+    end
 
     if v && length(photobleachPlan) > 1 
         fprintf('%s Moving to positoin (x = %.1fmm, y = %.1fmm, z= %.1fmm) #%d of %d\n',...

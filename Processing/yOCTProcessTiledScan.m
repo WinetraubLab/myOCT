@@ -4,7 +4,7 @@ function yOCTProcessTiledScan(varargin)
 % but will be saved directly to disk (or cloud).
 % For speed purposes, make sure that input and output folder are either both
 % local or both on the cloud. In case, both are on the cloud - run using
-% cluster.
+% cluster. See output tiff file units under "OUTPUT".
 % USAGE:
 %   yOCTProcessTiledScan(tiledScanInputFolder,outputPath,[params])
 %   yOCTProcessTiledScan({parameters})
