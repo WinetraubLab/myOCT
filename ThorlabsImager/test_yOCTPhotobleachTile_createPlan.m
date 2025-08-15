@@ -1,4 +1,4 @@
-classdef test_yOCTPhotobleachTile < matlab.unittest.TestCase
+classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
     
     properties
         DummyIni % dummy path
@@ -222,6 +222,50 @@ classdef test_yOCTPhotobleachTile < matlab.unittest.TestCase
                 'replicating X to Y in the FOV']);
         end
         
+        function testperformTilePhotobleaching(tc)
+        % Verify that the Photobleach Plan correctly decides whether each ROI
+        % should be photobleached, based on surface assertion results.
+            
+            % Pattern large enough to create multiple tiles
+            ptStart = [-2 -2; -2  2];
+            ptEnd   = [ 2  2;  2 -2];
+            
+            % Test data is designed so the left side passes (flat) and the right side fails.
+            xv = -5:0.02:5;
+            yv = -5:0.02:5;
+            [X, ~] = meshgrid(xv, yv);
+            S.surfacePosition_mm = zeros(size(X));
+            S.surfacePosition_mm(X <  0) = 0.02;           % flat area (should pass and be photobleached)
+            S.surfacePosition_mm(X >= 0) = 0.2 .* X(X>=0); % strong slope (should not pass or be photobleached)
+            S.surfaceX_mm = xv;
+            S.surfaceY_mm = yv;
+
+            % Build photobleach plan
+            json = yOCTPhotobleachTile(ptStart, ptEnd, ...
+                'skipHardware', true, ...
+                'surfaceMap',   S, ...
+                'octProbePath', tc.DummyIni, ...
+                'maxLensFOV',   0.4);
+
+            plan  = json.photobleachPlan;    % Photobleach Plan
+            tc.verifyGreaterThan(numel(plan), 20, 'Expected multiple tiles');
+            tc.verifyTrue(all(arrayfun(@(p)isfield(p,'performTilePhotobleaching'), plan)), ...
+                'Each tile must include performTilePhotobleaching');
+
+            % Extract decisions
+            flags     = [plan.performTilePhotobleaching]; % Decision to photobleach or skip
+            leftOnly  = ([plan.stageCenterX_mm] <= -0.2); % This half must be photobleached
+            rightOnly = ([plan.stageCenterX_mm] >=  0.2); % This half must NOT be photobleached
+            
+            % Test Expectations
+            tc.verifyGreaterThan(nnz(leftOnly),  0, 'Need left-only tiles'); % Ensure both sides exist first
+            tc.verifyGreaterThan(nnz(rightOnly), 0, 'Need right-only tiles');
+            tc.verifyTrue(all(flags(leftOnly)), ...
+                'Left half should be photobleached (all performTilePhotobleaching == true');
+            tc.verifyTrue(all(~flags(rightOnly)), ...
+                'Right half should be skipped (all performTilePhotobleaching == false)');
+        end
+
         function testSurfaceOffsetMatchesPlaneMap(tc)
         % Validate that yOCTPhotobleachTile returns the correct Z offset for a
         % planar surface map and ROI dependent
@@ -260,9 +304,10 @@ classdef test_yOCTPhotobleachTile < matlab.unittest.TestCase
                     json.FOV(1), json.FOV(2)];
         
                 % Use median over ROI
-                expectedZ(k) = yOCTComputeZOffsetToFocusFromSurfaceROI( ...
+                expectedZ(k) = yOCTAssertFocusAndComputeZOffset( ...
                     S.surfacePosition_mm, S.surfaceX_mm, S.surfaceY_mm, ...
                     'roiToCheckSurfacePosition', roiBox, ...
+                    'throwErrorIfOutOfFocus', false, ... 
                     'v', false);
         
                 if isnan(expectedZ(k)), expectedZ(k) = 0; end % Fallback (NaN 0)
