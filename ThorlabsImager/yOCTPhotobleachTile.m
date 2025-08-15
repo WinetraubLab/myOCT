@@ -149,9 +149,6 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
             x_mm - json.FOV(1)/2, y_mm - json.FOV(2)/2, ...
             json.FOV(1), json.FOV(2)];
 
-        % Flag by default: this tile will be photobleached
-        photobleachPlan(iXY).performTilePhotobleaching = true;
-
         % Assert detected surface and find Z offset inside that ROI
         try
             zSurf_mm = yOCTAssertFocusAndComputeZOffset( ...
