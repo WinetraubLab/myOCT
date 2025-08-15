@@ -222,7 +222,7 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                 'replicating X to Y in the FOV']);
         end
         
-        function testWillPhotobleach(tc)
+        function testperformTilePhotobleaching(tc)
         % Verify that the Photobleach Plan correctly decides whether each ROI
         % should be photobleached, based on surface assertion results.
             
@@ -249,11 +249,11 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
 
             plan  = json.photobleachPlan;    % Photobleach Plan
             tc.verifyGreaterThan(numel(plan), 20, 'Expected multiple tiles');
-            tc.verifyTrue(all(arrayfun(@(p)isfield(p,'willPhotobleach'), plan)), ...
-                'Each tile must include willPhotobleach');
+            tc.verifyTrue(all(arrayfun(@(p)isfield(p,'performTilePhotobleaching'), plan)), ...
+                'Each tile must include performTilePhotobleaching');
 
             % Extract decisions
-            flags     = [plan.willPhotobleach]; % Decision to photobleach or skip
+            flags     = [plan.performTilePhotobleaching]; % Decision to photobleach or skip
             leftOnly  = ([plan.stageCenterX_mm] <= -0.2); % This half must be photobleached
             rightOnly = ([plan.stageCenterX_mm] >=  0.2); % This half must NOT be photobleached
             
@@ -261,9 +261,9 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
             tc.verifyGreaterThan(nnz(leftOnly),  0, 'Need left-only tiles'); % Ensure both sides exist first
             tc.verifyGreaterThan(nnz(rightOnly), 0, 'Need right-only tiles');
             tc.verifyTrue(all(flags(leftOnly)), ...
-                'Left half should be photobleached (all willPhotobleach == true');
+                'Left half should be photobleached (all performTilePhotobleaching == true');
             tc.verifyTrue(all(~flags(rightOnly)), ...
-                'Right half should be skipped (all willPhotobleach == false)');
+                'Right half should be skipped (all performTilePhotobleaching == false)');
         end
 
         function testSurfaceOffsetMatchesPlaneMap(tc)

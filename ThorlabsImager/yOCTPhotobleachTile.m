@@ -150,7 +150,7 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
             json.FOV(1), json.FOV(2)];
 
         % Flag by default: this tile will be photobleached
-        photobleachPlan(iXY).willPhotobleach = true;
+        photobleachPlan(iXY).performTilePhotobleaching = true;
 
         % Assert detected surface and find Z offset inside that ROI
         try
@@ -162,15 +162,11 @@ function photobleachPlan = adjustPlanZ(S, photobleachPlan)
         catch ME
             switch ME.identifier
                 case {'yOCT:SurfaceCannotBeEstimated','yOCT:SurfaceCannotBeInFocus'}
-                    if json.skipHardware
-                        zSurf_mm = 0; % During simulations we only show the actual pattern (no X marks)
-                    else
-                        zSurf_mm = NaN;
-                    end
-                    photobleachPlan(iXY).willPhotobleach = false; % This tile will not be photobleached
+                    zSurf_mm = NaN;
+                    photobleachPlan(iXY).performTilePhotobleaching = false; % This tile will not be photobleached
                     if v
-                        fprintf('%s Skipping Photobleach for failed asserted ROI: (%s) at (x=%.3f, y=%.3f)\n', ...
-                            datestr(datetime), ME.identifier, x_mm, y_mm);
+                        fprintf('%s Tile centered at (x=%.3f, y=%.3f) cannot be photobleached, skipping. Reason: (%s) \n', ...
+                            datestr(datetime), x_mm, y_mm, ME.identifier);
                     end
                 otherwise
                     rethrow(ME);
@@ -273,11 +269,7 @@ for i=1:length(photobleachPlan)
     ppStep = photobleachPlan(i);
 
     % Skip tiles vetted by the assertions
-    if isfield(ppStep,'willPhotobleach') && ~ppStep.willPhotobleach
-        if v
-            fprintf('%s Skipping Photobleach at tile #%d (x=%.3f, y=%.3f, z=%.3f)\n', ...
-                datestr(datetime), i, ppStep.stageCenterX_mm, ppStep.stageCenterY_mm, ppStep.stageCenterZ_mm);
-        end
+    if ~ppStep.performTilePhotobleaching
         continue; % Don't move the stage or photobleach this tile
     end
 
