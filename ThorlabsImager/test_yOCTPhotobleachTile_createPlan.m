@@ -290,8 +290,7 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                 'skipHardware', true, ...
                 'surfaceMap',   S, ...
                 'octProbePath', tc.DummyIni, ...
-                'maxLensFOV',   0.4, ...          
-                'uniformSurfaceOffset', false);
+                'maxLensFOV',   0.4);
         
             plan = json.photobleachPlan;
         
@@ -327,9 +326,9 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                 'Z-offset per tile must match the median plane value (±5 microns)');
         end
 
-        function testUniformSurfaceOffset(tc)
-            % Verify that setting uniformSurfaceOffset = true forces ALL tiles
-            % to share one single z offset, even if the tissue surface is different
+        function testSurfaceCorrectionModes(tc)
+                % Verify that setting uniformSurfaceOffset = true forces ALL tiles
+                % to share one single z offset, even if the tissue surface is different
             
                 % Build an inclined surface map
                 baseOffset = 0.05;                     % mm  (central tile height we expect)
@@ -344,38 +343,156 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                 ptStart = [-2 -2; -2  2];              % big X (start points)
                 ptEnd   = [ 2  2;  2 -2];              % big X (end points)
             
-                % Case A: uniformSurfaceOffset OFF
+                % Case A: Per-tile (mode = 1)
                 jsonA = yOCTPhotobleachTile(ptStart, ptEnd, ...
                     'skipHardware',        true, ...
                     'surfaceMap',          S, ...
                     'octProbePath',        tc.DummyIni, ...
                     'maxLensFOV',          0.4, ...
-                    'uniformSurfaceOffset', false);
+                    'surfaceCorrectionMode', 1);
             
                 dzA = [jsonA.photobleachPlan.zOffsetDueToTissueSurface];
-            
-                % Case B: uniformSurfaceOffset ON
+
+                % Tiles should have different offsets
+                tc.verifyGreaterThan(range(dzA), 0.0, ...
+                    'Tiles should have different Z offsets when surfaceCorrectionMode=1 (Per-tile).');
+
+                % Case B: uniform from center (mode = 2)
                 jsonB = yOCTPhotobleachTile(ptStart, ptEnd, ...
                     'skipHardware',        true, ...
                     'surfaceMap',          S, ...
                     'octProbePath',        tc.DummyIni, ...
                     'maxLensFOV',          0.4, ...
-                    'uniformSurfaceOffset', true);
+                    'surfaceCorrectionMode', 2);
             
                 dzB = [jsonB.photobleachPlan.zOffsetDueToTissueSurface];
-            
-                % Assertions:
-                % Test without uniformSurfaceOffset, tiles should have different z offsets
-                tc.verifyGreaterThan(range(dzA), 0.0, ...
-                    'Tiles should have different Z offsets when uniformSurfaceOffset = false');
-            
-                % Test with uniformSurfaceOffset, all z offsets must be equal
+
+                % All offsets must be equal
                 tc.verifyLessThan(range(dzB), 1e-6, ...
-                    'All Z offsets must match when uniformSurfaceOffset = true');
+                    'All Z offsets must match when surfaceCorrectionMode=2 (uniform from center).');
+                
+                % Identify the centered tile to compare expected value
+                distB = hypot([jsonB.photobleachPlan.stageCenterX_mm], ...
+                              [jsonB.photobleachPlan.stageCenterY_mm]);
+                [~, idx0_B] = min(distB);
+                tc.verifyEqual(dzB(idx0_B), baseOffset, 'AbsTol', 1e-3, ...
+                    'Uniform Z offset should match the centered tile (+0.05 mm).');
+                
+                % Case C: uniform mode with a NaN tile away from center
+                % Make a NaN patch around (x,y) ≈ (2,2) so a non-center tile sees NaN
+                S_nanNonCenter = S;
+                nonCenterMask = (X > 1.7 & X < 2.3 & Y > 1.7 & Y < 2.3);
+                S_nanNonCenter.surfacePosition_mm(nonCenterMask) = NaN;
+
+                jsonC = yOCTPhotobleachTile(ptStart, ptEnd, ...
+                    'skipHardware', true, ...
+                    'surfaceMap',   S_nanNonCenter, ...
+                    'octProbePath', tc.DummyIni, ...
+                    'maxLensFOV',   0.4, ...
+                    'surfaceCorrectionMode', 2);
             
-                % Test the common value must equal the offset of the tile nearest (0,0)
-                tc.verifyEqual(dzB(1), baseOffset, 'AbsTol', 1e-3, ...
-                    'Uniform Z offset should match the central tile (+0.05 mm)');
+                dzC = [jsonC.photobleachPlan.zOffsetDueToTissueSurface];
+            
+                % Still all equal and no NaNs (sanitization of oldOffset)
+                tc.verifyTrue(all(~isnan(dzC)), ...
+                    'Uniform mode should not leave NaNs in zOffsetDueToTissueSurface.');
+                tc.verifyLessThan(range(dzC), 1e-6, ...
+                    'All Z offsets must match in uniform mode, even with a NaN in a non-center tile.');
+
+               % Case D: uniform mode with NaN at the center (reference invalid) must be zero offsets everywhere
+                tol = 1e-9;
+                
+                % Make a NaN patch around (0,0) to break the reference tile
+                S_nanCenter = S;
+                centerMask = (abs(X) <= 0.3 & abs(Y) <= 0.3);
+                S_nanCenter.surfacePosition_mm(centerMask) = NaN;
+                
+                jsonD = yOCTPhotobleachTile(ptStart, ptEnd, ...
+                    'skipHardware', true, ...
+                    'surfaceMap',   S_nanCenter, ...
+                    'octProbePath', tc.DummyIni, ...
+                    'maxLensFOV',   0.4, ...
+                    'surfaceCorrectionMode', 2);
+                
+                dzD = [jsonD.photobleachPlan.zOffsetDueToTissueSurface];
+                zD  = [jsonD.photobleachPlan.stageCenterZ_mm];
+                
+                % Expect: no NaNs in offsets and all exactly zero
+                tc.verifyTrue(all(~isnan(dzD)), ...
+                    'Case D: No NaNs expected in uniform fallback.');
+                tc.verifyLessThan(range(dzD), tol, ...
+                    'Case D: All Z offsets must be equal in uniform fallback.');
+                tc.verifyTrue(all(abs(dzD) <= tol), ...
+                    'Case D: All Z offsets must be zero when reference is invalid.');
+                
+                % Expect: stage Z unchanged from baseline (jsonD.z is the baseline depth)
+                tc.verifyLessThan(range(zD), tol, ...
+                    'Case D: stageCenterZ_mm should be identical across tiles in zero-offset fallback.');
+                tc.verifyEqual(mean(zD), jsonD.z, 'AbsTol', tol, ...
+                    'Case D: stageCenterZ_mm should remain at baseline (z).');
+
+                % Case E: per-tile produces NaNs in a subset; uniform must lift them to zRef and move stage Z
+                % This checks that there are no errors bringing previous invalid tiles from failed focus validations
+
+                % Build a surface map that yields NaN only in two off center patches
+                S_subset = S;
+                patch1 = (X > 1.5 & X < 3.5 & Y > 1.5 & Y < 3.5);            % near (+2,+2)
+                patch2 = (X < -1.5 & X > -3.5 & Y < -1.5 & Y > -3.5);        % near (-2,-2)
+                S_subset.surfacePosition_mm(patch1 | patch2) = NaN;
+                
+                % First run per-tile (mode=1) to identify which tiles became NaN
+                jsonE_per = yOCTPhotobleachTile(ptStart, ptEnd, ...
+                    'skipHardware',        true, ...
+                    'surfaceMap',          S_subset, ...
+                    'octProbePath',        tc.DummyIni, ...
+                    'maxLensFOV',          0.4, ...
+                    'surfaceCorrectionMode', 1);
+                
+                dzE_per = [jsonE_per.photobleachPlan.zOffsetDueToTissueSurface];
+                zE_per  = [jsonE_per.photobleachPlan.stageCenterZ_mm];
+                nanIdx  = find(isnan(dzE_per));
+                
+                % We expect at least 2 tiles to have NaN offsets in per-tile mode
+                tc.verifyGreaterThanOrEqual(numel(nanIdx), 2, ...
+                    'Case E: Expected at least 2 tiles with NaN per-tile offsets.');
+                
+                % Now run uniform mode (mode=2) with the same map
+                jsonE_uni = yOCTPhotobleachTile(ptStart, ptEnd, ...
+                    'skipHardware',        true, ...
+                    'surfaceMap',          S_subset, ...
+                    'octProbePath',        tc.DummyIni, ...
+                    'maxLensFOV',          0.4, ...
+                    'surfaceCorrectionMode', 2);
+                
+                dzE_uni = [jsonE_uni.photobleachPlan.zOffsetDueToTissueSurface];
+                zE_uni  = [jsonE_uni.photobleachPlan.stageCenterZ_mm];
+                
+                % Under uniform mode, no NaNs should remain and all offsets must be equal
+                tc.verifyTrue(all(~isnan(dzE_uni)), ...
+                    'Case E: Uniform mode must not leave NaNs in zOffsetDueToTissueSurface.');
+                tc.verifyLessThan(range(dzE_uni), 1e-6, ...
+                    'Case E: All Z offsets must match under uniform mode.');
+                
+                % Get the uniform reference offset (centered tile in the uniform result)
+                distE = hypot([jsonE_uni.photobleachPlan.stageCenterX_mm], ...
+                              [jsonE_uni.photobleachPlan.stageCenterY_mm]);
+                [~, idx0_E] = min(distE);
+                zRef_E = dzE_uni(idx0_E);
+                
+                % For tiles that were NaN in per-tile mode, uniform must add exactly zRef_E in stage Z
+                tc.verifyEqual(zE_uni(nanIdx) - zE_per(nanIdx), zRef_E*ones(size(nanIdx)), ...
+                    'AbsTol', 1e-9, ...
+                    'Case E: Tiles with NaN per-tile offsets must gain exactly zRef_E in stageCenterZ_mm under uniform mode.');
+                
+                % And their offsets must now equal the reference
+                tc.verifyTrue(all(abs(dzE_uni(nanIdx) - zRef_E) <= 1e-12), ...
+                    'Case E: Tiles with prior NaN offsets must equal the uniform reference offset after correction.');
+                
+                % If the plan tracks this flag, all tiles should be photobleached in uniform mode
+                if isfield(jsonE_uni.photobleachPlan,'performTilePhotobleaching')
+                    tc.verifyTrue(all([jsonE_uni.photobleachPlan.performTilePhotobleaching]), ...
+                        'Case E: performTilePhotobleaching should be true for all tiles in uniform mode.');
+                end
         end
     end
 end
