@@ -327,9 +327,10 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
         end
 
         function testSurfaceCorrectionModes(tc)
-                % Verify that setting uniformSurfaceOffset = true forces ALL tiles
-                % to share one single z offset, even if the tissue surface is different
-            
+                % Verify setting surfaceCorrectionMode="per-tile" computes and applies the best z offset 
+                % for each tile (lens field of view) individually and "origin-tile" forces all tiles
+                % to share the optimized z offset for the origin tile (the one that is closest to x=0, y=0)
+
                 % Build an inclined surface map
                 baseOffset = 0.05;                     % mm  (central tile height we expect)
                 slope  = 0.02;                         % 20 micron step per X pixel
@@ -349,13 +350,13 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                     'surfaceMap',          S, ...
                     'octProbePath',        tc.DummyIni, ...
                     'maxLensFOV',          0.4, ...
-                    'surfaceCorrectionMode', 1);
+                    'surfaceCorrectionMode', 'per-tile');
             
                 dzA = [jsonA.photobleachPlan.zOffsetDueToTissueSurface];
 
                 % Tiles should have different offsets
                 tc.verifyGreaterThan(range(dzA), 0.0, ...
-                    'Tiles should have different Z offsets when surfaceCorrectionMode=1 (Per-tile).');
+                    'Tiles should have different Z offsets when surfaceCorrectionMode="per-tile").');
 
                 % Case B: uniform from center (mode = 2)
                 jsonB = yOCTPhotobleachTile(ptStart, ptEnd, ...
@@ -363,13 +364,13 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                     'surfaceMap',          S, ...
                     'octProbePath',        tc.DummyIni, ...
                     'maxLensFOV',          0.4, ...
-                    'surfaceCorrectionMode', 2);
+                    'surfaceCorrectionMode', 'origin-tile');
             
                 dzB = [jsonB.photobleachPlan.zOffsetDueToTissueSurface];
 
                 % All offsets must be equal
                 tc.verifyLessThan(range(dzB), 1e-6, ...
-                    'All Z offsets must match when surfaceCorrectionMode=2 (uniform from center).');
+                    'All Z offsets must match when surfaceCorrectionMode="origin-tile"');
                 
                 % Identify the centered tile to compare expected value
                 distB = hypot([jsonB.photobleachPlan.stageCenterX_mm], ...
@@ -389,7 +390,7 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                     'surfaceMap',   S_nanNonCenter, ...
                     'octProbePath', tc.DummyIni, ...
                     'maxLensFOV',   0.4, ...
-                    'surfaceCorrectionMode', 2);
+                    'surfaceCorrectionMode', 'origin-tile');
             
                 dzC = [jsonC.photobleachPlan.zOffsetDueToTissueSurface];
             
@@ -412,7 +413,7 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                     'surfaceMap',   S_nanCenter, ...
                     'octProbePath', tc.DummyIni, ...
                     'maxLensFOV',   0.4, ...
-                    'surfaceCorrectionMode', 2);
+                    'surfaceCorrectionMode', 'origin-tile');
                 
                 dzD = [jsonD.photobleachPlan.zOffsetDueToTissueSurface];
                 zD  = [jsonD.photobleachPlan.stageCenterZ_mm];
@@ -446,7 +447,7 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                     'surfaceMap',          S_subset, ...
                     'octProbePath',        tc.DummyIni, ...
                     'maxLensFOV',          0.4, ...
-                    'surfaceCorrectionMode', 1);
+                    'surfaceCorrectionMode', 'per-tile');
                 
                 dzE_per = [jsonE_per.photobleachPlan.zOffsetDueToTissueSurface];
                 zE_per  = [jsonE_per.photobleachPlan.stageCenterZ_mm];
@@ -462,7 +463,7 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
                     'surfaceMap',          S_subset, ...
                     'octProbePath',        tc.DummyIni, ...
                     'maxLensFOV',          0.4, ...
-                    'surfaceCorrectionMode', 2);
+                    'surfaceCorrectionMode', 'origin-tile');
                 
                 dzE_uni = [jsonE_uni.photobleachPlan.zOffsetDueToTissueSurface];
                 zE_uni  = [jsonE_uni.photobleachPlan.stageCenterZ_mm];
