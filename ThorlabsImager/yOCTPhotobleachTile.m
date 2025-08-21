@@ -31,6 +31,8 @@ function json = yOCTPhotobleachTile(varargin)
 %                                                               for each tile (lens field of view) individually. This is default mode.
 %                                           "origin-tile":  In this mode, all tiles receive the same z offset. The offset is optimized 
 %                                                               for the origin tile (the tile that is closest to x=0, y=0).
+%                                           "none":         In this mode, no surface-based Z correction is applied. All tiles use zero Z offset
+%                                                               (stage Z remains at the baseline specified by 'z').
 %   exposure                15              How much time to expose each spot to laser light. Units sec/mm 
 %                                           Meaning for each 1mm, we will expose for exposurePerLine sec 
 %                                           If scanning at multiple depths, exposure will for each depth. Meaning two depths will be exposed twice as much. 
@@ -120,18 +122,16 @@ assert(isscalar(json.nPasses), 'Only 1 nPasses is permitted for all lines');
 assert(isscalar(json.exposure), 'Only 1 exposure is permitted for all lines');
 
 % Normalize surfaceCorrectionMode (case/separator tolerant parsing)
-m = char(json.surfaceCorrectionMode);
-m = lower(strtrim(m));
-m = regexprep(m,'[\s_–—−-]+','-'); % Map spaces/underscores/dashes to a single '-'
-% Canonicalize to either 'per-tile' or 'origin-tile'
-if strncmp(m,'per',3)
-    json.surfaceCorrectionMode = 'per-tile';
-elseif strncmp(m,'orig',4)
-    json.surfaceCorrectionMode = 'origin-tile';
-elseif any(strcmp(m,{'per-tile','origin-tile'}))
-    json.surfaceCorrectionMode = m;  % already canonical
-else
-    error('surfaceCorrectionMode must be "per-tile" (default) or "origin-tile".');
+switch regexprep(lower(strtrim(char(json.surfaceCorrectionMode))),'[\s_–—−-]+','-') % Map spaces/underscores/dashes to a single '-'
+    % Canonicalize to either 'per-tile', 'origin-tile' or 'none'
+    case {'per','per-tile'}
+        json.surfaceCorrectionMode = 'per-tile';
+    case {'orig','origin','origin-tile'}
+        json.surfaceCorrectionMode = 'origin-tile';
+    case {'non','none'}
+        json.surfaceCorrectionMode = 'none';
+    otherwise
+        error('surfaceCorrectionMode must be "per-tile" (default), "origin-tile", or "none".');
 end
 
 %% Pre processing, make a plan
@@ -183,113 +183,96 @@ function photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v)
 % Mode "per-tile" (default): Best z offset for each tile (lens field of view) 
 %                               individually.
 % Mode "origin-tile"       : Optimized Z offset for the origin tile 
-%                               (the tile that is closest to x=0, y=0)
+%                               (the tile that is closest to x=0, y=0).
+% Mode "none"              : No surface-based Z correction (all offsets are zero).
 
-    S = json.surfaceMap;
+    S    = json.surfaceMap;
     mode = json.surfaceCorrectionMode;
 
-    % If no surface map was provided, use zero offsets and return
-    if isempty(S)
-        % Make no adjustments
+    % Decide if we have a Z constant correction for all tiles
+    constantZCorrection_mm   = [];   % [] compute per-tile Z correction inside the loop
+    errIdConstantZCorrection = '';
+    idx0 = []; % for logging in origin-tile
+
+    % If no surface map OR mode 'none' was provided, use zero offsets and return
+    if isempty(S) || strcmp(mode,'none')
+        % Make no adjustments: uniform zero correction
         for iXY = 1:numel(photobleachPlan)
             photobleachPlan(iXY).zOffsetDueToTissueSurface = 0;
         end
-        return;
-    end
-
-    % Check surface position dimensions
-    assert(size(S.surfacePosition_mm,2) == length(S.surfaceX_mm), ...
-        'surfaceMap.surfaceX_mm length must match surfacePosition_mm columns.');
-    assert(size(S.surfacePosition_mm,1) == length(S.surfaceY_mm), ...
-        'surfaceMap.surfaceY_mm length must match surfacePosition_mm rows.');
-
-    % Mode: "Per-tile" Z offsets
-    if strcmp(mode,'per-tile')
-        % Compute best z offsets for each tile
-        for iXY = 1:numel(photobleachPlan)
-            x_mm = photobleachPlan(iXY).stageCenterX_mm;
-            y_mm = photobleachPlan(iXY).stageCenterY_mm;
-        
-            % Compute Z offset for this tile
-            [zSurf_mm, errId] = computeZCorrectionForTile(x_mm, y_mm, json.FOV, S, v);
-
-            % Store the surface offset; stage Z will be updated once below
-            if isnan(zSurf_mm)
-                photobleachPlan(iXY).zOffsetDueToTissueSurface = NaN;
-                photobleachPlan(iXY).performTilePhotobleaching = false; % don't photobleach, skip this tile
-                if v && ~isempty(errId)
-                    fprintf('%s Tile centered at (x=%.3f, y=%.3f) cannot be photobleached, skipping. Reason: (%s) \n', ...
-                        datestr(datetime), x_mm, y_mm, errId);
-                end
-            else
-                % Limit offset to 100 microns to prevent lens damage
-                zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
-                photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
-            end
+        constantZCorrection_mm   = 0;
+        errIdConstantZCorrection = '';
+        if v && strcmp(mode,'none')
+            fprintf('%s applySurfaceCorrectionMode: mode="none": no Z correction applied (all Z offsets = 0).\n', datestr(datetime));
         end
-
-        % Apply stage Z using the decided per-tile offsets
-        for iXY = 1:numel(photobleachPlan)
-            zOff = photobleachPlan(iXY).zOffsetDueToTissueSurface;
-            if ~isnan(zOff)
-                photobleachPlan(iXY).stageCenterZ_mm = ...
-                    photobleachPlan(iXY).stageCenterZ_mm + zOff;
-            end
-        end
-        return
-    end
 
     % Mode: "Origin-tile" Z offset
     % All tiles receive the same offset. The offset is optimized for the origin tile 
     % (the tile that is closest to x=0, y=0)
-    
-    % Pick the tile closest to (0,0)
-    [~, idx0] = min( hypot([photobleachPlan.stageCenterX_mm], ...
+    elseif strcmp(mode,'origin-tile')
+        % Pick the tile closest to (0,0)
+        [~, idx0] = min( hypot([photobleachPlan.stageCenterX_mm], ...
                                 [photobleachPlan.stageCenterY_mm]) );
+        x0_mm = photobleachPlan(idx0).stageCenterX_mm;
+        y0_mm = photobleachPlan(idx0).stageCenterY_mm;
 
-    % Compute the reference Z offset only for the centered tile
-    x0_mm = photobleachPlan(idx0).stageCenterX_mm;
-    y0_mm = photobleachPlan(idx0).stageCenterY_mm;
-    
-    % Compute reference Z offset for the origin tile
-    zRef = computeZCorrectionForTile(x0_mm, y0_mm, json.FOV, S, v);
-
-    % If the reference is invalid, set zero offsets for all tiles (no movement)
-    if isempty(zRef) || isnan(zRef)
-        if v
-            fprintf('%s applySurfaceCorrectionMode: center zOffset is invalid (NaN). Setting zero offsets for all tiles.\n', datestr(datetime));
+        % Compute the reference (may be NaN)
+        [zRef, errId0] = computeZCorrectionForTile(x0_mm, y0_mm, json.FOV, S, v);
+        
+        % Fallback to zero if invalid (preserves previous behavior)
+        if isempty(zRef) || isnan(zRef)
+            if v
+                fprintf('%s applySurfaceCorrectionMode: origin zOffset is invalid (NaN). Using zero offset for all tiles.\n', datestr(datetime));
+            end
+            zRef    = 0;
+            errId0  = '';
         end
-    
-        % Set zero offset for all tiles
-        for iXY = 1:numel(photobleachPlan)
-            photobleachPlan(iXY).zOffsetDueToTissueSurface = 0;
-        end
-        return
-    end
-    
-    % Propagate the same clamped offset to all tiles
-    zRef = max(min(zRef, 0.1), -0.1);   % same 100 micron cap
-    for k = 1:numel(photobleachPlan)
-        photobleachPlan(k).zOffsetDueToTissueSurface = zRef;
-    end
+        constantZCorrection_mm  = zRef;   % clamp happens uniformly inside the loop
+        errIdConstantZCorrection = errId0;
 
-    % In uniform mode we photobleach all tiles (if ref is valid)
-    if isfield(photobleachPlan,'performTilePhotobleaching')
-        [photobleachPlan.performTilePhotobleaching] = deal(true);
-    end
-
-    % Apply the new uniform corrections to the Z centers for all tiles
-    for k = 1:numel(photobleachPlan)
-        zOff = photobleachPlan(k).zOffsetDueToTissueSurface;
-        if ~isnan(zOff)
-            photobleachPlan(k).stageCenterZ_mm = ...
-                photobleachPlan(k).stageCenterZ_mm + zOff;
+        % Set the uniform Z offset and photobleach all tiles
+        if isfield(photobleachPlan,'performTilePhotobleaching')
+            [photobleachPlan.performTilePhotobleaching] = deal(true);
         end
     end
 
-    if v
+    % Unified loop for all modes
+    for iXY = 1:numel(photobleachPlan)
+        x_mm = photobleachPlan(iXY).stageCenterX_mm;
+        y_mm = photobleachPlan(iXY).stageCenterY_mm;
+
+        % Choose source of correction: constant (empty S/none/origin) or per-tile compute
+        if isempty(constantZCorrection_mm)
+            [zSurf_mm, errId] = computeZCorrectionForTile(x_mm, y_mm, json.FOV, S, v);
+        else
+            zSurf_mm = constantZCorrection_mm;
+            errId    = errIdConstantZCorrection;
+        end
+        
+        % Store and apply Z corrections
+        if isnan(zSurf_mm)
+            % Only happens in per-tile path; skip this tile
+            photobleachPlan(iXY).zOffsetDueToTissueSurface = NaN;
+            photobleachPlan(iXY).performTilePhotobleaching = false;
+            if v && ~isempty(errId)
+                fprintf('%s Tile centered at (x=%.3f, y=%.3f) cannot be photobleached, skipping. Reason: (%s) \n', ...
+                        datestr(datetime), x_mm, y_mm, errId);
+            end
+        else
+            % Clamp to 0.1 mm to protect the lens (applies uniformly in all modes)
+            zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
+            photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
+            photobleachPlan(iXY).stageCenterZ_mm = ...
+                photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
+        end
+    end
+
+    % Logging for origin-tile uniform value (after it has been clamped in the loop)
+    if strcmp(mode,'origin-tile') && v && ~isempty(idx0)
+        % Grab the (now clamped) value from any tile
+        zUni = photobleachPlan(1).zOffsetDueToTissueSurface;
         fprintf('%s applySurfaceCorrectionMode: uniform Z offset = %.4f mm from centered tile %d applied to all tiles.\n', ...
-            datestr(datetime), zRef, idx0);
+                datestr(datetime), zUni, idx0);
     end
 end
 
