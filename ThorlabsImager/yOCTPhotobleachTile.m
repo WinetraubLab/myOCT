@@ -124,11 +124,11 @@ assert(isscalar(json.exposure), 'Only 1 exposure is permitted for all lines');
 % Normalize surfaceCorrectionMode (case/separator tolerant parsing)
 switch regexprep(lower(strtrim(char(json.surfaceCorrectionMode))),'[\s_–—−-]+','-') % Map spaces/underscores/dashes to a single '-'
     % Canonicalize to either 'per-tile', 'origin-tile' or 'none'
-    case {'per','per-tile'}
+    case {'per-tile'}
         json.surfaceCorrectionMode = 'per-tile';
-    case {'orig','origin','origin-tile'}
+    case {'origin-tile'}
         json.surfaceCorrectionMode = 'origin-tile';
-    case {'non','none'}
+    case {'none'}
         json.surfaceCorrectionMode = 'none';
     otherwise
         error('surfaceCorrectionMode must be "per-tile" (default), "origin-tile", or "none".');
@@ -192,17 +192,12 @@ function photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v)
     % Decide if we have a Z constant correction for all tiles
     constantZCorrection_mm   = [];   % [] compute per-tile Z correction inside the loop
     errIdConstantZCorrection = '';
-    idx0 = []; % for logging in origin-tile
 
     % If no surface map OR mode 'none' was provided, use zero offsets and return
     if isempty(S) || strcmp(mode,'none')
         % Make no adjustments: uniform zero correction
-        for iXY = 1:numel(photobleachPlan)
-            photobleachPlan(iXY).zOffsetDueToTissueSurface = 0;
-        end
         constantZCorrection_mm   = 0;
-        errIdConstantZCorrection = '';
-        if v && strcmp(mode,'none')
+        if v
             fprintf('%s applySurfaceCorrectionMode: mode="none": no Z correction applied (all Z offsets = 0).\n', datestr(datetime));
         end
 
@@ -219,20 +214,16 @@ function photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v)
         % Compute the reference (may be NaN)
         [zRef, errId0] = computeZCorrectionForTile(x0_mm, y0_mm, json.FOV, S, v);
         
-        % Fallback to zero if invalid (preserves previous behavior)
+        % Fallback to zero if invalid
         if isempty(zRef) || isnan(zRef)
             if v
                 fprintf('%s applySurfaceCorrectionMode: origin zOffset is invalid (NaN). Using zero offset for all tiles.\n', datestr(datetime));
             end
-            zRef    = 0;
-            errId0  = '';
-        end
-        constantZCorrection_mm  = zRef;   % clamp happens uniformly inside the loop
-        errIdConstantZCorrection = errId0;
-
-        % Set the uniform Z offset and photobleach all tiles
-        if isfield(photobleachPlan,'performTilePhotobleaching')
-            [photobleachPlan.performTilePhotobleaching] = deal(true);
+            constantZCorrection_mm   = 0;
+            errIdConstantZCorrection = 0;
+        else
+            constantZCorrection_mm   = zRef;
+            errIdConstantZCorrection = errId0;
         end
     end
 
@@ -266,17 +257,9 @@ function photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v)
                 photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
         end
     end
-
-    % Logging for origin-tile uniform value (after it has been clamped in the loop)
-    if strcmp(mode,'origin-tile') && v && ~isempty(idx0)
-        % Grab the (now clamped) value from any tile
-        zUni = photobleachPlan(1).zOffsetDueToTissueSurface;
-        fprintf('%s applySurfaceCorrectionMode: uniform Z offset = %.4f mm from centered tile %d applied to all tiles.\n', ...
-                datestr(datetime), zUni, idx0);
-    end
 end
 
-% Apply Z offsets by mode: 'per-tile' or 'origin-tile'
+% Apply Z offsets by mode: 'per-tile', 'origin-tile' or 'none'
 photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v);
 
 % Save the plan in the json
