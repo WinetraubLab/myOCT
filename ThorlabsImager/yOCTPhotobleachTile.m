@@ -130,7 +130,19 @@ switch lower(json.surfaceCorrectionMode)
     case {'none'}
         json.surfaceCorrectionMode = 'none';
     otherwise
-        error('Invalid surfaceCorrectionMode value: %s', surfaceCorrectionMode);
+        error('Invalid surfaceCorrectionMode value: %s', json.surfaceCorrectionMode);
+end
+
+% Detect whether the user explicitly provided surfaceCorrectionMode
+userSpecifiedMode = ~ismember('surfaceCorrectionMode', p.UsingDefaults);
+
+if isempty(json.surfaceMap)
+    % User did specify a mode different from 'none' but not a surfaceMap: invalid
+    if userSpecifiedMode && ~strcmpi(json.surfaceCorrectionMode,'none')
+        error('Surface map was not provided, surfaceCorrectionMode cannot be %s', json.surfaceCorrectionMode);
+    else
+        json.surfaceCorrectionMode = 'none';  % No correction mode given forces it to 'none'
+    end
 end
 
 %% Pre processing, make a plan
@@ -192,10 +204,9 @@ function photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v)
     constantZCorrection_mm   = [];   % [] compute per-tile Z correction inside the loop
     errIdConstantZCorrection = '';
 
-    % If no surface map OR mode 'none' was provided, use zero offsets and return
-    if isempty(S) || strcmp(mode,'none')
-        % Make no adjustments: uniform zero correction
-        constantZCorrection_mm   = 0;
+    % Mode: "none" uses zero Z offsets
+    if strcmp(mode,'none')
+        constantZCorrection_mm   = 0; % Make no adjustments: uniform zero correction
         if v
             fprintf('%s applySurfaceCorrectionMode: mode="none": no Z correction applied (all Z offsets = 0).\n', datestr(datetime));
         end
