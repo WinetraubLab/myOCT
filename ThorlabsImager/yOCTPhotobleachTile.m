@@ -121,9 +121,8 @@ json.stagePauseBeforeMoving_sec = 0.5;
 assert(isscalar(json.nPasses), 'Only 1 nPasses is permitted for all lines');
 assert(isscalar(json.exposure), 'Only 1 exposure is permitted for all lines');
 
-% Normalize surfaceCorrectionMode (case/separator tolerant parsing)
+% Canonicalize to either 'per-tile', 'origin-tile' or 'none'
 switch lower(json.surfaceCorrectionMode)
-    % Canonicalize to either 'per-tile', 'origin-tile' or 'none'
     case {'per-tile'}
         json.surfaceCorrectionMode = 'per-tile';
     case {'origin-tile'}
