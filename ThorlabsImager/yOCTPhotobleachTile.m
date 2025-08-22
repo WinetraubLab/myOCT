@@ -27,6 +27,12 @@ function json = yOCTPhotobleachTile(varargin)
 %                                                   surfaceMap.surfacePosition_mm = surfacePosition_mm;
 %                                                   surfaceMap.surfaceX_mm        = surfaceX_mm;
 %                                                   surfaceMap.surfaceY_mm        = surfaceY_mm;
+%  surfaceCorrectionMode    "per-tile"      "per-tile":     In this mode, the algorithm computes and applies the best z offset 
+%                                                               for each tile (lens field of view) individually. This is default mode.
+%                                           "origin-tile":  In this mode, all tiles receive the same z offset. The offset is optimized 
+%                                                               for the origin tile (the tile that is closest to x=0, y=0).
+%                                           "none":         In this mode, no surface-based Z correction is applied. All tiles use zero Z offset
+%                                                               (stage Z remains at the baseline specified by 'z').
 %   exposure                15              How much time to expose each spot to laser light. Units sec/mm 
 %                                           Meaning for each 1mm, we will expose for exposurePerLine sec 
 %                                           If scanning at multiple depths, exposure will for each depth. Meaning two depths will be exposed twice as much. 
@@ -76,6 +82,7 @@ addParameter(p,'plotPattern',false);
 addParameter(p,'laserToggleMethod','OpticalSwitch');
 addParameter(p,'surfaceMap', [], @(x) isempty(x) || (isstruct(x) && ...
     all(ismember({'surfacePosition_mm','surfaceX_mm','surfaceY_mm'}, fieldnames(x)))));
+addParameter(p,'surfaceCorrectionMode','none', @(x) ischar(x) || (isstring(x) && isscalar(x)));
 
 parse(p,varargin{:});
 json = p.Results;
@@ -114,6 +121,30 @@ json.stagePauseBeforeMoving_sec = 0.5;
 assert(isscalar(json.nPasses), 'Only 1 nPasses is permitted for all lines');
 assert(isscalar(json.exposure), 'Only 1 exposure is permitted for all lines');
 
+% Canonicalize to either 'per-tile', 'origin-tile' or 'none'
+switch lower(json.surfaceCorrectionMode)
+    case {'per-tile'}
+        json.surfaceCorrectionMode = 'per-tile';
+    case {'origin-tile'}
+        json.surfaceCorrectionMode = 'origin-tile';
+    case {'none'}
+        json.surfaceCorrectionMode = 'none';
+    otherwise
+        error('Invalid surfaceCorrectionMode value: %s', json.surfaceCorrectionMode);
+end
+
+% Detect whether the user explicitly provided surfaceCorrectionMode
+userSpecifiedMode = ~ismember('surfaceCorrectionMode', p.UsingDefaults);
+
+if isempty(json.surfaceMap)
+    % User did specify a mode different from 'none' but not a surfaceMap: invalid
+    if userSpecifiedMode && ~strcmpi(json.surfaceCorrectionMode,'none')
+        error('Surface map was not provided, surfaceCorrectionMode cannot be %s', json.surfaceCorrectionMode);
+    else
+        json.surfaceCorrectionMode = 'none';  % No correction mode given forces it to 'none'
+    end
+end
+
 %% Pre processing, make a plan
 
 % Split lines to photobleach instructions by FOV
@@ -121,70 +152,125 @@ photobleachPlan = yOCTPhotobleachTile_createPlan(...
     json.ptStart, json.ptEnd, json.z, json.FOV, json.minLineLength, ...
     json.bufferZoneWidth, json.enableZoneAccuracy, enableZone);
 
-% This function takes a photobleach plan, adjust it by Z according to the
-% surface map S
-function photobleachPlan = adjustPlanZ(S, photobleachPlan)
-    if isempty(S) % The case where tissue surface was not provided
-        % Make no adjustments
-        for iXY = 1:numel(photobleachPlan)
-            photobleachPlan(iXY).zOffsetDueToTissueSurface = 0;
-        end
+function [zSurf_mm, errId] = computeZCorrectionForTile(x_mm, y_mm, FOV_mm, S, v)
+% This helper computes the Z correction for one tile according to the detected surface. 
+% It makes a ROI box around the tile center (x_mm, y_mm), and returns the z offset there.
+% If the surface can’t be found or focused, it returns NaN.
+% If another error happens, it throws the actual error.
+% Outputs:
+%   zSurf_mm     : estimated Z offset (mm), NaN if cannot be estimated/in focus
+%   errId        : error identifier; ('' if none)
 
-        return;
-    end
-    
-    % Check surface position dimensions
-    assert(size(S.surfacePosition_mm,2) == length(S.surfaceX_mm), ...
-        'surfaceMap.surfaceX_mm length must match surfacePosition_mm columns.');
-    assert(size(S.surfacePosition_mm,1) == length(S.surfaceY_mm), ...
-        'surfaceMap.surfaceY_mm length must match surfacePosition_mm rows.');
-    
-    % Loop over each tile and compute Z offset per tile
-    for iXY = 1:numel(photobleachPlan)
-        x_mm = photobleachPlan(iXY).stageCenterX_mm;
-        y_mm = photobleachPlan(iXY).stageCenterY_mm;
-    
-        % Build ROI box for current tile [x y w h] (mm)
-        roiBox = [...
-            x_mm - json.FOV(1)/2, y_mm - json.FOV(2)/2, ...
-            json.FOV(1), json.FOV(2)];
+    % Build ROI box for tile [x y w h] (mm)
+    roiBox = [ ...
+        x_mm - FOV_mm(1)/2, ...
+        y_mm - FOV_mm(2)/2, ...
+        FOV_mm(1), FOV_mm(2)];
 
-        try
-            % Get Z offset for this tile
-            zSurf_mm = yOCTAssertFocusAndComputeZOffset( ...
-                S.surfacePosition_mm, S.surfaceX_mm, S.surfaceY_mm, ...
-                'roiToCheckSurfacePosition', roiBox, ...
-                'throwErrorIfOutOfFocus',    false, ...
-                'v',                         v);
-        catch ME
-            switch ME.identifier
-                case {'yOCT:SurfaceCannotBeEstimated','yOCT:SurfaceCannotBeInFocus'}
-                    % Offset failed due to surface detection issues, don't photobleach the tile
-                    zSurf_mm = NaN;
-                    photobleachPlan(iXY).performTilePhotobleaching = false; % This tile will not be photobleached
-                    if v
-                        fprintf('%s Tile centered at (x=%.3f, y=%.3f) cannot be photobleached, skipping. Reason: (%s) \n', ...
-                            datestr(datetime), x_mm, y_mm, ME.identifier);
-                    end
-                otherwise
-                    rethrow(ME);
-            end
-        end
-        
-        % Store the surface offset and apply it to the Z-stage
-        if ~isnan(zSurf_mm)
-            % Limit offset to 100 microns to prevent lens damage
-            zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
-
-            photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
-            photobleachPlan(iXY).stageCenterZ_mm = ...
-                photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
-        else
-            photobleachPlan(iXY).zOffsetDueToTissueSurface = NaN;
+    try
+        % Get Z offset for this tile
+        zSurf_mm = yOCTAssertFocusAndComputeZOffset( ...
+            S.surfacePosition_mm, S.surfaceX_mm, S.surfaceY_mm, ...
+            'roiToCheckSurfacePosition', roiBox, ...
+            'throwErrorIfOutOfFocus',    false, ...
+            'v',                         v);
+        errId = '';
+    catch ME
+        switch ME.identifier
+            case {'yOCT:SurfaceCannotBeEstimated','yOCT:SurfaceCannotBeInFocus'}
+                % Offset failed due to surface detection issues
+                zSurf_mm = NaN;
+                errId    = ME.identifier; % keep reason for logger
+            otherwise
+                rethrow(ME);
         end
     end
 end
-photobleachPlan = adjustPlanZ(json.surfaceMap, photobleachPlan);
+
+% This function takes a photobleach plan, adjust it by Z according to the
+% surface map S and the requested surfaceCorrectionMode
+function photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v)
+% Make Z offset correction selection by mode.
+% Mode "per-tile" (default): Best z offset for each tile (lens field of view) 
+%                               individually.
+% Mode "origin-tile"       : Optimized Z offset for the origin tile 
+%                               (the tile that is closest to x=0, y=0).
+% Mode "none"              : No surface-based Z correction (all offsets are zero).
+
+    S    = json.surfaceMap;
+    mode = json.surfaceCorrectionMode;
+
+    % Decide if we have a Z constant correction for all tiles
+    constantZCorrection_mm   = [];   % [] compute per-tile Z correction inside the loop
+    errIdConstantZCorrection = '';
+
+    % Mode: "none" uses zero Z offsets
+    if strcmp(mode,'none')
+        constantZCorrection_mm   = 0; % Make no adjustments: uniform zero correction
+        if v
+            fprintf('%s applySurfaceCorrectionMode: mode="none": no Z correction applied (all Z offsets = 0).\n', datestr(datetime));
+        end
+
+    % Mode: "Origin-tile" Z offset
+    % All tiles receive the same offset. The offset is optimized for the origin tile 
+    % (the tile that is closest to x=0, y=0)
+    elseif strcmp(mode,'origin-tile')
+        % Pick the tile closest to (0,0)
+        [~, idx0] = min( hypot([photobleachPlan.stageCenterX_mm], ...
+                                [photobleachPlan.stageCenterY_mm]) );
+        x0_mm = photobleachPlan(idx0).stageCenterX_mm;
+        y0_mm = photobleachPlan(idx0).stageCenterY_mm;
+
+        % Compute the reference (may be NaN)
+        [zRef, errId0] = computeZCorrectionForTile(x0_mm, y0_mm, json.FOV, S, v);
+        
+        % Fallback to zero if invalid
+        if isempty(zRef) || isnan(zRef)
+            if v
+                fprintf('%s applySurfaceCorrectionMode: origin zOffset is invalid (NaN). Using zero offset for all tiles.\n', datestr(datetime));
+            end
+            constantZCorrection_mm   = 0;
+            errIdConstantZCorrection = 0;
+        else
+            constantZCorrection_mm   = zRef;
+            errIdConstantZCorrection = errId0;
+        end
+    end
+
+    % Unified loop for all modes
+    for iXY = 1:numel(photobleachPlan)
+        x_mm = photobleachPlan(iXY).stageCenterX_mm;
+        y_mm = photobleachPlan(iXY).stageCenterY_mm;
+
+        % Choose source of correction: constant (empty S/none/origin) or per-tile compute
+        if isempty(constantZCorrection_mm)
+            [zSurf_mm, errId] = computeZCorrectionForTile(x_mm, y_mm, json.FOV, S, v);
+        else
+            zSurf_mm = constantZCorrection_mm;
+            errId    = errIdConstantZCorrection;
+        end
+        
+        % Store and apply Z corrections
+        if isnan(zSurf_mm)
+            % Only happens in per-tile path; skip this tile
+            photobleachPlan(iXY).zOffsetDueToTissueSurface = NaN;
+            photobleachPlan(iXY).performTilePhotobleaching = false;
+            if v && ~isempty(errId)
+                fprintf('%s Tile centered at (x=%.3f, y=%.3f) cannot be photobleached, skipping. Reason: (%s) \n', ...
+                        datestr(datetime), x_mm, y_mm, errId);
+            end
+        else
+            % Clamp to 0.1 mm to protect the lens (applies uniformly in all modes)
+            zSurf_mm = max(min(zSurf_mm, 0.1), -0.1);
+            photobleachPlan(iXY).zOffsetDueToTissueSurface = zSurf_mm;
+            photobleachPlan(iXY).stageCenterZ_mm = ...
+                photobleachPlan(iXY).stageCenterZ_mm + zSurf_mm;
+        end
+    end
+end
+
+% Apply Z offsets by mode: 'per-tile', 'origin-tile' or 'none'
+photobleachPlan = applySurfaceCorrectionMode(photobleachPlan, json, v);
 
 % Save the plan in the json
 json.photobleachPlan = photobleachPlan;
@@ -382,4 +468,3 @@ if (v)
 end
 end
 end
-
