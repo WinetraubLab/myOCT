@@ -122,7 +122,7 @@ assert(isscalar(json.nPasses), 'Only 1 nPasses is permitted for all lines');
 assert(isscalar(json.exposure), 'Only 1 exposure is permitted for all lines');
 
 % Normalize surfaceCorrectionMode (case/separator tolerant parsing)
-switch regexprep(lower(strtrim(char(json.surfaceCorrectionMode))),'[\s_–—−-]+','-') % Map spaces/underscores/dashes to a single '-'
+switch lower(json.surfaceCorrectionMode)
     % Canonicalize to either 'per-tile', 'origin-tile' or 'none'
     case {'per-tile'}
         json.surfaceCorrectionMode = 'per-tile';
@@ -131,7 +131,7 @@ switch regexprep(lower(strtrim(char(json.surfaceCorrectionMode))),'[\s_–—−
     case {'none'}
         json.surfaceCorrectionMode = 'none';
     otherwise
-        error('surfaceCorrectionMode must be "per-tile" (default), "origin-tile", or "none".');
+        error('Invalid surfaceCorrectionMode value: %s', surfaceCorrectionMode);
 end
 
 %% Pre processing, make a plan
