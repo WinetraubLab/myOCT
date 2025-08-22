@@ -247,7 +247,7 @@ for attempt = 1:numRetries
             in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
             in.tileRangeY_mm,  ... rangeY [mm]
             0,       ... rotationAngle [deg]
-            in.nXPixels,in.nYPixels, ... SizeX,sizeY [# of pixels]
+            in.nXPixelsInEachTile,in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
             in.nBScanAvg,       ... B Scan Average
             s ... Output directory, make sure this folder doesn't exist when starting the scan
             );
