@@ -82,7 +82,7 @@ addParameter(p,'plotPattern',false);
 addParameter(p,'laserToggleMethod','OpticalSwitch');
 addParameter(p,'surfaceMap', [], @(x) isempty(x) || (isstruct(x) && ...
     all(ismember({'surfacePosition_mm','surfaceX_mm','surfaceY_mm'}, fieldnames(x)))));
-addParameter(p,'surfaceCorrectionMode','per-tile', @(x) ischar(x) || (isstring(x) && isscalar(x)));
+addParameter(p,'surfaceCorrectionMode','none', @(x) ischar(x) || (isstring(x) && isscalar(x)));
 
 parse(p,varargin{:});
 json = p.Results;
