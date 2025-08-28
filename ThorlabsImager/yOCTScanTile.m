@@ -46,8 +46,8 @@ addParameter(p,'pixelSize_um',1,@isnumeric)
 
 % Probe and stage parameters
 addParameter(p,'octProbePath','probe.ini',@ischar);
-addParameter(p,'octProbeFOV_mm',[])
-addParameter(p,'oct2stageXYAngleDeg',0,@isnumeric);
+addParameter(p,'octProbeFOV_mm',[]);
+addParameter(p,'oct2stageXYAngleDeg',[],@isnumeric);
 addParameter(p,'isVerifyMotionRange',true,@islogical);
 addParameter(p,'xOffset',0,@isnumeric);
 addParameter(p,'yOffset',0,@isnumeric);
@@ -80,6 +80,17 @@ in.octProbe = yOCTReadProbeIniToStruct(in.octProbePath);
 
 if isempty(in.octProbeFOV_mm)
     in.octProbeFOV_mm = in.octProbe.RangeMaxX; % Capture default value from probe ini
+end
+
+% Fill oct2stageXYAngleDeg from INI if not passed; error if nowhere to get it
+if isempty(in.oct2stageXYAngleDeg)
+    if isfield(in.octProbe,'Oct2StageXYAngleDeg')
+        in.oct2stageXYAngleDeg = in.octProbe.Oct2StageXYAngleDeg;
+    else
+        error(['oct2stageXYAngleDeg was not provided and the probe INI (' ...
+               in.octProbePath ') has no Oct2StageXYAngleDeg. ' ...
+               'Add it to the INI or pass ''oct2stageXYAngleDeg'' explicitly.']);
+    end
 end
 
 % If set, will protect lens from going into deep to the sample hiting the lens. Units: mm.
