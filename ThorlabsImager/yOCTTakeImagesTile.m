@@ -7,7 +7,6 @@ function [json] = yOCTTakeImagesTile(varargin)
 %NAME VALUE INPUTS:
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used
-%   oct2stageXYAngleDeg     []              The angle to convert OCT coordniate system to motor coordinate system, see yOCTStageInit
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan
 %   lightRingIntensity      50              Light ring intensity (0-100) for taking fully illuminated images
 %Scan tiling parameters, these will cerate a meshgrid relative to position
@@ -32,7 +31,6 @@ addRequired(p,'imageFolder',@isstr);
 
 %General parameters
 addParameter(p,'octProbePath','probe.ini',@isstr);
-addParameter(p,'oct2stageXYAngleDeg',[],@isnumeric);
 addParameter(p,'isVerifyMotionRange',true,@islogical);
 addParameter(p,'lightRingIntensity',50,@(x)(isnumeric(x) & x>=0 & x<=100))
 %Tile Parameters
@@ -55,6 +53,21 @@ in.version = 1; %Version of this file
 
 if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
+end
+
+%Load probe ini
+ini = yOCTReadProbeIniToStruct(in.octProbePath);
+
+% Fill oct2stageXYAngleDeg from INI
+if isfield(ini,'Oct2StageXYAngleDeg')
+    if isscalar(ini.Oct2StageXYAngleDeg)
+        in.oct2stageXYAngleDeg = ini.Oct2StageXYAngleDeg;
+    else
+        error('Field "Oct2StageXYAngleDeg" in probe INI is incorrect. Current value: %s\nINI file path: %s', ...
+              mat2str(ini.Oct2StageXYAngleDeg), json.octProbePath);
+    end
+else
+    error('Required field "Oct2StageXYAngleDeg" not found in probe INI: %s \nAdd it to the INI (e.g., Oct2StageXYAngleDeg = 0).', json.octProbePath);
 end
 
 %% Scan center list
