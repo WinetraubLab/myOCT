@@ -15,7 +15,6 @@ function [json] = yOCTScanTile(varargin)
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used.
 %   octProbeFOV_mm          []              Keep empty to use FOV frome probe, or set to override probe's value.
 %   pixelSize_um            1               What is the pixel size (in xy plane).
-%   oct2stageXYAngleDeg     0               The angle to convert OCT coordniate system to motor coordinate system, see yOCTStageInit.
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan.
 %   tissueRefractiveIndex   1.4             Refractive index of tissue.
 %   xOffset,yOffset         0               (0,0) means that the center of the tile scaned is at the center of the galvo range aka lens optical axis. 
@@ -46,8 +45,7 @@ addParameter(p,'pixelSize_um',1,@isnumeric)
 
 % Probe and stage parameters
 addParameter(p,'octProbePath','probe.ini',@ischar);
-addParameter(p,'octProbeFOV_mm',[])
-addParameter(p,'oct2stageXYAngleDeg',0,@isnumeric);
+addParameter(p,'octProbeFOV_mm',[]);
 addParameter(p,'isVerifyMotionRange',true,@islogical);
 addParameter(p,'xOffset',0,@isnumeric);
 addParameter(p,'yOffset',0,@isnumeric);
@@ -80,6 +78,18 @@ in.octProbe = yOCTReadProbeIniToStruct(in.octProbePath);
 
 if isempty(in.octProbeFOV_mm)
     in.octProbeFOV_mm = in.octProbe.RangeMaxX; % Capture default value from probe ini
+end
+
+% Fill oct2stageXYAngleDeg from INI
+if isfield(in.octProbe,'Oct2StageXYAngleDeg')
+    if isscalar(in.octProbe.Oct2StageXYAngleDeg)
+        in.oct2stageXYAngleDeg = in.octProbe.Oct2StageXYAngleDeg;
+    else
+        error('Field "Oct2StageXYAngleDeg" in probe INI is incorrect. Current value: %s\nINI file path: %s', ...
+              mat2str(in.octProbe.Oct2StageXYAngleDeg), in.octProbePath);
+    end
+else
+    error('Required field "Oct2StageXYAngleDeg" not found in probe INI: %s. \nAdd it to the INI (e.g., Oct2StageXYAngleDeg = 0).', in.octProbePath);
 end
 
 % If set, will protect lens from going into deep to the sample hiting the lens. Units: mm.
