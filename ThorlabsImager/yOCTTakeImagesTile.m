@@ -59,16 +59,7 @@ end
 ini = yOCTReadProbeIniToStruct(in.octProbePath);
 
 % Fill oct2stageXYAngleDeg from INI
-if isfield(ini,'Oct2StageXYAngleDeg')
-    if isscalar(ini.Oct2StageXYAngleDeg)
-        in.oct2stageXYAngleDeg = ini.Oct2StageXYAngleDeg;
-    else
-        error('Field "Oct2StageXYAngleDeg" in probe INI is incorrect. Current value: %s\nINI file path: %s', ...
-              mat2str(ini.Oct2StageXYAngleDeg), json.octProbePath);
-    end
-else
-    error('Required field "Oct2StageXYAngleDeg" not found in probe INI: %s \nAdd it to the INI (e.g., Oct2StageXYAngleDeg = 0).', json.octProbePath);
-end
+in.oct2stageXYAngleDeg = ini.Oct2StageXYAngleDeg;
 
 %% Scan center list
 

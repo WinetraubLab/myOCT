@@ -25,3 +25,8 @@ for i=1:length(txtlines)
     
     evalc(['st.' ln]);
 end
+
+% If Oct2StageXYAngleDeg is missing or invalid, set it to 0 degrees
+if ~isfield(st,'Oct2StageXYAngleDeg') || ~isnumeric(st.Oct2StageXYAngleDeg) || ~isscalar(st.Oct2StageXYAngleDeg) || ~isfinite(st.Oct2StageXYAngleDeg)
+    st.Oct2StageXYAngleDeg = 0;
+end

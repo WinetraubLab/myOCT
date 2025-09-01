@@ -81,16 +81,7 @@ if isempty(in.octProbeFOV_mm)
 end
 
 % Fill oct2stageXYAngleDeg from INI
-if isfield(in.octProbe,'Oct2StageXYAngleDeg')
-    if isscalar(in.octProbe.Oct2StageXYAngleDeg)
-        in.oct2stageXYAngleDeg = in.octProbe.Oct2StageXYAngleDeg;
-    else
-        error('Field "Oct2StageXYAngleDeg" in probe INI is incorrect. Current value: %s\nINI file path: %s', ...
-              mat2str(in.octProbe.Oct2StageXYAngleDeg), in.octProbePath);
-    end
-else
-    error('Required field "Oct2StageXYAngleDeg" not found in probe INI: %s. \nAdd it to the INI (e.g., Oct2StageXYAngleDeg = 0).', in.octProbePath);
-end
+in.oct2stageXYAngleDeg = in.octProbe.Oct2StageXYAngleDeg;
 
 % If set, will protect lens from going into deep to the sample hiting the lens. Units: mm.
 % The way it works is it computes what is the span of zDepths, compares that to working distance + safety buffer
