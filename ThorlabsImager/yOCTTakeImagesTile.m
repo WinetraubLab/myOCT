@@ -7,7 +7,6 @@ function [json] = yOCTTakeImagesTile(varargin)
 %NAME VALUE INPUTS:
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used
-%   oct2stageXYAngleDeg     0               The angle to convert OCT coordniate system to motor coordinate system, see yOCTStageInit
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan
 %   lightRingIntensity      50              Light ring intensity (0-100) for taking fully illuminated images
 %Scan tiling parameters, these will cerate a meshgrid relative to position
@@ -32,7 +31,6 @@ addRequired(p,'imageFolder',@isstr);
 
 %General parameters
 addParameter(p,'octProbePath','probe.ini',@isstr);
-addParameter(p,'oct2stageXYAngleDeg',0,@isnumeric);
 addParameter(p,'isVerifyMotionRange',true,@islogical);
 addParameter(p,'lightRingIntensity',50,@(x)(isnumeric(x) & x>=0 & x<=100))
 %Tile Parameters
@@ -56,6 +54,12 @@ in.version = 1; %Version of this file
 if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
+
+%Load probe ini
+ini = yOCTReadProbeIniToStruct(in.octProbePath);
+
+% Fill oct2stageXYAngleDeg from INI
+in.oct2stageXYAngleDeg = ini.Oct2StageXYAngleDeg;
 
 %% Scan center list
 
