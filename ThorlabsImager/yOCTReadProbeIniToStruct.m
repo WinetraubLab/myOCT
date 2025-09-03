@@ -26,7 +26,18 @@ for i=1:length(txtlines)
     evalc(['st.' ln]);
 end
 
-% If Oct2StageXYAngleDeg is missing or invalid, set it to 0 degrees
-if ~isfield(st,'Oct2StageXYAngleDeg') || ~isnumeric(st.Oct2StageXYAngleDeg) || ~isscalar(st.Oct2StageXYAngleDeg) || ~isfinite(st.Oct2StageXYAngleDeg)
-    st.Oct2StageXYAngleDeg = 0;
+% Ensure st.Oct2StageXYAngleDegue is valid
+if ~isfield(st, 'Oct2StageXYAngleDeg')
+    st.Oct2StageXYAngleDeg = 0; % default to 0 degrees if no value provided by user
+else
+    % User value must be a finite numeric scalar
+    if ~isnumeric(st.Oct2StageXYAngleDeg) || ~isscalar(st.Oct2StageXYAngleDeg) || ~isfinite(st.Oct2StageXYAngleDeg)
+        error('Oct2StageXYAngleDeg in octProbe INI file is invalid. Current value: %s\nINI file: %s', ...
+              mat2str(st.Oct2StageXYAngleDeg), probeIniPath);
+    end
+    % User value must be within -180 and 180 degrees
+    if st.Oct2StageXYAngleDeg < -180 || st.Oct2StageXYAngleDeg > 180
+        error('Oct2StageXYAngleDeg out of range: expected [-180, 180] degrees. \nCurrent angle: %.6g\nINI file: %s', ...
+              st.Oct2StageXYAngleDeg, probeIniPath);
+    end
 end
