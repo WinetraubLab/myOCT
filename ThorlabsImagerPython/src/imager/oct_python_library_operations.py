@@ -71,13 +71,16 @@ def yOCTScannerInit(octProbePath : str) -> None:
         _device = _oct_system.dev
         
         # Load probe configuration from .ini file
+        # This dictionary contains all parameters, including myOCT-specific ones
+        # (like DynamicFactorX, Oct2StageXYAngleDeg) that aren't SDK properties
         _probe_config = _read_probe_ini(octProbePath)
         
-        # Create probe (try from file, fallback to default)
-        try:
-            _probe = _oct_system.probe_factory.create_default()
-        except Exception:
-            _probe = _oct_system.probe_factory.create_default()
+        # Create probe with default settings, then configure from .ini file
+        _probe = _oct_system.probe_factory.create_default()
+        
+        # Apply calibration parameters from .ini file to probe
+        _apply_probe_config_to_probe(_probe, _probe_config)
+        print(f"  Probe configured from: {octProbePath}")
         
         # Create processing pipeline
         _processing = _oct_system.processing_factory.from_device()
@@ -124,4 +127,135 @@ def yOCTScannerClose():
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} OCT Scanner closed.")
 
 
+# ============================================================================
+# Helper Functions  
+# ============================================================================
+
+
+def _read_probe_ini(ini_path: str) -> dict:
+    """Read probe configuration from .ini file.
     
+    Args:
+        ini_path (str): Path to the .ini file
+    
+    Returns:
+        dict: Dictionary containing all probe configuration parameters
+    
+    Raises:
+        FileNotFoundError: If the .ini file does not exist
+        ValueError: If the .ini file cannot be parsed
+    """
+    if not os.path.exists(ini_path):
+        raise FileNotFoundError(f"Probe configuration file not found: {ini_path}")
+    
+    config = {}
+    
+    try:
+        with open(ini_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                
+                # Skip comments and empty lines
+                if not line or line.startswith('#') or line.startswith('##'):
+                    continue
+                
+                # Parse key = value pairs
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    
+                    # Remove quotes if present
+                    if value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
+                    
+                    # Try to convert to appropriate type
+                    try:
+                        # Try float first
+                        if '.' in value or 'e' in value.lower() or 'E' in value:
+                            config[key] = float(value)
+                        else:
+                            # Try int
+                            config[key] = int(value)
+                    except ValueError:
+                        # Handle lists (e.g., OpticalPathCorrectionPolynomial)
+                        if '[' in value and ']' in value:
+                            # Parse list of numbers
+                            list_str = value.strip('[]')
+                            config[key] = [float(x.strip()) for x in list_str.split(',')]
+                        else:
+                            # Keep as string
+                            config[key] = value
+        
+        print(f"Loaded probe configuration from: {ini_path}")
+        print(f"  Objective: {config.get('ObjectiveName', 'Unknown')}")
+        print(f"  FOV Max X: {config.get('RangeMaxX', 'Unknown')} mm")
+        print(f"  FOV Max Y: {config.get('RangeMaxY', 'Unknown')} mm")
+        
+        return config
+        
+    except Exception as e:
+        raise ValueError(f"Error parsing probe configuration file: {e}")
+
+
+def _apply_probe_config_to_probe(probe, config: dict) -> None:
+    """Apply probe configuration parameters to probe object.
+    
+    This function sets probe properties from the parsed .ini file configuration.
+    Only parameters that have corresponding SDK setter methods are applied.
+    
+    Args:
+        probe: Probe object from probe_factory
+        config (dict): Configuration dictionary from _read_probe_ini()
+    
+    Returns:
+        None
+    """
+    # Mapping of .ini file keys to probe.properties setter methods
+    # Format: 'IniKey': ('setter_method_name', conversion_function)
+    property_mappings = {
+        # Galvo calibration
+        'FactorX': ('set_factor_x', float),
+        'FactorY': ('set_factor_y', float),
+        'OffsetX': ('set_offset_x', float),
+        'OffsetY': ('set_offset_y', float),
+        
+        # Field of view
+        'RangeMaxX': ('set_range_max_x', float),
+        'RangeMaxY': ('set_range_max_y', float),
+        
+        # Apodization
+        'ApoVoltage': ('set_apo_volt_x', float),  # Note: setting both X and Y to same value
+        'FlybackTime': ('set_flyback_time_sec', float),
+        
+        # Camera calibration
+        'CameraScalingX': ('set_camera_scaling_x', float),
+        'CameraScalingY': ('set_camera_scaling_y', float),
+        'CameraOffsetX': ('set_camera_offset_x', float),
+        'CameraOffsetY': ('set_camera_offset_y', float),
+        'CameraAngle': ('set_camera_angle', float),
+    }
+    
+    # Apply each property if it exists in config
+    for ini_key, (setter_name, converter) in property_mappings.items():
+        if ini_key in config:
+            try:
+                # Get the setter method
+                setter = getattr(probe.properties, setter_name)
+                # Convert and set the value
+                value = converter(config[ini_key])
+                setter(value)
+                print(f"  Set {ini_key} = {value}")
+            except AttributeError:
+                print(f"  Warning: Probe property setter '{setter_name}' not found")
+            except Exception as e:
+                print(f"  Warning: Could not set {ini_key}: {e}")
+    
+    # Special case: ApoVoltage sets both X and Y
+    if 'ApoVoltage' in config:
+        try:
+            value = float(config['ApoVoltage'])
+            probe.properties.set_apo_volt_y(value)
+            print(f"  Set ApoVoltageY = {value}")
+        except Exception as e:
+            print(f"  Warning: Could not set ApoVoltageY: {e}")
