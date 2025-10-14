@@ -13,6 +13,7 @@ _private/*.*
 # Python SDK vendor files (exclude from git, but keep locally)
 ThorlabsImagerPython/PySpectralRadar/Demos/
 ThorlabsImagerPython/PySpectralRadar/lib/
+ThorlabsImagerPython/PySpectralRadar/README.md
 
 # Python cache and build files
 __pycache__/
