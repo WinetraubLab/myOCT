@@ -5,8 +5,12 @@ This module provides direct hardware interaction functions similar to the MATLAB
 These functions are called by high-level scanning functions like yOCTScanTile and yOCTPhotobleachTile.
 
 Function Naming Convention:
-- OCT functions: yOCTScannerInit, yOCTScan3DVolume, yOCTScannerClose, yOCTPhotobleachLine
-- Stage functions: yOCTStageInit, yOCTStageMoveTo (yOCTStageSetPosition)
+(Implemented)
+- OCT functions: yOCTScannerInit,  yOCTScannerClose
+
+(not yet implemented)
+- OCT functions: yOCTScan3DVolume, yOCTPhotobleachLine
+- Stage functions: yOCTStageInit_1axis, yOCTStageSetPosition_1axis
 - Laser functions: (DiodeCtrl equivalent functions)
 - Optical switch: yOCTTurnOpticalSwitch
 """
