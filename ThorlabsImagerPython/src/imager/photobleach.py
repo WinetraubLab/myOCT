@@ -1,1 +1,0 @@
-# Photobleach logic will go here

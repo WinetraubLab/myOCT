@@ -1,8 +1,0 @@
-# ThorlabsImagerPython
-
-## Setup
-
-# Install pyspectralradar manually from the wheel file before running:
-# pip install pyspectralradar-5.8.0-py3-none-any.whl
-
-# Add other dependencies below as needed
