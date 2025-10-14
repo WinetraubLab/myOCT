@@ -9,3 +9,20 @@ _private/*.*
 *temp*
 
 *.gif
+
+# Python SDK vendor files (exclude from git, but keep locally)
+ThorlabsImagerPython/PySpectralRadar/Demos/
+ThorlabsImagerPython/PySpectralRadar/lib/
+
+# Python cache and build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+ENV/
