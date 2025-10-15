@@ -346,6 +346,21 @@ for ii = 1:length(dValues)
 end
 saveas(gcf, [in.tempFolder 'dispersion.png']);
 
+%% Cleanup simulated data
+% In skipHardware mode, remove simulation directory and close figures
+if in.skipHardware
+    % Close all figures created during simulation
+    close all;
+    
+    % Remove simulation directory to avoid confusion with real data
+    if exist(in.tempFolder, 'dir')
+        rmdir(in.tempFolder, 's'); % 's' flag removes directory and all contents
+        if in.v
+            fprintf('Cleaned up simulation directory: %s\n', in.tempFolder);
+        end
+    end
+end
+
 end
 
 function [pos, width] = alignZ(scan, template)
