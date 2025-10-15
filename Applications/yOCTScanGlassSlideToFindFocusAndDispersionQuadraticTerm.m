@@ -48,18 +48,6 @@ end
 
 in.tempFolder = tempFolder;
 
-%% Early return if in simulation mode
-if in.skipHardware
-    % Return NaN values to indicate unmeasured parameters in simulation mode
-    dispersionQuadraticTerm = NaN;
-    focusPositionInImageZpix = NaN;
-    if (in.v)
-        fprintf('%s Simulation mode: Returning NaN for focus and dispersion (not measured)\n', ...
-            datestr(datetime));
-    end
-    return;
-end
-
 %% Scan multiple depths to find focus
 if (in.v)
     fprintf('%s Please adjust the OCT focus such that it is at glass silde interface, closest to the tissue.\n', datestr(datetime));
