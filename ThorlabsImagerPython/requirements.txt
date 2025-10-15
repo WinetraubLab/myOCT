@@ -1,0 +1,3 @@
+# Optional dependencies placeholder for ThorlabsImagerPython
+# Add any optional dependencies your project may have below
+

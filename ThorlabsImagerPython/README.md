@@ -13,13 +13,18 @@
    `C:\Program Files\Thorlabs\SpectralRadar\Python\PySpectralRadar\lib\pyspectralradar-5.8.0-py3-none-any.whl`
 2. Install the SDK manually:
    ```
-   pip install pyspectralradar-5.8.0-py3-none-any.whl
+   pip install "C:\\Program Files\\Thorlabs\\SpectralRadar\\Python\\PySpectralRadar\\lib\\pyspectralradar-5.8.0-py3-none-any.whl"
    ```
-3. Install other dependencies:
+3. (Optional) Create and activate a virtual environment:
+   ```powershell
+   python -m venv venv
+   .\venv\Scripts\activate
    ```
+4. Install other dependencies that may be needed:
+   ```powershell
+   # From the current directory:
    pip install -r requirements.txt
-   ```
-4. Run the main program:
-   ```
-   python src/main.py
+
+   # Or using the full path:
+   pip install -r "C:\\Users\\alber\\myOCT\\ThorlabsImagerPython\\requirements.txt"
    ```
