@@ -24,7 +24,4 @@
    ```powershell
    # From the current directory:
    pip install -r requirements.txt
-
-   # Or using the full path:
-   pip install -r "C:\\Users\\alber\\myOCT\\ThorlabsImagerPython\\requirements.txt"
    ```

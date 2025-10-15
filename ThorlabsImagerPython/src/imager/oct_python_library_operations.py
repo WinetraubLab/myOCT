@@ -48,7 +48,7 @@ _optical_switch_on = False
 def yOCTScannerInit(octProbePath : str) -> None:
     """Initialize scanner with a probe file.
     
-    Equivalent to MATLAB: ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath)
+    Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath)
     
     Args:
         octProbePath (str): Path to the probe configuration .ini file
@@ -58,14 +58,15 @@ def yOCTScannerInit(octProbePath : str) -> None:
     
     Raises:
         FileNotFoundError: If probe file does not exist
-        RuntimeError: If OCT system initialization fails
+        RuntimeError: If scanner is already initialized or OCT system initialization fails
     """
     global _oct_system, _device, _probe, _processing, _probe_config, _scanner_initialized
     
+    # Check if scanner is already initialized
+    if _scanner_initialized:
+        raise RuntimeError("Scanner is already initialized. Call yOCTScannerClose() first.")
+    
     try:
-        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Initializing OCT Scanner...")
-        print(f"\t(if taking more than 2 minutes, restart hardware and try again)")
-        
         # Initialize OCT system
         _oct_system = OCTSystem()
         _device = _oct_system.dev
@@ -80,16 +81,13 @@ def yOCTScannerInit(octProbePath : str) -> None:
         
         # Apply calibration parameters from .ini file to probe
         _apply_probe_config_to_probe(_probe, _probe_config)
-        print(f"  Probe configured from: {octProbePath}")
         
         # Create processing pipeline
         _processing = _oct_system.processing_factory.from_device()
         
         _scanner_initialized = True
-        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Initializing Hardware Completed")
         
     except Exception as e:
-        print(f"Error initializing OCT scanner: {e}")
         _scanner_initialized = False
         raise
 
@@ -97,7 +95,7 @@ def yOCTScannerInit(octProbePath : str) -> None:
 def yOCTScannerClose():
     """Free-up scanner resources.
     
-    Equivalent to MATLAB: ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose()
+    Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose()
     
     In Python SDK, cleanup is done by deleting objects in reverse order of creation.
     
@@ -124,7 +122,6 @@ def yOCTScannerClose():
         del _oct_system
     
     _scanner_initialized = False
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} OCT Scanner closed.")
 
 
 # ============================================================================
@@ -187,11 +184,6 @@ def _read_probe_ini(ini_path: str) -> dict:
                             # Keep as string
                             config[key] = value
         
-        print(f"Loaded probe configuration from: {ini_path}")
-        print(f"  Objective: {config.get('ObjectiveName', 'Unknown')}")
-        print(f"  FOV Max X: {config.get('RangeMaxX', 'Unknown')} mm")
-        print(f"  FOV Max Y: {config.get('RangeMaxY', 'Unknown')} mm")
-        
         return config
         
     except Exception as e:
@@ -245,17 +237,16 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
                 # Convert and set the value
                 value = converter(config[ini_key])
                 setter(value)
-                print(f"  Set {ini_key} = {value}")
             except AttributeError:
-                print(f"  Warning: Probe property setter '{setter_name}' not found")
-            except Exception as e:
-                print(f"  Warning: Could not set {ini_key}: {e}")
+                pass  # Setter not available in this SDK version
+            except Exception:
+                pass  # Could not set this property
     
     # Special case: ApoVoltage sets both X and Y
     if 'ApoVoltage' in config:
         try:
             value = float(config['ApoVoltage'])
             probe.properties.set_apo_volt_y(value)
-            print(f"  Set ApoVoltageY = {value}")
-        except Exception as e:
-            print(f"  Warning: Could not set ApoVoltageY: {e}")
+        except Exception:
+            pass  # Could not set ApoVoltageY
+
