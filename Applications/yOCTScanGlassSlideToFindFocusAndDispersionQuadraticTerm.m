@@ -36,6 +36,16 @@ tempFolder = in.tempFolder;
 if (tempFolder(end) ~= '\' &&  tempFolder(end) ~= '/')
     tempFolder(end+1) = '/';
 end
+
+% If using skipHardware mode, create simulated data in separate subdirectory
+% to avoid confusion with real hardware data
+if in.skipHardware
+    tempFolder = [tempFolder 'simulation/'];
+    if ~exist(tempFolder, 'dir')
+        mkdir(tempFolder);
+    end
+end
+
 in.tempFolder = tempFolder;
 
 %% Early return if in simulation mode
@@ -85,24 +95,44 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
             fprintf('Scanning [%.0fum, %.0fum]\n', ...
                 scanDepths_um(1),scanDepths_um(end));
         end
-        yOCTScanTile (...
-            tempFolder, ...
-            1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
-            1e-3 * [-1, 1] * pixelSize_um, ...
-            'octProbePath', in.octProbePath, ...
-            'pixelSize_um', pixelSize_um, ...
-            'skipHardware', in.skipHardware, ...
-            'zDepths', scanDepths_um*1e-3, ... zDepths are in mm
-            'v',in.v  ...
-            );
         
-        % Load all the scans, find the scan that is in focus
-        json = awsReadJSON([tempFolder 'ScanInfo.json']);
+        if in.skipHardware
+            % Use simulation library to generate complete tile scan with all files
+            % Create simple reflector data to simulate glass-air interface
+            nZ = 1024; nX = nuberOfPixels; nY = 2;
+            data = zeros(nZ, nX, nY); data(round(nZ/2), :, :) = 1; % Single strong reflector at center depth
+            
+            json = yOCTSimulateTileScan(data, tempFolder, ...
+                'xRange_mm', 1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
+                'yRange_mm', 1e-3 * [-1, 1] * pixelSize_um, ...
+                'octProbePath', in.octProbePath, ...
+                'pixelSize_um', pixelSize_um, ...
+                'zDepths', scanDepths_um*1e-3);
+        else
+            json = yOCTScanTile (...
+                tempFolder, ...
+                1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
+                1e-3 * [-1, 1] * pixelSize_um, ...
+                'octProbePath', in.octProbePath, ...
+                'pixelSize_um', pixelSize_um, ...
+                'skipHardware', in.skipHardware, ...
+                'zDepths', scanDepths_um*1e-3, ... zDepths are in mm
+                'v',in.v  ...
+                );
+        end
+        
         atFocusIndex = NaN;
         atFocusIntensity = 0;
         for scanI = 1:length(json.octFolders)
-            [interf, dim] = yOCTLoadInterfFromFile(...
-                [tempFolder json.octFolders{scanI}], 'YFramesToProcess',1);
+            % For simulated data, pass OCTSystem explicitly to avoid detection error
+            if in.skipHardware
+                [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}], ...
+                    'YFramesToProcess', 1, ...
+                    'OCTSystem', json.OCTSystem);
+            else
+                [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}], 'YFramesToProcess',1);
+            end
+
             score = mean(abs(interf(:)));
             
             % Collect data
@@ -119,6 +149,13 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
             end
         end
 
+        % In simulation mode, intensity scores may be uniform across all scans
+        % because simulated data has identical structure at all depths. Default to
+        % middle scan as a reasonable approximation for testing.
+        if in.skipHardware && isnan(atFocusIndex)
+            atFocusIndex = ceil(length(zDepths_mm)/2);
+        end
+        
         % Update best focus position
         bestZ_mm = zDepths_mm(atFocusIndex);
 
@@ -324,6 +361,9 @@ saveas(gcf, [in.tempFolder 'dispersion.png']);
 end
 
 function [pos, width] = alignZ(scan, template)
+    % Ensure scan is double precision for fminsearch compatibility
+    scan = double(scan);
+    
     zI = 1:size(scan,1); zI = zI(:);
     
     pos = zeros(1,size(scan,2));
@@ -331,7 +371,10 @@ function [pos, width] = alignZ(scan, template)
     for xI = 1:length(pos)
         s = scan(:, xI);
         [~, maxIdZ] = max(s);
-        maxIdZEnv = maxIdZ + (-5:5); maxIdZEnv=maxIdZEnv(:);
+
+        maxIdZEnv = maxIdZ + (-5:5);
+        maxIdZEnv = maxIdZEnv(maxIdZEnv >= 1 & maxIdZEnv <= length(s));
+        maxIdZEnv = maxIdZEnv(:);
 
         if ~exist('template','var') % Gaussian template
             model = @(x)(x(1)*exp( -(zI(maxIdZEnv)-x(2)).^2/(2*x(3)^2) ) + x(4));
