@@ -213,7 +213,7 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         oct_file.add_data(raw_data, f"data\\Spectral0.data")
         
         # Set metadata properties
-        oct_file.properties.set_process_state = pt.ProcessingStates.RAW_AND_PROCESSED
+        oct_file.properties.set_process_state = pt.ProcessingStates.RAW_SPECTRA
         oct_file.properties.set_acquisition_mode("Mode3D")
         oct_file.properties.set_comment("Created using Python SDK - yOCTScan3DVolume")
         oct_file.set_metadata(_device, _processing, _probe, scan_pattern)
