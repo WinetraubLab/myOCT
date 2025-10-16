@@ -241,6 +241,10 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         # Remove temporary .oct file
         os.remove(temp_oct_path)
         
+        # Split concatenated spectral data into individual B-scan files
+        # (MATLAB loader expects Spectral0.data, Spectral1.data, etc., not concatenated Spectral0.data)
+        _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels)
+        
         # Clean up OCT file object
         del oct_file
         del raw_data
@@ -379,4 +383,121 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
             probe.properties.set_apo_volt_y(value)
         except Exception:
             pass  # Could not set ApoVoltageY
+
+
+def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
+    """Split concatenated Spectral0.data into individual B-scan files.
+    
+    The Python SDK's OCTFile saves all spectral data in a single concatenated file: Spectral0.data
+    However, the MATLAB loader (yOCTLoadInterfFromFile_ThorlabsData.m) expects individual files:
+    Spectral0.data, Spectral1.data, Spectral2.data, ..., Spectral(nYPixels-1).data
+    
+    This function:
+    1. Reads the Header.xml to get exact spectral data dimensions
+    2. Calculates byte offsets for each B-scan
+    3. Splits the concatenated data into individual files
+    
+    The output is MATLAB-compatible: each file contains one complete B-scan worth of spectral data.
+    
+    Args:
+        outputFolder (str): Path to scan output folder containing Header.xml and data/
+        nYPixels (int): Number of B-scans (Y pixels/frames in volume)
+        nXPixels (int): Number of A-scans per B-scan (X pixels)
+    
+    Returns:
+        None
+    
+    Raises:
+        FileNotFoundError: If Header.xml or Spectral0.data not found
+        ValueError: If dimensions in Header.xml don't match expected size
+    """
+    import xml.etree.ElementTree as ET
+    
+    header_path = os.path.join(outputFolder, 'Header.xml')
+    data_folder = os.path.join(outputFolder, 'data')
+    spectral_concat_path = os.path.join(data_folder, 'Spectral0.data')
+    
+    if not os.path.exists(header_path):
+        raise FileNotFoundError(f"Header.xml not found in {outputFolder}")
+    
+    if not os.path.exists(spectral_concat_path):
+        raise FileNotFoundError(f"Spectral0.data not found in {data_folder}")
+    
+    # Parse Header.xml to get exact dimensions
+    try:
+        tree = ET.parse(header_path)
+        root = tree.getroot()
+        
+        # Extract dimension info from Header.xml
+        # The XML has two places with dimensions:
+        # 1. <Image><SizePixel>: Contains SizeZ, SizeX, SizeY (pixel count)
+        # 2. <DataFile> attributes: Contains SizeZ (spectral points), SizeX (A-scans)
+        
+        # For spectral file splitting, we need:
+        # - SizeZ from DataFile: number of spectral points (wavelengths) - for data structure
+        # - SizeX from DataFile: number of A-scans per B-scan - for data structure
+        # - SizeY from Image/SizePixel: number of B-scans in volume - for number of files
+        
+        size_z_spectral = None  # Spectral points (wavelengths)
+        size_x_ascans = None    # A-scans per B-scan
+        size_y_bscans = None    # B-scans in volume
+        
+        # Find the Raw DataFile (contains spectral data)
+        for datafile_elem in root.findall('.//DataFile[@Type="Raw"]'):
+            size_z_spectral = int(datafile_elem.get('SizeZ', 0)) if datafile_elem.get('SizeZ') else None
+            size_x_ascans = int(datafile_elem.get('SizeX', 0)) if datafile_elem.get('SizeX') else None
+        
+        # Find the Image dimensions for number of B-scans
+        for size_elem in root.findall('.//SizePixel/SizeY'):
+            size_y_bscans = int(float(size_elem.text)) if size_elem.text else None
+        
+        # Fallback: use the nYPixels parameter if we couldn't find it
+        if size_y_bscans is None:
+            size_y_bscans = nYPixels
+        
+        if size_z_spectral is None or size_x_ascans is None or size_y_bscans is None:
+            raise ValueError(
+                f"Could not extract all dimensions from Header.xml. "
+                f"Got: SizeZ_spectral={size_z_spectral}, SizeX_ascans={size_x_ascans}, SizeY_bscans={size_y_bscans}"
+            )
+        
+    except ET.ParseError as e:
+        raise ValueError(f"Failed to parse Header.xml: {e}")
+    
+    # Read concatenated spectral data
+    # Data format: uint16 (2 bytes per value)
+    # Layout: [B-scan 0][B-scan 1]...[B-scan N-1]
+    # Each B-scan: [SizeZ_spectral wavelengths × (SizeX_ascans + ApodPixels)]
+    with open(spectral_concat_path, 'rb') as f:
+        concat_data = f.read()
+    
+    # Calculate bytes per B-scan
+    # Total size should be: SizeZ_spectral × (SizeX_ascans + ApodPixels) × 2 bytes × SizeY_bscans
+    total_bytes = len(concat_data)
+    bytes_per_bscan = total_bytes // size_y_bscans
+    
+    # Verify the split is clean (no remainder)
+    if total_bytes % size_y_bscans != 0:
+        raise ValueError(
+            f"Cannot cleanly split spectral data. "
+            f"Total bytes ({total_bytes}) not divisible by number of B-scans ({size_y_bscans}). "
+            f"Got remainder: {total_bytes % size_y_bscans} bytes"
+        )
+    
+    # Split concatenated data into individual B-scan files
+    for bscan_idx in range(size_y_bscans):
+        start_byte = bscan_idx * bytes_per_bscan
+        end_byte = start_byte + bytes_per_bscan
+        
+        bscan_data = concat_data[start_byte:end_byte]
+        
+        # Create filename: Spectral0.data, Spectral1.data, etc.
+        output_filename = f'Spectral{bscan_idx}.data'
+        output_path = os.path.join(data_folder, output_filename)
+        
+        # Write individual B-scan file
+        with open(output_path, 'wb') as f:
+            f.write(bscan_data)
+
+    os.remove(spectral_concat_path)  
 
