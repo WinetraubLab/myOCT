@@ -6,16 +6,16 @@ These functions are called by high-level scanning functions like yOCTScanTile an
 
 Function Naming Convention:
 (Implemented)
-- OCT functions: yOCTScannerInit,  yOCTScannerClose
+- OCT functions: yOCTScannerInit, yOCTScannerClose, yOCTScan3DVolume
 
 (not yet implemented)
-- OCT functions: yOCTScan3DVolume, yOCTPhotobleachLine
+- OCT functions: yOCTPhotobleachLine
 - Stage functions: yOCTStageInit_1axis, yOCTStageSetPosition_1axis
 - Laser functions: (DiodeCtrl equivalent functions)
 - Optical switch: yOCTTurnOpticalSwitch
 """
 
-from pyspectralradar import OCTSystem, RawData, RealData
+from pyspectralradar import OCTSystem, RawData, RealData, OCTFile
 import pyspectralradar.types as pt
 import os
 import time
@@ -122,6 +122,136 @@ def yOCTScannerClose():
         del _oct_system
     
     _scanner_initialized = False
+
+
+def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float, 
+                     rangeX_mm: float, rangeY_mm: float,
+                     rotationAngle_deg: float,
+                     nXPixels: int, nYPixels: int,
+                     nBScanAvg: int,
+                     outputFolder: str):
+    """Scan 3D OCT volume.
+    
+    Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume()
+    
+    Creates an output folder with Header.xml, data/Spectral*.data files, and calibration files
+    
+    Args:
+        centerX_mm (float): Center position X in mm
+        centerY_mm (float): Center position Y in mm
+        rangeX_mm (float): Scan range X in mm
+        rangeY_mm (float): Scan range Y in mm
+        rotationAngle_deg (float): Rotation angle in degrees
+        nXPixels (int): Number of pixels in X (A-scans per B-scan)
+        nYPixels (int): Number of pixels in Y (B-scans in volume)
+        nBScanAvg (int): Number of B-scans to average
+        outputFolder (str): Output directory path (must not exist)
+    
+    Returns:
+        None (data is saved to outputFolder/Header.xml and outputFolder/data/*.data)
+    
+    Raises:
+        RuntimeError: If scanner is not initialized
+        FileExistsError: If outputFolder already exists
+    """
+    global _scanner_initialized, _device, _probe, _processing
+    
+    if not _scanner_initialized:
+        raise RuntimeError("Scanner not initialized. Call yOCTScannerInit() first.")
+    
+    # Check if output folder already exists
+    if os.path.exists(outputFolder):
+        raise FileExistsError(f"Output folder already exists: {outputFolder}")
+    
+    # Create output directory
+    os.makedirs(outputFolder, exist_ok=True)
+    
+    try:
+        # Set B-scan averaging on probe and processing
+        if nBScanAvg > 1:
+            _probe.properties.set_oversampling_slow_axis(nBScanAvg)
+            _processing.properties.set_bscan_avg(nBScanAvg)
+        
+        # Create volume scan pattern
+        scan_pattern = _probe.scan_pattern.create_volume_pattern(
+            rangeX_mm,  # range X in mm
+            nXPixels,   # A-scans per B-scan
+            rangeY_mm,  # range Y in mm
+            nYPixels,   # B-scans in volume
+            pt.ApodizationType.EACH_BSCAN,  # Apodization type
+            pt.AcquisitionOrder.ACQ_ORDER_ALL  # Acquisition order
+        )
+        
+        # Apply center offset (shift scan pattern to center position)
+        scan_pattern.shift(centerX_mm, centerY_mm)
+        
+        # Apply rotation if specified
+        if rotationAngle_deg != 0:
+            scan_pattern.rotate(rotationAngle_deg * 3.14159265359 / 180.0)  # Convert to radians
+        
+        # Allocate data buffers
+        raw_data = RawData()
+        
+        # Start acquisition
+        time_start = time.time()
+        _device.acquisition.start(scan_pattern, pt.AcqType.ASYNC_FINITE)
+        
+        # Get raw data from acquisition
+        _device.acquisition.get_raw_data(buffer=raw_data)
+        
+        # Stop acquisition
+        _device.acquisition.stop()
+        time_end = time.time()
+        
+        # Create OCT file with proper metadata 
+        oct_file = OCTFile(filetype=pt.FileFormat.OCITY)
+        
+        # Save calibration (includes Chirp.data, OffsetErrors.data)
+        oct_file.save_calibration(_processing, 0)
+        
+        # Add raw spectral data
+        oct_file.add_data(raw_data, f"data\\Spectral0.data")
+        
+        # Set metadata properties
+        oct_file.properties.set_process_state = pt.ProcessingStates.RAW_AND_PROCESSED
+        oct_file.properties.set_acquisition_mode("Mode3D")
+        oct_file.properties.set_comment("Created using Python SDK - yOCTScan3DVolume")
+        oct_file.set_metadata(_device, _processing, _probe, scan_pattern)
+        
+        # Set acquisition time
+        acq_time = time_end - time_start
+        oct_file.properties.set_scan_time_sec(acq_time)
+        
+        # Set timestamp
+        current_time = int(time.time())
+        oct_file.timestamp = current_time
+        
+        # Save to temporary .oct file in the output folder
+        import zipfile
+        import shutil
+        
+        temp_oct_path = os.path.join(outputFolder, '_temp_scan.oct')
+        oct_file.save(temp_oct_path)
+        
+        # Extract .oct file to output folder (matching C++ DLL behavior)
+        # .oct is a zip archive containing Header.xml and data/*.data files
+        with zipfile.ZipFile(temp_oct_path, 'r') as zip_ref:
+            zip_ref.extractall(outputFolder)
+        
+        # Remove temporary .oct file
+        os.remove(temp_oct_path)
+        
+        # Clean up OCT file object
+        del oct_file
+        del raw_data
+        del scan_pattern
+        
+    except Exception as e:
+        # Clean up output folder on error
+        if os.path.exists(outputFolder):
+            import shutil
+            shutil.rmtree(outputFolder)
+        raise
 
 
 # ============================================================================
