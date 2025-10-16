@@ -6,16 +6,16 @@ These functions are called by high-level scanning functions like yOCTScanTile an
 
 Function Naming Convention:
 (Implemented)
-- OCT functions: yOCTScannerInit,  yOCTScannerClose
+- OCT functions: yOCTScannerInit, yOCTScannerClose, yOCTScan3DVolume
 
 (not yet implemented)
-- OCT functions: yOCTScan3DVolume, yOCTPhotobleachLine
+- OCT functions: yOCTPhotobleachLine
 - Stage functions: yOCTStageInit_1axis, yOCTStageSetPosition_1axis
 - Laser functions: (DiodeCtrl equivalent functions)
 - Optical switch: yOCTTurnOpticalSwitch
 """
 
-from pyspectralradar import OCTSystem, RawData, RealData
+from pyspectralradar import OCTSystem, RawData, RealData, OCTFile
 import pyspectralradar.types as pt
 import os
 import time
@@ -122,6 +122,140 @@ def yOCTScannerClose():
         del _oct_system
     
     _scanner_initialized = False
+
+
+def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float, 
+                     rangeX_mm: float, rangeY_mm: float,
+                     rotationAngle_deg: float,
+                     nXPixels: int, nYPixels: int,
+                     nBScanAvg: int,
+                     outputFolder: str):
+    """Scan 3D OCT volume.
+    
+    Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume()
+    
+    Creates an output folder with Header.xml, data/Spectral*.data files, and calibration files
+    
+    Args:
+        centerX_mm (float): Center position X in mm
+        centerY_mm (float): Center position Y in mm
+        rangeX_mm (float): Scan range X in mm
+        rangeY_mm (float): Scan range Y in mm
+        rotationAngle_deg (float): Rotation angle in degrees
+        nXPixels (int): Number of pixels in X (A-scans per B-scan)
+        nYPixels (int): Number of pixels in Y (B-scans in volume)
+        nBScanAvg (int): Number of B-scans to average
+        outputFolder (str): Output directory path (must not exist)
+    
+    Returns:
+        None (data is saved to outputFolder/Header.xml and outputFolder/data/*.data)
+    
+    Raises:
+        RuntimeError: If scanner is not initialized
+        FileExistsError: If outputFolder already exists
+    """
+    global _scanner_initialized, _device, _probe, _processing
+    
+    if not _scanner_initialized:
+        raise RuntimeError("Scanner not initialized. Call yOCTScannerInit() first.")
+    
+    # Check if output folder already exists
+    if os.path.exists(outputFolder):
+        raise FileExistsError(f"Output folder already exists: {outputFolder}")
+    
+    # Create output directory
+    os.makedirs(outputFolder, exist_ok=True)
+    
+    try:
+        # Set B-scan averaging on probe and processing
+        if nBScanAvg > 1:
+            _probe.properties.set_oversampling_slow_axis(nBScanAvg)
+            _processing.properties.set_bscan_avg(nBScanAvg)
+        
+        # Create volume scan pattern
+        scan_pattern = _probe.scan_pattern.create_volume_pattern(
+            rangeX_mm,  # range X in mm
+            nXPixels,   # A-scans per B-scan
+            rangeY_mm,  # range Y in mm
+            nYPixels,   # B-scans in volume
+            pt.ApodizationType.EACH_BSCAN,  # Apodization type
+            pt.AcquisitionOrder.ACQ_ORDER_ALL  # Acquisition order
+        )
+        
+        # Apply center offset (shift scan pattern to center position)
+        scan_pattern.shift(centerX_mm, centerY_mm)
+        
+        # Apply rotation if specified
+        if rotationAngle_deg != 0:
+            scan_pattern.rotate(rotationAngle_deg * 3.14159265359 / 180.0)  # Convert to radians
+        
+        # Allocate data buffers
+        raw_data = RawData()
+        
+        # Start acquisition
+        time_start = time.time()
+        _device.acquisition.start(scan_pattern, pt.AcqType.ASYNC_FINITE)
+        
+        # Get raw data from acquisition
+        _device.acquisition.get_raw_data(buffer=raw_data)
+        
+        # Stop acquisition
+        _device.acquisition.stop()
+        time_end = time.time()
+        
+        # Create OCT file with proper metadata 
+        oct_file = OCTFile(filetype=pt.FileFormat.OCITY)
+        
+        # Save calibration (includes Chirp.data, OffsetErrors.data)
+        oct_file.save_calibration(_processing, 0)
+        
+        # Add raw spectral data
+        oct_file.add_data(raw_data, f"data\\Spectral0.data")
+        
+        # Set metadata properties
+        oct_file.properties.set_process_state = pt.ProcessingStates.RAW_SPECTRA
+        oct_file.properties.set_acquisition_mode("Mode3D")
+        oct_file.properties.set_comment("Created using Python SDK - yOCTScan3DVolume")
+        oct_file.set_metadata(_device, _processing, _probe, scan_pattern)
+        
+        # Set acquisition time
+        acq_time = time_end - time_start
+        oct_file.properties.set_scan_time_sec(acq_time)
+        
+        # Set timestamp
+        current_time = int(time.time())
+        oct_file.timestamp = current_time
+        
+        # Save to temporary .oct file in the output folder
+        import zipfile
+        import shutil
+        
+        temp_oct_path = os.path.join(outputFolder, '_temp_scan.oct')
+        oct_file.save(temp_oct_path)
+        
+        # Extract .oct file to output folder (matching C++ DLL behavior)
+        # .oct is a zip archive containing Header.xml and data/*.data files
+        with zipfile.ZipFile(temp_oct_path, 'r') as zip_ref:
+            zip_ref.extractall(outputFolder)
+        
+        # Remove temporary .oct file
+        os.remove(temp_oct_path)
+        
+        # Split concatenated spectral data into individual B-scan files
+        # (MATLAB loader expects Spectral0.data, Spectral1.data, etc., not concatenated Spectral0.data)
+        _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels)
+        
+        # Clean up OCT file object
+        del oct_file
+        del raw_data
+        del scan_pattern
+        
+    except Exception as e:
+        # Clean up output folder on error
+        if os.path.exists(outputFolder):
+            import shutil
+            shutil.rmtree(outputFolder)
+        raise
 
 
 # ============================================================================
@@ -249,4 +383,121 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
             probe.properties.set_apo_volt_y(value)
         except Exception:
             pass  # Could not set ApoVoltageY
+
+
+def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
+    """Split concatenated Spectral0.data into individual B-scan files.
+    
+    The Python SDK's OCTFile saves all spectral data in a single concatenated file: Spectral0.data
+    However, the MATLAB loader (yOCTLoadInterfFromFile_ThorlabsData.m) expects individual files:
+    Spectral0.data, Spectral1.data, Spectral2.data, ..., Spectral(nYPixels-1).data
+    
+    This function:
+    1. Reads the Header.xml to get exact spectral data dimensions
+    2. Calculates byte offsets for each B-scan
+    3. Splits the concatenated data into individual files
+    
+    The output is MATLAB-compatible: each file contains one complete B-scan worth of spectral data.
+    
+    Args:
+        outputFolder (str): Path to scan output folder containing Header.xml and data/
+        nYPixels (int): Number of B-scans (Y pixels/frames in volume)
+        nXPixels (int): Number of A-scans per B-scan (X pixels)
+    
+    Returns:
+        None
+    
+    Raises:
+        FileNotFoundError: If Header.xml or Spectral0.data not found
+        ValueError: If dimensions in Header.xml don't match expected size
+    """
+    import xml.etree.ElementTree as ET
+    
+    header_path = os.path.join(outputFolder, 'Header.xml')
+    data_folder = os.path.join(outputFolder, 'data')
+    spectral_concat_path = os.path.join(data_folder, 'Spectral0.data')
+    
+    if not os.path.exists(header_path):
+        raise FileNotFoundError(f"Header.xml not found in {outputFolder}")
+    
+    if not os.path.exists(spectral_concat_path):
+        raise FileNotFoundError(f"Spectral0.data not found in {data_folder}")
+    
+    # Parse Header.xml to get exact dimensions
+    try:
+        tree = ET.parse(header_path)
+        root = tree.getroot()
+        
+        # Extract dimension info from Header.xml
+        # The XML has two places with dimensions:
+        # 1. <Image><SizePixel>: Contains SizeZ, SizeX, SizeY (pixel count)
+        # 2. <DataFile> attributes: Contains SizeZ (spectral points), SizeX (A-scans)
+        
+        # For spectral file splitting, we need:
+        # - SizeZ from DataFile: number of spectral points (wavelengths) - for data structure
+        # - SizeX from DataFile: number of A-scans per B-scan - for data structure
+        # - SizeY from Image/SizePixel: number of B-scans in volume - for number of files
+        
+        size_z_spectral = None  # Spectral points (wavelengths)
+        size_x_ascans = None    # A-scans per B-scan
+        size_y_bscans = None    # B-scans in volume
+        
+        # Find the Raw DataFile (contains spectral data)
+        for datafile_elem in root.findall('.//DataFile[@Type="Raw"]'):
+            size_z_spectral = int(datafile_elem.get('SizeZ', 0)) if datafile_elem.get('SizeZ') else None
+            size_x_ascans = int(datafile_elem.get('SizeX', 0)) if datafile_elem.get('SizeX') else None
+        
+        # Find the Image dimensions for number of B-scans
+        for size_elem in root.findall('.//SizePixel/SizeY'):
+            size_y_bscans = int(float(size_elem.text)) if size_elem.text else None
+        
+        # Fallback: use the nYPixels parameter if we couldn't find it
+        if size_y_bscans is None:
+            size_y_bscans = nYPixels
+        
+        if size_z_spectral is None or size_x_ascans is None or size_y_bscans is None:
+            raise ValueError(
+                f"Could not extract all dimensions from Header.xml. "
+                f"Got: SizeZ_spectral={size_z_spectral}, SizeX_ascans={size_x_ascans}, SizeY_bscans={size_y_bscans}"
+            )
+        
+    except ET.ParseError as e:
+        raise ValueError(f"Failed to parse Header.xml: {e}")
+    
+    # Read concatenated spectral data
+    # Data format: uint16 (2 bytes per value)
+    # Layout: [B-scan 0][B-scan 1]...[B-scan N-1]
+    # Each B-scan: [SizeZ_spectral wavelengths × (SizeX_ascans + ApodPixels)]
+    with open(spectral_concat_path, 'rb') as f:
+        concat_data = f.read()
+    
+    # Calculate bytes per B-scan
+    # Total size should be: SizeZ_spectral × (SizeX_ascans + ApodPixels) × 2 bytes × SizeY_bscans
+    total_bytes = len(concat_data)
+    bytes_per_bscan = total_bytes // size_y_bscans
+    
+    # Verify the split is clean (no remainder)
+    if total_bytes % size_y_bscans != 0:
+        raise ValueError(
+            f"Cannot cleanly split spectral data. "
+            f"Total bytes ({total_bytes}) not divisible by number of B-scans ({size_y_bscans}). "
+            f"Got remainder: {total_bytes % size_y_bscans} bytes"
+        )
+    
+    # Split concatenated data into individual B-scan files
+    for bscan_idx in range(size_y_bscans):
+        start_byte = bscan_idx * bytes_per_bscan
+        end_byte = start_byte + bytes_per_bscan
+        
+        bscan_data = concat_data[start_byte:end_byte]
+        
+        # Create filename: Spectral0.data, Spectral1.data, etc.
+        output_filename = f'Spectral{bscan_idx}.data'
+        output_path = os.path.join(data_folder, output_filename)
+        
+        # Write individual B-scan file
+        with open(output_path, 'wb') as f:
+            f.write(bscan_data)
+
+    os.remove(spectral_concat_path)  
 
