@@ -29,18 +29,18 @@ def test_scan_3d_volume():
     print("=" * 70)
     
     # Configuration
-    probe_path = r"C:\Program Files\Thorlabs\SpectralRadar\Config\Probe - Olympus 10x.ini"
-    output_folder = r"C:\Users\OCT User\Documents\GitHub\myOCT\ThorlabsImagerPython\tests\test_output_scan3d"
+    probe_path = r"C:\Program Files\Thorlabs\SpectralRadar\Config\Probe - Olympus 40x.ini"
+    output_folder = r"C:\Users\OCT User\Desktop\TestD"
     
     # Test scan parameters - typical case with no B-scan averaging
     
     center_x = 0.0      # mm - centered
     center_y = 0.0      # mm - centered
-    range_x = 1.0       # mm - 1mm scan range
-    range_y = 1.0       # mm - 1mm scan range
+    range_x = 1       # mm - 1mm scan range
+    range_y = 1       # mm - 1mm scan range
     rotation = 0.0      # degrees - no rotation
-    n_x_pixels = 50     # Small number for quick test (vs 100 in demo)
-    n_y_pixels = 4      # 4 B-scans (4 Y positions)
+    n_x_pixels = 1000     # Small number for quick test (vs 100 in demo)
+    n_y_pixels = 6      # 6 B-scans (6 Y positions)
     n_bscan_avg = 1     # No averaging (typical case) → 4 spectral files total
     
     try:
@@ -81,8 +81,7 @@ def test_scan_3d_volume():
         
         # Step 3: Verify output
         print(f"\n[3/4] Verifying output files")
-        header_file = os.path.join(output_folder, 'Header.xml')
-        data_folder = os.path.join(output_folder, 'data')
+        oct_file_path = os.path.join(output_folder, 'scan.oct')
         
         if os.path.exists(output_folder):
             print(f"      ✓ Output folder created: {output_folder}")
@@ -90,39 +89,12 @@ def test_scan_3d_volume():
             print(f"      ✗ Output folder NOT created!")
             raise FileNotFoundError(f"Output folder not found: {output_folder}")
         
-        if os.path.exists(header_file):
-            file_size = os.path.getsize(header_file)
-            print(f"      ✓ Header.xml created ({file_size:,} bytes)")
+        if os.path.exists(oct_file_path):
+            file_size = os.path.getsize(oct_file_path)
+            print(f"      ✓ scan.oct created ({file_size:,} bytes)")
         else:
-            print(f"      ✗ Header.xml NOT created!")
-            raise FileNotFoundError(f"Header.xml not found: {header_file}")
-        
-        if os.path.exists(data_folder):
-            print(f"      ✓ data/ folder created")
-        else:
-            print(f"      ✗ data/ folder NOT created!")
-            raise FileNotFoundError(f"data folder not found: {data_folder}")
-        
-        # Check for Spectral data files
-        # Python SDK saves all data as Spectral0.data, then splits it into:
-        # Spectral0.data, Spectral1.data, Spectral2.data, ... (one per B-scan)
-        # This matches the format expected by MATLAB's yOCTLoadInterfFromFile()
-        spectral_files_found = []
-        total_expected_files = n_y_pixels * n_bscan_avg
-        
-        for i in range(total_expected_files):
-            spectral_file = os.path.join(data_folder, f'Spectral{i}.data')
-            if os.path.exists(spectral_file):
-                file_size = os.path.getsize(spectral_file)
-                spectral_files_found.append((f'Spectral{i}.data', file_size))
-        
-        if len(spectral_files_found) > 0:
-            print(f"      ✓ Spectral data files found ({len(spectral_files_found)} files):")
-            for filename, fsize in spectral_files_found:
-                print(f"          - {filename} ({fsize:,} bytes)")
-        else:
-            print(f"      ✗ No Spectral data files found!")
-            raise FileNotFoundError(f"No Spectral.data files found in {data_folder}")
+            print(f"      ✗ scan.oct NOT created!")
+            raise FileNotFoundError(f"scan.oct not found: {oct_file_path}")
         
         # List all files in output folder
         files = os.listdir(output_folder)
@@ -135,16 +107,14 @@ def test_scan_3d_volume():
             else:
                 print(f"        - {f}/ (folder)")
         
-        # List files in data subfolder
-        if os.path.exists(data_folder):
-            data_files = os.listdir(data_folder)
-            print(f"      Files in data/ folder ({len(data_files)}):")
-            for f in data_files[:5]:  # Show first 5 files
-                fpath = os.path.join(data_folder, f)
-                fsize = os.path.getsize(fpath)
-                print(f"        - {f} ({fsize:,} bytes)")
-            if len(data_files) > 5:
-                print(f"        ... and {len(data_files) - 5} more files")
+        # Validate file size (basic sanity check)
+        # Expected size depends on: spectral points × A-scans × B-scans × 2 bytes + overhead
+        # Rough estimate for test scan: ~2-10 MB
+        if file_size < 100000:  # Less than 100 KB seems too small
+            print(f"      ⚠ Warning: scan.oct seems small ({file_size:,} bytes)")
+            print(f"      Expected: at least 100 KB for typical OCT data")
+        else:
+            print(f"      ✓ scan.oct size is reasonable")
         
         # Step 4: Close scanner
         print(f"\n[4/4] Closing scanner")
@@ -159,15 +129,18 @@ def test_scan_3d_volume():
         print(f"  - Initialization: {init_time:.2f}s")
         print(f"  - Scanning: {scan_time:.2f}s")
         print(f"Output saved to: {output_folder}")
-        print("\nOutput format (MATLAB-compatible):")
-        print("- Header.xml: Metadata and scan parameters")
-        print(f"- data/Spectral0.data through Spectral{total_expected_files-1}.data: One file per B-scan")
-        print("- data/Chirp.data: Calibration chirp")
-        print("- data/OffsetErrors.data: Calibration offset")
+        print("\nOutput format:")
+        print("- scan.oct: Complete OCT file (OCITY format) containing:")
+        print("  • Header.xml: Scan metadata and parameters")
+        print("  • Spectral data: Raw spectral/interferogram data")
+        print("  • Image data: Processed intensity (amplitude in dB)")
+        print("  • Chirp.data: Spectral calibration")
+        print("  • Offset.data: Offset calibration")
+        print("  • Apodization.data: Window function")
         print("\nYou can now:")
-        print("1. Load the data with myOCT MATLAB: yOCTLoadInterfFromFile('" + output_folder.replace('\\', '/') + "')")
-        print("2. Open in ThorImage OCT software")
-        print("3. Verify Header.xml contains correct scan parameters")
+        print("1. Open in ThorImage OCT software")
+        print("2. Extract with unzip tool or Python: zipfile.ZipFile('scan.oct').extractall()")
+        print("3. Load with myOCT MATLAB after extracting")
         
         return True
         
