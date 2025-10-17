@@ -240,16 +240,15 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         with zipfile.ZipFile(oct_file_path, 'r') as zip_ref:
             zip_ref.extractall(outputFolder)
         
-        # Split the concatenated Spectral0.data into individual B-scan files FIRST
-        # This must be done BEFORE fixing header so we can count the files
+        # Delete the .oct file after extraction to avoid duplication
+        # MATLAB expects to find extracted files, not the .oct archive
+        os.remove(oct_file_path)
+        
+        # Split the concatenated Spectral0.data into individual B-scan files
         # MATLAB expects Spectral0.data, Spectral1.data, ..., Spectral(N-1).data
         _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels)
         
-        # Fix Header.xml metadata for MATLAB compatibility AFTER splitting
-        # Ensure DataFile attributes have correct SizeX and ApoRegionEnd0
-        # Must be done BEFORE deleting raw_data
-        print(f"DEBUG: raw_data.shape = {raw_data.shape}")
-        print(f"DEBUG: nXPixels = {nXPixels}, nYPixels = {nYPixels}")
+        # Fix Header.xml metadata for MATLAB compatibility
         _fix_header_xml_for_matlab(outputFolder, raw_data, _probe)
         
         # Clean up OCT file object and data buffers
@@ -544,44 +543,28 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
         root = tree.getroot()
         
         # Get dimensions from raw_data
-        # RawData has shape (wavelengths, A-scans + apod, B-scans)
-        # BUT: if it's a volume scan, the SDK may concatenate B-scans horizontally
-        # So shape might be (wavelengths, (A-scans + apod) * B-scans, 1)
         data_shape = raw_data.shape
-        print(f"DEBUG _fix_header: data_shape = {data_shape}")
         size_z = data_shape[0]  # Number of spectral points (wavelengths)
         total_x = data_shape[1]  # Total width (may include multiple B-scans)
-        size_y = data_shape[2] if len(data_shape) > 2 else 1  # B-scans (may be 1 if concatenated)
-        
-        print(f"DEBUG _fix_header: size_z={size_z}, total_x={total_x}, size_y={size_y}")
+        size_y = data_shape[2] if len(data_shape) > 2 else 1  # B-scans
         
         # Get apodization size from probe
         try:
             apo_size = int(probe.properties.get_apo_size())
-            print(f"DEBUG _fix_header: apo_size from probe = {apo_size}")
-        except Exception as e:
-            print(f"DEBUG _fix_header: Could not get apo_size from probe: {e}")
+        except Exception:
             apo_size = 50  # Default fallback
         
-        # The actual interfSize per B-scan needs to account for the file structure
-        # Each individual Spectral file should have size_z * (interfSize + apo_size) elements
         # Read the first split file to determine actual size per B-scan
         spectral_0_path = os.path.join(outputFolder, 'data', 'Spectral0.data')
         if os.path.exists(spectral_0_path):
             file_size_bytes = os.path.getsize(spectral_0_path)
             elements_per_file = file_size_bytes // 2  # 2 bytes per uint16
             width_per_bscan = elements_per_file // size_z
-            # MATLAB expects interfSize to be the TOTAL width including apodization
-            # It will then split it into apod and interf internally
-            interf_size = width_per_bscan  # Total width, not subtracting apo_size
-            print(f"DEBUG _fix_header: Calculated from Spectral0.data: width_per_bscan={width_per_bscan}, interf_size={interf_size} (includes apo)")
+            interf_size = width_per_bscan  # Total width including apodization
         else:
             # Fallback: assume total_x includes all B-scans concatenated
             width_per_bscan = total_x // size_y if size_y > 0 else total_x
-            interf_size = width_per_bscan  # Total width
-            print(f"DEBUG _fix_header: Calculated from raw_data: width_per_bscan={width_per_bscan}, interf_size={interf_size} (includes apo)")
-        
-        print(f"DEBUG _fix_header: Final interf_size = {interf_size}")
+            interf_size = width_per_bscan
         
         # Count actual number of B-scans from split files
         data_folder = os.path.join(outputFolder, 'data')
@@ -589,35 +572,29 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
         if os.path.exists(data_folder):
             spectral_files = [f for f in os.listdir(data_folder) if f.startswith('Spectral') and f.endswith('.data')]
             actual_bscans = len(spectral_files)
-            print(f"DEBUG _fix_header: Found {actual_bscans} Spectral files")
         
-        # Use actual_bscans if we found files, otherwise use size_y
         final_size_y = actual_bscans if actual_bscans > 0 else size_y
         
         # The actual interfSize WITHOUT apodization (for Image.SizePixel.SizeX)
         actual_interf_size = interf_size - apo_size
         
-        # Find the DataFile element with Type="Raw" (spectral data)
+        # Update DataFile element with Type="Raw" (spectral data)
         for datafile_elem in root.findall('.//DataFile[@Type="Raw"]'):
-            # Update or set attributes
             datafile_elem.set('SizeZ', str(size_z))
-            datafile_elem.set('SizeX', str(interf_size))  # Total width including apo
+            datafile_elem.set('SizeX', str(interf_size))
             datafile_elem.set('SizeY', str(final_size_y))
             datafile_elem.set('ApoRegionEnd0', str(apo_size))
             datafile_elem.set('ApoRegionStart0', '0')
             datafile_elem.set('ScanRegionStart0', str(apo_size))
             datafile_elem.set('ScanRegionEnd0', str(interf_size))
-            print(f"DEBUG _fix_header: Set DataFile attributes: SizeZ={size_z}, SizeX={interf_size}, SizeY={final_size_y}, ApoRegionEnd0={apo_size}")
         
-        # Also update Image.SizePixel.SizeX to be the interferogram size WITHOUT apodization
+        # Update Image.SizePixel.SizeX (interferogram size without apodization)
         for sizex_elem in root.findall('.//Image/SizePixel/SizeX'):
             sizex_elem.text = str(actual_interf_size)
-            print(f"DEBUG _fix_header: Set Image.SizePixel.SizeX = {actual_interf_size}")
         
-        # Update Image.SizePixel.SizeY to match actual B-scans
+        # Update Image.SizePixel.SizeY (number of B-scans)
         for sizey_elem in root.findall('.//Image/SizePixel/SizeY'):
             sizey_elem.text = str(final_size_y)
-            print(f"DEBUG _fix_header: Set Image.SizePixel.SizeY = {final_size_y}")
         
         # Write back the modified XML
         tree.write(header_path, encoding='utf-8', xml_declaration=True)
@@ -626,4 +603,3 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
         # If we can't fix the header, just continue
         # The scan data is still there, just metadata might be wrong
         pass  
-
