@@ -548,11 +548,20 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
         total_x = data_shape[1]  # Total width (may include multiple B-scans)
         size_y = data_shape[2] if len(data_shape) > 2 else 1  # B-scans
         
-        # Get apodization size from probe
+        # Get apodization size from Header.xml (ActualSizeOfApodization)
+        # This is more reliable than probe.properties.get_apo_size()
+        apo_size = 25  # Default fallback
         try:
-            apo_size = int(probe.properties.get_apo_size())
+            # First try to get from ActualSizeOfApodization in XML
+            actual_apo_elem = root.find('.//Acquisition/ActualSizeOfApodization')
+            if actual_apo_elem is not None and actual_apo_elem.text:
+                apo_size = int(actual_apo_elem.text)
         except Exception:
-            apo_size = 50  # Default fallback
+            # If that fails, try from probe
+            try:
+                apo_size = int(probe.properties.get_apo_size())
+            except Exception:
+                pass  # Use default
         
         # Read the first split file to determine actual size per B-scan
         spectral_0_path = os.path.join(outputFolder, 'data', 'Spectral0.data')
@@ -595,6 +604,11 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
         # Update Image.SizePixel.SizeY (number of B-scans)
         for sizey_elem in root.findall('.//Image/SizePixel/SizeY'):
             sizey_elem.text = str(final_size_y)
+        
+        # Change Image Type from "Processed" to "RawSpectra" for MATLAB compatibility
+        for image_elem in root.findall('.//Image'):
+            if image_elem.get('Type') == 'Processed':
+                image_elem.set('Type', 'RawSpectra')
         
         # Write back the modified XML
         tree.write(header_path, encoding='utf-8', xml_declaration=True)
