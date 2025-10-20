@@ -6,17 +6,18 @@ These functions are called by high-level scanning functions like yOCTScanTile an
 
 Function Naming Convention:
 (Implemented)
-- OCT functions: yOCTScannerInit,  yOCTScannerClose
+- OCT functions: yOCTScannerInit, yOCTScannerClose, yOCTPhotobleachLine
 
 (not yet implemented)
-- OCT functions: yOCTScan3DVolume, yOCTPhotobleachLine
+- OCT functions: yOCTScan3DVolume
 - Stage functions: yOCTStageInit_1axis, yOCTStageSetPosition_1axis
 - Laser functions: (DiodeCtrl equivalent functions)
 - Optical switch: yOCTTurnOpticalSwitch
 """
 
-from pyspectralradar import OCTSystem, RawData, RealData
+from pyspectralradar import OCTSystem, RawData, RealData, ScanPattern
 import pyspectralradar.types as pt
+import numpy as np
 import os
 import time
 from datetime import datetime
@@ -122,6 +123,91 @@ def yOCTScannerClose():
         del _oct_system
     
     _scanner_initialized = False
+
+
+def yOCTPhotobleachLine(startX: float, startY: float, endX: float, endY: float, 
+                        duration: float, nPasses: int = 1) -> None:
+    """Photobleach a line by repeatedly scanning galvo mirrors along specified path.
+    
+    Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTPhotobleachLine(...)
+    
+    This function moves the galvo mirrors along a line from (startX, startY) to (endX, endY)
+    repeatedly for the specified duration and number of passes. It does not acquire data,
+    only moves the beam to photobleach the sample.
+    
+    Args:
+        startX (float): Start X position in mm (in FOV coordinates)
+        startY (float): Start Y position in mm (in FOV coordinates)
+        endX (float): End X position in mm (in FOV coordinates)
+        endY (float): End Y position in mm (in FOV coordinates)
+        duration (float): Total duration to photobleach in seconds
+        nPasses (int): Number of passes over the line (default: 1)
+    
+    Returns:
+        None
+    
+    Raises:
+        RuntimeError: If scanner is not initialized
+    
+    Example:
+        >>> yOCTPhotobleachLine(-1, 0, 1, 0, duration=10, nPasses=10)
+    """
+    global _oct_system, _device, _probe, _scanner_initialized
+    
+    if not _scanner_initialized:
+        raise RuntimeError("Scanner not initialized. Call yOCTScannerInit() first.")
+    
+    try:
+        # Calculate line properties
+        line_length_mm = np.sqrt((endX - startX)**2 + (endY - startY)**2)
+        
+        # Create a scan pattern that traces the line
+        # We'll use a B-scan pattern where we scan along the line direction
+        # Number of A-scans determines smoothness of the line
+        n_ascans = max(100, int(line_length_mm * 100))  # ~100 points per mm
+        
+        # Create scan pattern
+        scan_pattern = ScanPattern()
+        
+        # Set scan pattern to B-scan (2D line scan)
+        # The pattern will scan from start to end position
+        scan_pattern.set_b_scan(
+            size_x=n_ascans,  # Number of A-scans along the line
+            range_x=line_length_mm  # Length of the line in mm
+        )
+        
+        # Calculate the angle of the line relative to X axis
+        angle_rad = np.arctan2(endY - startY, endX - startX)
+        angle_deg = np.degrees(angle_rad)
+        
+        # Set the rotation angle to align the B-scan with the line
+        scan_pattern.set_rotation_angle(angle_deg)
+        
+        # Set the center position of the scan (midpoint of the line)
+        center_x = (startX + endX) / 2.0
+        center_y = (startY + endY) / 2.0
+        scan_pattern.set_position(center_x, center_y)
+        
+        # Apply the scan pattern to the probe
+        _probe.set_scan_pattern(scan_pattern)
+        
+        # Calculate time per pass
+        time_per_pass = duration / nPasses if nPasses > 0 else duration
+        
+        # Execute the photobleach by running the scan pattern multiple times
+        for pass_num in range(nPasses):
+            # Start the measurement (moves galvo but doesn't acquire data)
+            # We use a dummy acquisition that we discard
+            _device.start_measurement()
+            
+            # Wait for the duration of this pass
+            time.sleep(time_per_pass)
+            
+            # Stop the measurement
+            _device.stop_measurement()
+        
+    except Exception as e:
+        raise RuntimeError(f"Error during photobleaching: {e}")
 
 
 # ============================================================================
