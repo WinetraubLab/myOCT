@@ -189,86 +189,35 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         if rotationAngle_deg != 0:
             scan_pattern.rotate(rotationAngle_deg * 3.14159265359 / 180.0)  # Convert to radians
         
-        # Create data directory
-        data_folder = os.path.join(outputFolder, 'data')
-        os.makedirs(data_folder, exist_ok=True)
+        # Allocate data buffers
+        raw_data = RawData()
         
-        # Scan B-scan by B-scan to avoid memory issues
+        # Start acquisition
         time_start = time.time()
+        _device.acquisition.start(scan_pattern, pt.AcqType.ASYNC_FINITE)
         
-        # Store first raw_data for metadata purposes
-        first_raw_data = None
+        # Get raw data from acquisition
+        _device.acquisition.get_raw_data(buffer=raw_data)
         
-        for bscan_idx in range(nYPixels):
-            # Create B-scan pattern for this slice
-            bscan_pattern = _probe.scan_pattern.create_bscan_pattern(
-                rangeX_mm,
-                nXPixels
-            )
-            
-            # Apply center offset and Y-position for this B-scan
-            # Calculate Y position for this B-scan
-            y_start = centerY_mm - rangeY_mm / 2.0
-            y_current = y_start + (bscan_idx * rangeY_mm / max(nYPixels - 1, 1))
-            bscan_pattern.shift(centerX_mm, y_current)
-            
-            # Apply rotation if specified
-            if rotationAngle_deg != 0:
-                bscan_pattern.rotate(rotationAngle_deg * 3.14159265359 / 180.0)
-            
-            # Allocate buffer for this B-scan
-            raw_data_bscan = RawData()
-            
-            # Acquire this B-scan
-            _device.acquisition.start(bscan_pattern, pt.AcqType.ASYNC_FINITE)
-            _device.acquisition.get_raw_data(buffer=raw_data_bscan)
-            _device.acquisition.stop()
-            
-            # Save first raw_data for metadata
-            if bscan_idx == 0:
-                first_raw_data = raw_data_bscan
-            
-            # Create temporary OCTFile to save this B-scan using SDK
-            temp_oct = OCTFile(filetype=pt.FileFormat.OCITY)
-            temp_oct.add_data(raw_data_bscan, f"Spectral{bscan_idx}.data")
-            
-            # Save to temporary file and extract just the spectral data
-            temp_oct_path = os.path.join(outputFolder, f'temp_bscan_{bscan_idx}.oct')
-            temp_oct.save(temp_oct_path)
-            
-            # Extract the spectral data file from the temp .oct
-            import zipfile
-            with zipfile.ZipFile(temp_oct_path, 'r') as zip_ref:
-                # Find the spectral data file in the zip
-                # SDK adds "data" prefix, so file is "dataSpectral{N}.data" in the zip
-                for name in zip_ref.namelist():
-                    if 'Spectral' in name and name.endswith('.data'):
-                        # Extract it to the data folder with correct name (without "data" prefix)
-                        spectral_data = zip_ref.read(name)
-                        spectral_filename = os.path.join(data_folder, f'Spectral{bscan_idx}.data')
-                        with open(spectral_filename, 'wb') as f:
-                            f.write(spectral_data)
-                        break  # Found and saved, exit loop
-            
-            # Clean up temporary file
-            os.remove(temp_oct_path)
-            del temp_oct
-            
-            # Clean up this B-scan's buffer (but keep first one)
-            if bscan_idx > 0:
-                del raw_data_bscan
-        
+        # Stop acquisition
+        _device.acquisition.stop()
         time_end = time.time()
         
-        # Create OCT file with proper metadata (using first B-scan dimensions)
+        # Create OCT file with proper metadata 
         oct_file = OCTFile(filetype=pt.FileFormat.OCITY)
         
-        # Process first B-scan to get calibration data
+        # Process raw data to get real (processed) data
         real_data = RealData()
         _processing.set_data_output(real_data)
-        _processing.execute(first_raw_data)
+        _processing.execute(raw_data)
         
-        # Save calibration files (Chirp.data, Offset.data, Apodization.data)
+        # Add raw spectral data
+        oct_file.add_data(raw_data, "data\\Spectral0.data")
+        
+        # Add processed data (intensity/amplitude in dB)
+        oct_file.add_data(real_data, "data\\Image.data")
+        
+        # Save calibration files (includes Chirp.data, Offset.data, Apodization.data)
         oct_file.save_calibration(_processing, 0)
         
         # Set metadata from the scan
@@ -281,27 +230,30 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         # Add comment
         oct_file.properties.set_comment("Created using Python SDK - yOCTScan3DVolume()")
         
-        # Save to temporary .oct file
+        # Save to .oct file in the output folder
         oct_file_path = os.path.join(outputFolder, 'scan.oct')
         oct_file.save(oct_file_path)
         
         # Extract .oct file for MATLAB compatibility
+        # The .oct file is a ZIP archive, we need to extract it so MATLAB can read it
         import zipfile
         with zipfile.ZipFile(oct_file_path, 'r') as zip_ref:
             zip_ref.extractall(outputFolder)
         
-        # Delete the .oct file after extraction
+        # Delete the .oct file after extraction to avoid duplication
+        # MATLAB expects to find extracted files, not the .oct archive
         os.remove(oct_file_path)
         
-        # NOTE: We don't need to split spectral files anymore because we saved them individually
-        # Each B-scan was already saved as Spectral0.data, Spectral1.data, etc.
+        # Split the concatenated Spectral0.data into individual B-scan files
+        # MATLAB expects Spectral0.data, Spectral1.data, ..., Spectral(N-1).data
+        _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels)
         
         # Fix Header.xml metadata for MATLAB compatibility
-        _fix_header_xml_for_matlab(outputFolder, first_raw_data, _probe)
+        _fix_header_xml_for_matlab(outputFolder, raw_data, _probe)
         
         # Clean up OCT file object and data buffers
         del oct_file
-        del first_raw_data
+        del raw_data
         del real_data
         del scan_pattern
         
@@ -635,31 +587,15 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
         # The actual interfSize WITHOUT apodization (for Image.SizePixel.SizeX)
         actual_interf_size = interf_size - apo_size
         
-        # Add or update DataFile elements for each Spectral{N}.data file
-        datafiles_elem = root.find('.//DataFiles')
-        if datafiles_elem is not None:
-            # Remove any existing Spectral DataFile entries
-            for datafile_elem in list(datafiles_elem.findall('.//DataFile')):
-                if datafile_elem.text and 'Spectral' in datafile_elem.text:
-                    datafiles_elem.remove(datafile_elem)
-            
-            # Add new DataFile entry for each Spectral{N}.data file
-            data_folder = os.path.join(outputFolder, 'data')
-            if os.path.exists(data_folder):
-                spectral_files = sorted([f for f in os.listdir(data_folder) 
-                                       if f.startswith('Spectral') and f.endswith('.data')])
-                for spectral_file in spectral_files:
-                    datafile_elem = ET.SubElement(datafiles_elem, 'DataFile')
-                    datafile_elem.set('Type', 'Raw')
-                    datafile_elem.set('SizeZ', str(size_z))
-                    datafile_elem.set('SizeX', str(interf_size))
-                    datafile_elem.set('SizeY', '1')  # Each file has 1 B-scan
-                    datafile_elem.set('ApoRegionEnd0', str(apo_size))
-                    datafile_elem.set('ApoRegionStart0', '0')
-                    datafile_elem.set('ScanRegionStart0', str(apo_size))
-                    datafile_elem.set('ScanRegionEnd0', str(interf_size))
-                    datafile_elem.set('BytesPerPixel', '2')
-                    datafile_elem.text = f'data\\{spectral_file}'
+        # Update DataFile element with Type="Raw" (spectral data)
+        for datafile_elem in root.findall('.//DataFile[@Type="Raw"]'):
+            datafile_elem.set('SizeZ', str(size_z))
+            datafile_elem.set('SizeX', str(interf_size))
+            datafile_elem.set('SizeY', str(final_size_y))
+            datafile_elem.set('ApoRegionEnd0', str(apo_size))
+            datafile_elem.set('ApoRegionStart0', '0')
+            datafile_elem.set('ScanRegionStart0', str(apo_size))
+            datafile_elem.set('ScanRegionEnd0', str(interf_size))
         
         # Update Image.SizePixel.SizeX (interferogram size without apodization)
         for sizex_elem in root.findall('.//Image/SizePixel/SizeX'):
