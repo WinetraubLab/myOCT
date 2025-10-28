@@ -1,3 +1,21 @@
+# Helper: run a function with a timeout watchdog
+import threading
+def _run_with_timeout(func, timeout_s):
+    result = [None]
+    exc = [None]
+    def target():
+        try:
+            result[0] = func()
+        except Exception as e:
+            exc[0] = e
+    t = threading.Thread(target=target)
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        raise TimeoutError(f"Operation timed out after {timeout_s} seconds.")
+    if exc[0]:
+        raise exc[0]
+    return result[0]
 """
 Low-level hardware functions for Thorlabs OCT system.
 This module provides direct hardware interaction functions similar to the MATLAB/C/DLL interface.
@@ -22,6 +40,11 @@ import time
 from datetime import datetime
 import configparser
 
+import time
+from xa_sdk.native_sdks.xa_sdk import XASDK
+from xa_sdk.shared.tlmc_type_structures import *
+from xa_sdk.shared.xa_error_factory import XADeviceException
+from xa_sdk.products.kst201 import KST201
 
 # Global variables to maintain state across function calls
 _oct_system = None
@@ -122,6 +145,168 @@ def yOCTScannerClose():
         del _oct_system
     
     _scanner_initialized = False
+
+
+# ============================================================================
+# STAGE CONTROL FUNCTIONS
+# ============================================================================
+
+
+# Axis to serial number mapping
+_stage_serial_numbers = {
+    'x': '26006464',
+    'y': '26006471',
+    'z': '26006482'
+}
+
+# Stage handles for each axis
+_stage_handles = {}
+
+def yOCTStageInit_1axis(axes: str) -> float:
+    """
+    Initialize stage for one axis (C++ style: axes='x','y','z'). Returns current position in mm.
+    Args:
+        axes (str): Axis character ('x', 'y', or 'z')
+    Returns:
+        float: Current position in mm
+    """
+    axis = axes.lower()
+    actuator_model = "ZST225"  
+    if axis not in _stage_serial_numbers:
+        raise ValueError(f"Invalid axis: {axes}")
+    serial_no = _stage_serial_numbers[axis]
+    try:
+        if not hasattr(XASDK, '_oct_xa_started'):
+            dll_path = os.path.dirname(__file__)
+            XASDK.try_load_library(dll_path)
+            XASDK.startup("")
+            XASDK._oct_xa_started = True
+        device = KST201(serial_no, "", TLMC_OperatingModes.Default)
+        print(f"Created device for {axis}")
+        device.set_enable_state(TLMC_ChannelEnableStates.ChannelEnabled)
+        print(f"Enabled device for {axis}")
+        supported = device.get_connected_products_supported()
+        print(f"Supported products for {axis}: {supported}")
+        device.set_connected_product(actuator_model)
+        print(f"Set connected product for {axis}")
+        HOME_TIMEOUT_S = 120
+        print(f"Homing {axis}...")
+        _run_with_timeout(lambda: device.home(TLMC_Wait.TLMC_InfiniteWait), HOME_TIMEOUT_S)
+        print(f"Homed {axis}")
+        time.sleep(2)  # Wait for position to be available
+        pos_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
+        pos_conv = device.convert_from_device_units_to_physical(
+            TLMC_ScaleType.TLMC_ScaleType_Distance,
+            pos_counts
+        )
+        pos_mm = pos_conv.converted_value
+        _stage_handles[axis] = device
+        return pos_mm
+    except XADeviceException as e:
+        if axis in _stage_handles:
+            _stage_handles[axis].close()
+            del _stage_handles[axis]
+        raise RuntimeError(f"XADeviceException during stage init: {e.error_code}")
+    except Exception as e:
+        print(f"Error initializing stage for axis '{axis}': {e}")
+        # Clean up partially created device if possible
+        if 'device' in locals():
+            try:
+                device.close()
+            except Exception:
+                pass
+        if axis in _stage_handles:
+            try:
+                _stage_handles[axis].close()
+            except Exception:
+                pass
+            del _stage_handles[axis]
+        raise
+
+
+def yOCTStageSetPosition_1axis(axis: str, position_mm: float) -> None:
+    """
+    Move stage axis to position in mm using XA SDK.
+    Args:
+        axis (str): 'x', 'y', or 'z'
+        position_mm (float): Target position in mm
+    Returns:
+        None
+    """
+    axis = axis.lower()
+    if axis not in _stage_handles:
+        raise RuntimeError(f"Stage for axis {axis} not initialized.")
+    device = _stage_handles[axis]
+    try:
+        # Validate travel limits (example: 0 to 13 mm, adjust for your actuator)
+        min_mm, max_mm = 0.0, 13.0
+        if not (min_mm <= position_mm <= max_mm):
+            raise ValueError(f"Target {position_mm} mm out of range for axis {axis} [{min_mm}, {max_mm}] mm.")
+
+        # Read current position (blocking wait) and compute delta
+        current_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
+        current_conv = device.convert_from_device_units_to_physical(
+            TLMC_ScaleType.TLMC_ScaleType_Distance,
+            current_counts
+        )
+        current_mm = current_conv.converted_value
+        delta_mm = float(position_mm) - float(current_mm)
+
+        if abs(delta_mm) < 1e-6:
+            print(f"Axis {axis} already at {position_mm} mm (within tolerance). Skipping move.")
+            return
+
+        # Use a relative move (safer than guessing absolute API signature).
+        # Convert the delta to device units and set as relative move parameter.
+        rel_param = device.convert_from_physical_to_device(
+            TLMC_ScaleType.TLMC_ScaleType_Distance,
+            TLMC_Unit.TLMC_Unit_Millimetres,
+            delta_mm
+        )
+        device.set_move_relative_params(rel_param)
+
+        MOVE_TIMEOUT_S = 60
+        print(f"Moving axis '{axis}' by {delta_mm} mm (target {position_mm} mm)...")
+        # Use the MoveMode_RelativeByProgrammedDistance mode which uses the previously set relative params
+        _run_with_timeout(lambda: device.move_relative(
+            TLMC_MoveModes.MoveMode_RelativeByProgrammedDistance,
+            TLMC_Wait.TLMC_Unused,
+            TLMC_Wait.TLMC_InfiniteWait
+        ), MOVE_TIMEOUT_S)
+
+        # Poll final position and report
+        final_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
+        final_conv = device.convert_from_device_units_to_physical(
+            TLMC_ScaleType.TLMC_ScaleType_Distance,
+            final_counts
+        )
+        final_mm = final_conv.converted_value
+        print(f"Axis {axis} moved to {final_mm:.3f} mm (target {position_mm} mm)")
+    except XADeviceException as e:
+        # Provide richer error info for diagnosis
+        err_msg = getattr(e, 'message', None) or str(e)
+        raise RuntimeError(f"XADeviceException during move: code={getattr(e,'error_code',None)} msg={err_msg}")
+    except Exception as e:
+        # Surface native/ctypes errors plainly (useful for access-violation cases)
+        raise RuntimeError(f"Error during move for axis {axis}: {e}")
+
+
+def yOCTStageClose_1axis(axis: str) -> None:
+    """
+    Close stage for one axis using XA SDK.
+    Args:
+        axis (str): 'x', 'y', or 'z'
+    Returns:
+        None
+    """
+    axis = axis.lower()
+    if axis in _stage_handles:
+        try:
+            _stage_handles[axis].disconnect()
+            _stage_handles[axis].close()
+        except Exception as e:
+            raise RuntimeError(f"Error closing stage for axis {axis}: {e}")
+        del _stage_handles[axis]
 
 
 # ============================================================================
@@ -250,4 +435,5 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
         except Exception:
             pass  # Could not set ApoVoltageY
 
-            
+
+
