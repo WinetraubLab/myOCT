@@ -184,9 +184,7 @@ def yOCTStageInit_1axis(axes: str) -> float:
         device = KST201(serial_no, "", TLMC_OperatingModes.Default)
         device.set_enable_state(TLMC_ChannelEnableStates.ChannelEnabled)
         device.set_connected_product(actuator_model)
-        HOME_TIMEOUT_S = 120
-        _run_with_timeout(lambda: device.home(TLMC_Wait.TLMC_InfiniteWait), HOME_TIMEOUT_S)
-        time.sleep(2)  # Wait for position to be available
+        
         pos_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
         pos_conv = device.convert_from_device_units_to_physical(
             TLMC_ScaleType.TLMC_ScaleType_Distance,
