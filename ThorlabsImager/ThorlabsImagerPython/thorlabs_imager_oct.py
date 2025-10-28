@@ -182,17 +182,10 @@ def yOCTStageInit_1axis(axes: str) -> float:
             XASDK.startup("")
             XASDK._oct_xa_started = True
         device = KST201(serial_no, "", TLMC_OperatingModes.Default)
-        print(f"Created device for {axis}")
         device.set_enable_state(TLMC_ChannelEnableStates.ChannelEnabled)
-        print(f"Enabled device for {axis}")
-        supported = device.get_connected_products_supported()
-        print(f"Supported products for {axis}: {supported}")
         device.set_connected_product(actuator_model)
-        print(f"Set connected product for {axis}")
         HOME_TIMEOUT_S = 120
-        print(f"Homing {axis}...")
         _run_with_timeout(lambda: device.home(TLMC_Wait.TLMC_InfiniteWait), HOME_TIMEOUT_S)
-        print(f"Homed {axis}")
         time.sleep(2)  # Wait for position to be available
         pos_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
         pos_conv = device.convert_from_device_units_to_physical(
@@ -208,7 +201,8 @@ def yOCTStageInit_1axis(axes: str) -> float:
             del _stage_handles[axis]
         raise RuntimeError(f"XADeviceException during stage init: {e.error_code}")
     except Exception as e:
-        print(f"Error initializing stage for axis '{axis}': {e}")
+        # Surface initialization errors as exceptions for caller handling
+        raise RuntimeError(f"Error initializing stage for axis '{axis}': {e}")
         # Clean up partially created device if possible
         if 'device' in locals():
             try:
@@ -253,7 +247,7 @@ def yOCTStageSetPosition_1axis(axis: str, position_mm: float) -> None:
         delta_mm = float(position_mm) - float(current_mm)
 
         if abs(delta_mm) < 1e-6:
-            print(f"Axis {axis} already at {position_mm} mm (within tolerance). Skipping move.")
+            # Already at target (within tolerance) — no action needed
             return
 
         # Use a relative move (safer than guessing absolute API signature).
@@ -266,7 +260,6 @@ def yOCTStageSetPosition_1axis(axis: str, position_mm: float) -> None:
         device.set_move_relative_params(rel_param)
 
         MOVE_TIMEOUT_S = 60
-        print(f"Moving axis '{axis}' by {delta_mm} mm (target {position_mm} mm)...")
         # Use the MoveMode_RelativeByProgrammedDistance mode which uses the previously set relative params
         _run_with_timeout(lambda: device.move_relative(
             TLMC_MoveModes.MoveMode_RelativeByProgrammedDistance,
@@ -281,7 +274,6 @@ def yOCTStageSetPosition_1axis(axis: str, position_mm: float) -> None:
             final_counts
         )
         final_mm = final_conv.converted_value
-        print(f"Axis {axis} moved to {final_mm:.3f} mm (target {position_mm} mm)")
     except XADeviceException as e:
         # Provide richer error info for diagnosis
         err_msg = getattr(e, 'message', None) or str(e)
