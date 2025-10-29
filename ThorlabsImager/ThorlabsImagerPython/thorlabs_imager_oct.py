@@ -1,21 +1,3 @@
-# Helper: run a function with a timeout watchdog
-import threading
-def _run_with_timeout(func, timeout_s):
-    result = [None]
-    exc = [None]
-    def target():
-        try:
-            result[0] = func()
-        except Exception as e:
-            exc[0] = e
-    t = threading.Thread(target=target)
-    t.start()
-    t.join(timeout_s)
-    if t.is_alive():
-        raise TimeoutError(f"Operation timed out after {timeout_s} seconds.")
-    if exc[0]:
-        raise exc[0]
-    return result[0]
 """
 Low-level hardware functions for Thorlabs OCT system.
 This module provides direct hardware interaction functions similar to the MATLAB/C/DLL interface.
@@ -39,6 +21,7 @@ import os
 import time
 from datetime import datetime
 import configparser
+import threading
 
 import time
 from xa_sdk.native_sdks.xa_sdk import XASDK
@@ -425,5 +408,21 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
         except Exception:
             pass  # Could not set ApoVoltageY
 
+def _run_with_timeout(func, timeout_s):
+    result = [None]
+    exc = [None]
+    def target():
+        try:
+            result[0] = func()
+        except Exception as e:
+            exc[0] = e
+    t = threading.Thread(target=target)
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        raise TimeoutError(f"Operation timed out after {timeout_s} seconds.")
+    if exc[0]:
+        raise exc[0]
+    return result[0]
 
 
