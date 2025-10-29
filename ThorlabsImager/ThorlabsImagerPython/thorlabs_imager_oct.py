@@ -213,8 +213,8 @@ def yOCTStageSetPosition_1axis(axis: str, position_mm: float) -> None:
         raise RuntimeError(f"Stage for axis {axis} not initialized.")
     device = _stage_handles[axis]
     try:
-        # Validate travel limits (example: 0 to 13 mm, adjust for your actuator)
-        min_mm, max_mm = 0.0, 13.0
+        # Validate travel limits (example: 0 to 25 mm, adjust for your actuator)
+        min_mm, max_mm = 0.0, 25.0
         if not (min_mm <= position_mm <= max_mm):
             raise ValueError(f"Target {position_mm} mm out of range for axis {axis} [{min_mm}, {max_mm}] mm.")
 
