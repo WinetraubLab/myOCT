@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 import configparser
 import threading
+import atexit
 
 import time
 from xa_sdk.native_sdks.xa_sdk import XASDK
@@ -45,6 +46,10 @@ _laser_on = False
 _laser_power = 0
 
 _optical_switch_on = False
+
+# Lock and flag to make shutdown/close operations idempotent and thread-safe
+_shutdown_lock = threading.Lock()
+_closed_all = False
 
 
 # ============================================================================
@@ -94,6 +99,15 @@ def yOCTScannerInit(octProbePath : str) -> None:
         _scanner_initialized = True
         
     except Exception as e:
+        # Concise cleanup of created objects
+        for obj_name in ['_processing', '_probe', '_device', '_oct_system']:
+            obj = globals().get(obj_name)
+            if obj is not None:
+                try:
+                    del obj
+                except Exception:
+                    pass
+                globals()[obj_name] = None
         _scanner_initialized = False
         raise
 
@@ -114,20 +128,18 @@ def yOCTScannerClose():
     Raises:
         None
     """
-    global _oct_system, _device, _probe, _processing, _scanner_initialized
-    
-    # Delete objects in reverse order of creation (from most derived to base)
-    # This follows the pattern shown in the official pySpectralRadar demos
-    if _processing is not None:
-        del _processing
-    if _probe is not None:
-        del _probe
-    if _device is not None:
-        del _device
-    if _oct_system is not None:
-        del _oct_system
-    
-    _scanner_initialized = False
+    global _oct_system, _device, _probe, _processing, _scanner_initialized, _shutdown_lock
+
+    with _shutdown_lock:
+        for name in ['_processing', '_probe', '_device', '_oct_system']:
+            try:
+                if globals().get(name) is not None:
+                    globals()[name] = None
+            except Exception:
+                globals()[name] = None
+
+        _scanner_initialized = False
+
 
 
 # ============================================================================
@@ -281,6 +293,73 @@ def yOCTStageClose_1axis(axis: str) -> None:
             raise RuntimeError(f"Error closing stage for axis {axis}: {e}")
         del _stage_handles[axis]
 
+
+def yOCTCloseAll():
+    """Close any open OCT resources.
+
+    This function will attempt to close all stage handles, delete OCT objects,
+    and then call the XA SDK shutdown routine if the SDK was started by us.
+    It's safe to call multiple times.
+    """
+    global _stage_handles, _oct_system, _device, _probe, _processing, _shutdown_lock, _closed_all
+
+    # Make the full cleanup idempotent and thread-safe. Use a lock and a flag so
+    # repeated calls (from finally blocks, atexit, or multiple threads) are safe.
+    with _shutdown_lock:
+        if _closed_all:
+            return
+
+        # Close all stage handles (pop items so dict is emptied safely)
+        try:
+            while _stage_handles:
+                axis, dev = _stage_handles.popitem()
+                try:
+                    dev.disconnect()
+                except Exception:
+                    pass
+                try:
+                    dev.close()
+                except Exception:
+                    pass
+        except Exception:
+            # in case _stage_handles is not a mapping or is modified concurrently
+            try:
+                for axis in list(_stage_handles.keys()):
+                    dev = _stage_handles.pop(axis, None)
+                    if dev is None:
+                        continue
+                    try:
+                        dev.disconnect()
+                    except Exception:
+                        pass
+                    try:
+                        dev.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # Clear OCT-related objects by setting globals to None (idempotent)
+        for name in ['_processing', '_probe', '_device', '_oct_system']:
+            try:
+                if globals().get(name) is not None:
+                    globals()[name] = None
+            except Exception:
+                globals()[name] = None
+
+        # Shutdown XA SDK if we started it
+        try:
+            if hasattr(XASDK, '_oct_xa_started') and XASDK._oct_xa_started:
+                try:
+                    XASDK.shutdown()
+                except Exception:
+                    pass
+                XASDK._oct_xa_started = False
+        except Exception:
+            # best-effort: ignore SDK attribute access errors during interpreter teard
+            pass
+
+        _closed_all = True
 
 # ============================================================================
 # Helper Functions  
