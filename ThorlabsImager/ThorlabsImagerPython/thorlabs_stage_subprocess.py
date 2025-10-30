@@ -30,6 +30,16 @@ def _start_server():
         raise FileNotFoundError(f"Stage server script not found: {server_script}")
     
     # Start server process
+    startupinfo = None
+    creationflags = 0
+    
+    # On Windows, hide the console window
+    if sys.platform == 'win32':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        creationflags = subprocess.CREATE_NO_WINDOW
+    
     _server_process = subprocess.Popen(
         [sys.executable, server_script],
         stdin=subprocess.PIPE,
@@ -37,6 +47,8 @@ def _start_server():
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,  # Line buffered
+        startupinfo=startupinfo,
+        creationflags=creationflags,
     )
     
     # Wait for ready signal
