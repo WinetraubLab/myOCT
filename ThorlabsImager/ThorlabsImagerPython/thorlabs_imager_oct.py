@@ -463,7 +463,14 @@ def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: i
 
 
 def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> None:
-    """Fix Header.xml metadata to ensure MATLAB compatibility."""
+    """
+    Fix Header.xml metadata for MATLAB compatibility.
+        Args:
+            outputFolder (str): Output directory containing Header.xml  
+            raw_data (RawData): Raw data object from the scan
+        Returns:
+            None
+    """
     import xml.etree.ElementTree as ET
     
     header_path = os.path.join(outputFolder, 'Header.xml')
