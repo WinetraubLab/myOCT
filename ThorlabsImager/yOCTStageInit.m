@@ -55,13 +55,12 @@ switch(octSystemName)
         % TODO: Stage functions not yet implemented in Python module
         % Placeholder values until yOCTStageInit_1axis is implemented
         if (v)
-            # fprintf('%s [GAN632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
+            % fprintf('%s [GAN632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
             fprintf('%s [GAN632] Stage control not yet implemented - using dummy values\n', datestr(datetime));
         end
         x0 = 0;
         y0 = 0;
         z0 = 0;
-        
         % Future implementation (once Python functions are ready):
         % z0 = octSystemModule.yOCTStageInit_1axis('z');
         % x0 = octSystemModule.yOCTStageInit_1axis('x');

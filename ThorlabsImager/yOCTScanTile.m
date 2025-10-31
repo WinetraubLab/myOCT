@@ -228,12 +228,7 @@ end
 % Close hardware based on system type (octSystemModule/octSystemName already loaded at line 78)
 switch(octSystemName)
     case 'gan632'
-        % GAN632: Close Python scanner and stage
-        try
-            octSystemModule.yOCTStageShutdown();  % Close all axes + cleanup
-        catch ME
-            warning('Stage shutdown failed: %s', ME.message);
-        end
+        % GAN632: Close Python scanner
         octSystemModule.yOCTScannerClose();
         
     case 'ganymede'
