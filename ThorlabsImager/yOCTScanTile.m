@@ -35,9 +35,6 @@ function [json] = yOCTScanTile(varargin)
 %% Input Parameters
 p = inputParser;
 
-% OCT System
-addParameter(p,'octSystem','Ganymede',@ischar);
-
 % Output folder
 addRequired(p,'octFolder',@ischar);
 
@@ -77,12 +74,9 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
-% Validate that octSystem is specified and valid
-validSystems = {'GAN632', 'Ganymede'};
-if ~any(strcmpi(in.octSystem, validSystems))
-    error(['Invalid OCT System: %s' newline ...
-           'Valid options are: ''GAN632'' or ''Ganymede'''], in.octSystem);
-end
+% Get OCT system from persistent library
+[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+in.octSystem = octSystemName; % Store for compatibility and logging
 
 %% Parse our parameters from probe
 in.octProbe = yOCTReadProbeIniToStruct(in.octProbePath);
@@ -175,7 +169,7 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v, octSystemModule);
+[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
 
 if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
@@ -194,14 +188,14 @@ for scanI=1:length(in.scanOrder)
     end
         
     % Move to position
-    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI), false, octSystemModule);
+    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI), false);
 
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
     % Scan
-    octScan(in, s, octSystemModule);
+    octScan(in, s, octSystemModule, octSystemName);
     
     % Unzip if needed (for Ganymede system)
     if strcmpi(in.octSystem, 'Ganymede') && in.unzipOCTFile
@@ -224,27 +218,30 @@ end
 
 % Return stage to home position
 pause(0.5);
-yOCTStageMoveTo(x0, y0, z0, false, octSystemModule);
+yOCTStageMoveTo(x0, y0, z0, false);
 pause(0.5);
 
 if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
 
-% Close hardware based on system type
-if strcmpi(in.octSystem, 'GAN632')
-    % GAN632: Close Python scanner (stage not committed yet)
-    % TODO: Uncomment when stage control is ready
-    % try
-    %     octSystemModule.yOCTStageShutdown();  % Close all axes + cleanup
-    % catch ME
-    %     error('Stage shutdown failed: %s', ME.message);
-    % end
-    octSystemModule.yOCTScannerClose();
-    
-elseif strcmpi(in.octSystem, 'Ganymede')
-    % Ganymede: Close C# DLL scanner
-    ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
+% Close hardware based on system type (octSystemModule/octSystemName already loaded at line 78)
+switch(octSystemName)
+    case 'gan632'
+        % GAN632: Close Python scanner and stage
+        try
+            octSystemModule.yOCTStageShutdown();  % Close all axes + cleanup
+        catch ME
+            warning('Stage shutdown failed: %s', ME.message);
+        end
+        octSystemModule.yOCTScannerClose();
+        
+    case 'ganymede'
+        % Ganymede: Close C# DLL scanner
+        ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
+        
+    otherwise
+        error('Unknown OCT system: %s', octSystemName);
 end
 
 % Save scan configuration parameters
@@ -254,7 +251,7 @@ json = in;
 end
 
 %% Scan Using Thorlabs
-function octScan(in, s, octSystemModule)
+function octScan(in, s, octSystemModule, octSystemName)
 
 % Define the number of retries
 numRetries = 3;
@@ -268,30 +265,35 @@ for attempt = 1:numRetries
         end
 
         % Scan based on system type
-        if strcmpi(in.octSystem, 'GAN632')
-            % GAN632: Use Python module
-            octSystemModule.yOCTScan3DVolume(...
-                in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-                in.yOffset, ... centerY [mm]
-                in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-                in.tileRangeY_mm,  ... rangeY [mm]
-                0,       ... rotationAngle [deg]
-                int32(in.nXPixelsInEachTile), int32(in.nYPixelsInEachTile), ... SizeX,sizeY [# of pixels per tile]
-                int32(in.nBScanAvg),       ... B Scan Average
-                s ... Output directory, make sure this folder doesn't exist when starting the scan
-                );
-        elseif strcmpi(in.octSystem, 'Ganymede')
-            % Ganymede: Use C# DLL
-            ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
-                in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-                in.yOffset, ... centerY [mm]
-                in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-                in.tileRangeY_mm,  ... rangeY [mm]
-                0,       ... rotationAngle [deg]
-                in.nXPixelsInEachTile, in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
-                in.nBScanAvg,       ... B Scan Average
-                s ... Output directory, make sure this folder doesn't exist when starting the scan
-                );
+        switch(octSystemName)
+            case 'gan632'
+                % GAN632: Use Python module
+                octSystemModule.yOCTScan3DVolume(...
+                    in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
+                    in.yOffset, ... centerY [mm]
+                    in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
+                    in.tileRangeY_mm,  ... rangeY [mm]
+                    0,       ... rotationAngle [deg]
+                    int32(in.nXPixelsInEachTile), int32(in.nYPixelsInEachTile), ... SizeX,sizeY [# of pixels per tile]
+                    int32(in.nBScanAvg),       ... B Scan Average
+                    s ... Output directory, make sure this folder doesn't exist when starting the scan
+                    );
+                    
+            case 'ganymede'
+                % Ganymede: Use C# DLL
+                ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
+                    in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
+                    in.yOffset, ... centerY [mm]
+                    in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
+                    in.tileRangeY_mm,  ... rangeY [mm]
+                    0,       ... rotationAngle [deg]
+                    in.nXPixelsInEachTile, in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
+                    in.nBScanAvg,       ... B Scan Average
+                    s ... Output directory, make sure this folder doesn't exist when starting the scan
+                    );
+                    
+            otherwise
+                error('Unknown OCT system: %s', octSystemName);
         end
         
         % If the function call is successful, break out of the loop
