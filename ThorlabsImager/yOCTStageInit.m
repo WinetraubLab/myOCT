@@ -1,5 +1,5 @@
 function [x0,y0,z0] = yOCTStageInit(oct2stageXYAngleDeg, ...
-    minPosition, maxPosition, v, py_oct)
+    minPosition, maxPosition, v, octSystemModule)
 % This function initializes translation stage and returns current position.
 % INPUTS:
 %   goct2stageXYAngleDeg - Optional, the rotation angle to convert between OCT
@@ -13,8 +13,8 @@ function [x0,y0,z0] = yOCTStageInit(oct2stageXYAngleDeg, ...
 %       minPosition, maxPosition are in milimiters and compared to current
 %       stage position (x,y,z). Set to 0 or NaN if an axis shouldn't move
 %   v - verbose mode, default is off
-%   py_oct - (optional) Python module handle for GAN632 system. 
-%            If empty/not provided, uses C# DLL (Ganymede) system.
+%   octSystemModule - Python module for OCT control: Empty (default) for Ganymede.
+%                     If empty/not provided, uses C# DLL (Ganymede) system. 
 % OUTPUTS: 
 %   x0,y0,z0 as defined in the coordinate systm defenition document.
 %       Units are mm
@@ -41,8 +41,8 @@ if ~exist('v','var')
     v = false;
 end
 
-if ~exist('py_oct','var')
-    py_oct = [];
+if ~exist('octSystemModule','var')
+    octSystemModule = [];
 end
 
 %% Initialization
@@ -51,8 +51,8 @@ if (v)
     fprintf('%s Initialzing Stage Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
 
-% Determine which system to use based on py_oct
-if ~isempty(py_oct)
+% Determine which system to use based on octSystemModule
+if ~isempty(octSystemModule)
     % GAN632: Python stage control (currently disabled for first release)
     if (v)
         fprintf('%s [GAN632] Stage control not active in this release. Using (0,0,0) as origin.\n', datestr(datetime));
@@ -61,11 +61,11 @@ if ~isempty(py_oct)
     y0 = 0;
     z0 = 0;
     % TODO: Uncomment when stage control is ready
-    % z0 = py_oct.yOCTStageInit_1axis('z');
-    % x0 = py_oct.yOCTStageInit_1axis('x');
-    % y0 = py_oct.yOCTStageInit_1axis('y');
+    % z0 = octSystemModule.yOCTStageInit_1axis('z');
+    % x0 = octSystemModule.yOCTStageInit_1axis('x');
+    % y0 = octSystemModule.yOCTStageInit_1axis('y');
 else
-    % Ganymede: C# DLL stage control (default when py_oct is empty)
+    % Ganymede: C# DLL stage control (default when octSystemModule is empty)
     ThorlabsImagerNETLoadLib();
     z0=ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z'); %Init stage
     x0=ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x'); %Init stage

@@ -1,4 +1,4 @@
-function yOCTStageMoveTo (newx,newy,newz,v,py_oct)
+function yOCTStageMoveTo (newx,newy,newz,v,octSystemModule)
 % Move stage to new position.
 % INPUTS:
 %   newx,newy,newz - new stage position (mm). Set to nan if you would like
@@ -7,8 +7,8 @@ function yOCTStageMoveTo (newx,newy,newz,v,py_oct)
 %       system to the stage coordinate system is done via
 %       goct2stageXYAngleDeg which is set in yOCTStageInit
 %   v - verbose mode (default is false)
-%   py_oct - (optional) Python module handle for GAN632 system.
-%            If empty/not provided, uses C# DLL (Ganymede) system.
+%   octSystemModule - Python module for OCT control: Empty (default) for Ganymede.
+%                     If empty/not provided, uses C# DLL (Ganymede) system.          
 
 %% Input checks
 if ~exist('newx','var')
@@ -27,25 +27,25 @@ if ~exist('v','var')
     v = false;
 end
 
-if ~exist('py_oct','var')
-    py_oct = [];
+if ~exist('octSystemModule','var')
+    octSystemModule = [];
 end
 
 %% Handle stage movement based on OCT system type
-if ~isempty(py_oct)
+if ~isempty(octSystemModule)
     % GAN632: Python stage control (currently disabled for first release)
     if (v)
         fprintf('[GAN632] Stage movement skipped (not active in this release).\n');
     end
     % TODO: Uncomment when stage control is ready
     % if ~isnan(newx)
-    %     py_oct.yOCTStageSetPosition_1axis('x', newx);
+    %     octSystemModule.yOCTStageSetPosition_1axis('x', newx);
     % end
     % if ~isnan(newy)
-    %     py_oct.yOCTStageSetPosition_1axis('y', newy);
+    %     octSystemModule.yOCTStageSetPosition_1axis('y', newy);
     % end
     % if ~isnan(newz)
-    %     py_oct.yOCTStageSetPosition_1axis('z', newz);
+    %     octSystemModule.yOCTStageSetPosition_1axis('z', newz);
     % end
     return; % Exit early for GAN632
 end

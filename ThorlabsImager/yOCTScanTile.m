@@ -160,27 +160,27 @@ end
 if strcmpi(in.octSystem, 'GAN632')
     
     % GAN632: Use Python SDK (pyspectralradar)
-    py_oct = yOCTImportPythonModule(...
+    octSystemModule = yOCTImportPythonModule(...
         'packageName', 'thorlabs_imager_oct', ...
         'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
         'v', v);
     
     % Close any existing scanner first (in case of previous error/incomplete run)
     try
-        py_oct.yOCTScannerClose();
+        octSystemModule.yOCTScannerClose();
     catch
         % Ignore errors if scanner wasn't initialized
     end
     
     % Init OCT using Python module
-    py_oct.yOCTScannerInit(in.octProbePath);
+    octSystemModule.yOCTScannerInit(in.octProbePath);
     
 elseif strcmpi(in.octSystem, 'Ganymede')
 
     % Ganymede: Use C# DLL (ThorlabsImagerNET)
     ThorlabsImagerNETLoadLib(); % Init library
     ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); % Init OCT
-    py_oct = []; % Not used for Ganymede
+    octSystemModule = []; % Not used for Ganymede
 
 end
 
@@ -201,7 +201,7 @@ if (v)
     fprintf('%s Initializing Stage (3 axes)...\n', datestr(datetime));
 end
 
-% Initialize stage (function auto-detects system based on py_oct)
+% Initialize stage (function auto-detects system based on octSystemModule)
 if in.isVerifyMotionRange
     rg_min = [min(in.xCenters_mm) min(in.yCenters_mm) min(in.zDepths)];
     rg_max = [max(in.xCenters_mm) max(in.yCenters_mm) max(in.zDepths)];
@@ -209,7 +209,7 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v, py_oct);
+[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v, octSystemModule);
 
 if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
@@ -228,14 +228,14 @@ for scanI=1:length(in.scanOrder)
     end
         
     % Move to position
-    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI), false, py_oct);
+    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI), false, octSystemModule);
 
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
     % Scan
-    octScan(in, s, py_oct);
+    octScan(in, s, octSystemModule);
     
     % Unzip if needed (for Ganymede system)
     if strcmpi(in.octSystem, 'Ganymede') && in.unzipOCTFile
@@ -258,7 +258,7 @@ end
 
 % Return stage to home position
 pause(0.5);
-yOCTStageMoveTo(x0, y0, z0, false, py_oct);
+yOCTStageMoveTo(x0, y0, z0, false, octSystemModule);
 pause(0.5);
 
 if (v)
@@ -270,11 +270,11 @@ if strcmpi(in.octSystem, 'GAN632')
     % GAN632: Close Python scanner (stage not committed yet)
     % TODO: Uncomment when stage control is ready
     % try
-    %     py_oct.yOCTStageShutdown();  % Close all axes + cleanup
+    %     octSystemModule.yOCTStageShutdown();  % Close all axes + cleanup
     % catch ME
     %     error('Stage shutdown failed: %s', ME.message);
     % end
-    py_oct.yOCTScannerClose();
+    octSystemModule.yOCTScannerClose();
     
 elseif strcmpi(in.octSystem, 'Ganymede')
     % Ganymede: Close C# DLL scanner
@@ -288,7 +288,7 @@ json = in;
 end
 
 %% Scan Using Thorlabs
-function octScan(in, s, py_oct)
+function octScan(in, s, octSystemModule)
 
 % Define the number of retries
 numRetries = 3;
@@ -304,7 +304,7 @@ for attempt = 1:numRetries
         % Scan based on system type
         if strcmpi(in.octSystem, 'GAN632')
             % GAN632: Use Python module
-            py_oct.yOCTScan3DVolume(...
+            octSystemModule.yOCTScan3DVolume(...
                 in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
                 in.yOffset, ... centerY [mm]
                 in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
