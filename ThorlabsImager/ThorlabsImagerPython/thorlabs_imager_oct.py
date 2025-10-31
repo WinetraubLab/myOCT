@@ -391,15 +391,16 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
         except Exception:
             pass  # Could not set ApoVoltageY
 
-    def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
-        """Split concatenated Spectral0.data into individual B-scan files for MATLAB compatibility.
+def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
+    """
+    Split concatenated Spectral0.data into individual B-scan files for MATLAB compatibility.
         Args:
             outputFolder (str): Output directory containing Header.xml and data/Spectral0.data
             nYPixels (int): Number of B-scans in the volume
             nXPixels (int): Number of pixels in the X direction
         Returns:
-            None    
-        """ 
+            None 
+""" 
     import xml.etree.ElementTree as ET
     
     header_path = os.path.join(outputFolder, 'Header.xml')
@@ -534,5 +535,3 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
         
     except:
         pass  # If fixing fails, continue anyway
-
-            
