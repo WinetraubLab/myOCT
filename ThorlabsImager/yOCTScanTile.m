@@ -141,16 +141,7 @@ if in.skipHardware
     return;
 end
 
-if (v)
-    fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
-end
- 
-ThorlabsImagerNETLoadLib(); % Init library
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); % Init OCT
-
-if (v)
-    fprintf('%s Initialzing Hardware Completed\n',datestr(datetime));
-end
+yOCTScannerInit(in.octProbePath,v); % Init OCT
 
 % Make sure depths are ok for working distance's sake 
 if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
