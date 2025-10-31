@@ -14,6 +14,7 @@ function [json] = yOCTScanTile(varargin)
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used.
 %   octProbeFOV_mm          []              Keep empty to use FOV frome probe, or set to override probe's value.
+%   octSystem               (required)      OCT system type: 'GAN632' (Python SDK) or 'Ganymede' (C# DLL)
 %   pixelSize_um            1               What is the pixel size (in xy plane).
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan.
 %   tissueRefractiveIndex   1.4             Refractive index of tissue.
@@ -33,6 +34,9 @@ function [json] = yOCTScanTile(varargin)
 
 %% Input Parameters
 p = inputParser;
+
+% OCT System
+addParameter(p,'octSystem','',@ischar);
 
 % Output folder
 addRequired(p,'octFolder',@ischar);
@@ -71,6 +75,13 @@ in.version = 1.1; % Version of this file
 
 if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
+end
+
+% Validate that octSystem is specified and valid
+validSystems = {'GAN632', 'Ganymede'};
+if ~any(strcmpi(in.octSystem, validSystems))
+    error(['Invalid OCT System: %s' newline ...
+           'Valid options are: ''GAN632'' or ''Ganymede'''], in.octSystem);
 end
 
 %% Parse our parameters from probe
@@ -145,13 +156,39 @@ if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
  
-ThorlabsImagerNETLoadLib(); % Init library
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); % Init OCT
+%% Initialize OCT Scanner based on system type
+if strcmpi(in.octSystem, 'GAN632')
+    
+    % GAN632: Use Python SDK (pyspectralradar)
+    py_oct = yOCTImportPythonModule(...
+        'packageName', 'thorlabs_imager_oct', ...
+        'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
+        'v', v);
+    
+    % Close any existing scanner first (in case of previous error/incomplete run)
+    try
+        py_oct.yOCTScannerClose();
+    catch
+        % Ignore errors if scanner wasn't initialized
+    end
+    
+    % Init OCT using Python module
+    py_oct.yOCTScannerInit(in.octProbePath);
+    
+elseif strcmpi(in.octSystem, 'Ganymede')
+
+    % Ganymede: Use C# DLL (ThorlabsImagerNET)
+    ThorlabsImagerNETLoadLib(); % Init library
+    ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); % Init OCT
+    py_oct = []; % Not used for Ganymede
+
+end
 
 if (v)
     fprintf('%s Initialzing Hardware Completed\n',datestr(datetime));
 end
 
+%% Check working distance
 % Make sure depths are ok for working distance's sake 
 if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         - 0.5) % Buffer
@@ -159,7 +196,12 @@ if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         min(in.zDepths), max(in.zDepths), objectiveWorkingDistance);
 end
 
-% Init stage and verify range if needed
+%% Initialize Stage
+if (v)
+    fprintf('%s Initializing Stage (3 axes)...\n', datestr(datetime));
+end
+
+% Initialize stage (function auto-detects system based on py_oct)
 if in.isVerifyMotionRange
     rg_min = [min(in.xCenters_mm) min(in.yCenters_mm) min(in.zDepths)];
     rg_max = [max(in.xCenters_mm) max(in.yCenters_mm) max(in.zDepths)];
@@ -167,10 +209,10 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
+[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v, py_oct);
 
 if (v)
-    fprintf('%s Done\n',datestr(datetime));
+    fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
 end
 
 %% Make sure folder is empty
@@ -186,17 +228,20 @@ for scanI=1:length(in.scanOrder)
     end
         
     % Move to position
-    yOCTStageMoveTo(x0+in.gridXcc(scanI),y0+in.gridYcc(scanI),z0+in.gridZcc(scanI));
+    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI), false, py_oct);
 
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
-    octScan(in,s);
+    % Scan
+    octScan(in, s, py_oct);
     
-	if in.unzipOCTFile
-		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
-	end
+    % Unzip if needed (for Ganymede system)
+    if strcmpi(in.octSystem, 'Ganymede') && in.unzipOCTFile
+        yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
+    end
+    % NOTE: GAN632 Python module already extracts and splits files automatically
     
     if(scanI==1)
         [OCTSystem] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(s);
@@ -211,15 +256,30 @@ if (v)
     fprintf('%s Homing...\n', datestr(datetime));
 end
 
-% Home 
+% Return stage to home position
 pause(0.5);
-yOCTStageMoveTo(x0,y0,z0);
+yOCTStageMoveTo(x0, y0, z0, false, py_oct);
 pause(0.5);
 
 if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
+
+% Close hardware based on system type
+if strcmpi(in.octSystem, 'GAN632')
+    % GAN632: Close Python scanner (stage not committed yet)
+    % TODO: Uncomment when stage control is ready
+    % try
+    %     py_oct.yOCTStageShutdown();  % Close all axes + cleanup
+    % catch ME
+    %     error('Stage shutdown failed: %s', ME.message);
+    % end
+    py_oct.yOCTScannerClose();
+    
+elseif strcmpi(in.octSystem, 'Ganymede')
+    % Ganymede: Close C# DLL scanner
+    ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
+end
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
@@ -228,7 +288,7 @@ json = in;
 end
 
 %% Scan Using Thorlabs
-function octScan(in,s)
+function octScan(in, s, py_oct)
 
 % Define the number of retries
 numRetries = 3;
@@ -236,22 +296,37 @@ pauseDuration = 1; % Duration to pause (in seconds) between retries
 
 for attempt = 1:numRetries
     try
-        % Rmove folder if it exists
+        % Remove folder if it exists
         if exist(s,'dir')
             rmdir(s, 's');
         end
 
-        % Scan
-        ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
-            in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-            in.yOffset, ... centerY [mm]
-            in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-            in.tileRangeY_mm,  ... rangeY [mm]
-            0,       ... rotationAngle [deg]
-            in.nXPixelsInEachTile,in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
-            in.nBScanAvg,       ... B Scan Average
-            s ... Output directory, make sure this folder doesn't exist when starting the scan
-            );
+        % Scan based on system type
+        if strcmpi(in.octSystem, 'GAN632')
+            % GAN632: Use Python module
+            py_oct.yOCTScan3DVolume(...
+                in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
+                in.yOffset, ... centerY [mm]
+                in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
+                in.tileRangeY_mm,  ... rangeY [mm]
+                0,       ... rotationAngle [deg]
+                int32(in.nXPixelsInEachTile), int32(in.nYPixelsInEachTile), ... SizeX,sizeY [# of pixels per tile]
+                int32(in.nBScanAvg),       ... B Scan Average
+                s ... Output directory, make sure this folder doesn't exist when starting the scan
+                );
+        elseif strcmpi(in.octSystem, 'Ganymede')
+            % Ganymede: Use C# DLL
+            ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
+                in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
+                in.yOffset, ... centerY [mm]
+                in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
+                in.tileRangeY_mm,  ... rangeY [mm]
+                0,       ... rotationAngle [deg]
+                in.nXPixelsInEachTile, in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
+                in.nBScanAvg,       ... B Scan Average
+                s ... Output directory, make sure this folder doesn't exist when starting the scan
+                );
+        end
         
         % If the function call is successful, break out of the loop
         break;
@@ -268,5 +343,4 @@ for attempt = 1:numRetries
         end
     end
 end
-
 end
