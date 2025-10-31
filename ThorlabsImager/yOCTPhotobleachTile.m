@@ -292,21 +292,14 @@ if (json.skipHardware)
     return;
 end
 
-%% Initialize Hardware Library
 
-if (v)
-    fprintf('%s Initialzing Hardware Dll Library... \n\t(if Matlab is taking more than 2 minutes to finish this step, restart matlab and try again)\n',datestr(datetime));
-end
-ThorlabsImagerNETLoadLib(); %Init library
-if (v)
-    fprintf('%s Done Hardware Dll Init.\n',datestr(datetime));
-end
+%% Initialize Hardware
 
-%% Initialize Translation Stage
+% OCT Scanner
+yOCTScannerInit(in.octProbePath,v);
+
+% Translational stage
 [x0,y0,z0] = yOCTStageInit(json.oct2stageXYAngleDeg, NaN, NaN, v);
-
-%Initialize scanner
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(json.octProbePath); %Init OCT
 
 if (v)
     fprintf('%s Initialzing Motorized Translation Stage Hardware Completed\n',datestr(datetime));

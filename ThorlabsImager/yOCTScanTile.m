@@ -152,41 +152,7 @@ if in.skipHardware
     return;
 end
 
-if (v)
-    fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
-end
- 
-%% Initialize OCT Scanner based on system type
-if strcmpi(in.octSystem, 'GAN632')
-    
-    % GAN632: Use Python SDK (pyspectralradar)
-    octSystemModule = yOCTImportPythonModule(...
-        'packageName', 'thorlabs_imager_oct', ...
-        'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
-        'v', v);
-    
-    % Close any existing scanner first (in case of previous error/incomplete run)
-    try
-        octSystemModule.yOCTScannerClose();
-    catch
-        % Ignore errors if scanner wasn't initialized
-    end
-    
-    % Init OCT using Python module
-    octSystemModule.yOCTScannerInit(in.octProbePath);
-    
-elseif strcmpi(in.octSystem, 'Ganymede')
-
-    % Ganymede: Use C# DLL (ThorlabsImagerNET)
-    ThorlabsImagerNETLoadLib(); % Init library
-    ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); % Init OCT
-    octSystemModule = []; % Not used for Ganymede
-
-end
-
-if (v)
-    fprintf('%s Initialzing Hardware Completed\n',datestr(datetime));
-end
+yOCTScannerInit(in.octProbePath,v); % Init OCT
 
 %% Check working distance
 % Make sure depths are ok for working distance's sake 

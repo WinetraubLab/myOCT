@@ -41,6 +41,9 @@ skipScanning = false;
 % Time interval
 scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
 
+%% Load hardware
+yOCTLoadHardwareLib('Ganymede',skipScanning)
+
 %% Compute scanning parameters
 
 % Check that sufficient ammount of gel is above the tissue for proper focus

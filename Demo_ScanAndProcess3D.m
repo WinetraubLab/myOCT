@@ -36,6 +36,9 @@ output_folder = '\';
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
 
+%% Load hardware
+yOCTLoadHardwareLib('Ganymede',skipScanning)
+
 %% Compute scanning parameters
 
 % Check that sufficient ammount of gel is above the tissue for proper focus

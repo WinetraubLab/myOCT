@@ -22,6 +22,9 @@ tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results.
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipHardware = false;
 
+%% Load hardware
+yOCTLoadHardwareLib('Ganymede',skipScanning)
+
 %% Compute scanning parameters
 
 % Estimate dispersionQuadraticTerm and focusPositionInImageZpix using the
