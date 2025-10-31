@@ -14,7 +14,7 @@ function [json] = yOCTScanTile(varargin)
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used.
 %   octProbeFOV_mm          []              Keep empty to use FOV frome probe, or set to override probe's value.
-%   octSystem               (required)      OCT system type: 'GAN632' (Python SDK) or 'Ganymede' (C# DLL)
+%   octSystem               'Ganymede'      OCT system name ('Ganymede' or 'Gan632'). Default: 'Ganymede'.
 %   pixelSize_um            1               What is the pixel size (in xy plane).
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan.
 %   tissueRefractiveIndex   1.4             Refractive index of tissue.
@@ -36,7 +36,7 @@ function [json] = yOCTScanTile(varargin)
 p = inputParser;
 
 % OCT System
-addParameter(p,'octSystem','',@ischar);
+addParameter(p,'octSystem','Ganymede',@ischar);
 
 % Output folder
 addRequired(p,'octFolder',@ischar);

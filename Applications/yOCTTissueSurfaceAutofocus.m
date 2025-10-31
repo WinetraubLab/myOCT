@@ -2,6 +2,8 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 % This function uses the OCT to scan and identify the tissue surface from 
 % the OCT image, evaluates focus, and (if requested) automatically moves 
 % the Z-stage to bring the surface into focus.
+% INPUTS:
+%   octSystem: OCT system name ('Ganymede' or 'Gan632'). Default: 'Ganymede'.
 %   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
 %   pixelSize_um: Pixel resolution for this analysis, default: 25 um.
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
@@ -31,7 +33,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 
 %% Parse inputs
 p = inputParser;
-addParameter(p,'octSystem','',@ischar);
+addParameter(p,'octSystem','Ganymede',@ischar);
 addParameter(p,'xRange_mm',[-1 1]);
 addParameter(p,'yRange_mm',[-1 1]);
 addParameter(p,'pixelSize_um',25);

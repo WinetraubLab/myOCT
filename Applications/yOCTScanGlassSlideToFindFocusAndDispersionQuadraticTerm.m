@@ -6,6 +6,7 @@ function [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
 % is more or less in focus. Then let it run.
 % 
 % INPUTS:
+%   octSystem: OCT system name ('Ganymede' or 'Gan632'). Default: 'Ganymede'.
 %   octProbePath: path to OCT probe
 %   dispersionQuadraticTermInitialGuess: initial guess for dispersion
 %       value. Units: [nm^2/rad]
@@ -20,7 +21,7 @@ function [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
 %% Parse inputs
 
 p = inputParser;
-addParameter(p,'octSystem','',@ischar);
+addParameter(p,'octSystem','Ganymede',@ischar);
 addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'dispersionQuadraticTermInitialGuess',-1.482e8,@isnumeric);
 addParameter(p,'focusPositionInImageZpixInitialGuess',400,@isnumeric);
