@@ -23,7 +23,6 @@ if ~skipHardware
     switch(octSystemName)
         case 'gan632'
             % GAN632: Use Python SDK (pyspectralradar)
-            error('Not implemented yet');
         
             % Close any existing scanner first (in case of previous error/incomplete run)
             try

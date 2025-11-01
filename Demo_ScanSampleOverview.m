@@ -6,6 +6,7 @@
 yOCTSetLibraryPath(); % Set path
 
 %% Inputs
+octSystem = 'Ganymede'; % Use either 'Gan632' or 'Ganymede' depending on your OCT system
 
 % Define the scan
 sampleSize_mm = 2; % Will scan from -sampleSize_mm to +sampleSize_mm
@@ -23,7 +24,7 @@ tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results.
 skipHardware = false;
 
 %% Load hardware
-yOCTLoadHardwareLib('Ganymede',skipScanning)
+yOCTLoadHardwareLib(octSystem, skipHardware)
 
 %% Compute scanning parameters
 

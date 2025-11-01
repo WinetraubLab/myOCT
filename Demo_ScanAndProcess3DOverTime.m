@@ -9,6 +9,7 @@
 yOCTSetLibraryPath(); % Set path
 
 %% Inputs
+octSystem = 'Ganymede'; % Use either 'Gan632' or 'Ganymede' depending on your OCT system
 
 % Define the 3D Volume
 pixel_size_um = 1; % x-y Pixel size in microns
@@ -42,7 +43,7 @@ skipScanning = false;
 scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
 
 %% Load hardware
-yOCTLoadHardwareLib('Ganymede',skipScanning)
+yOCTLoadHardwareLib(octSystem, skipScanning)
 
 %% Compute scanning parameters
 
