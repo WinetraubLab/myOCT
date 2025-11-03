@@ -205,56 +205,47 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         
         # Create OCT file with proper metadata 
         oct_file = OCTFile(filetype=pt.FileFormat.OCITY)
-        
-        # Process raw data to get real (processed) data
-        real_data = RealData()
-        _processing.set_data_output(real_data)
-        _processing.execute(raw_data)
-        
-        # Add raw spectral data
+
+        # Add raw data to OCT file
         oct_file.add_data(raw_data, "data\\Spectral0.data")
-        
-        # Add processed data (intensity/amplitude in dB)
-        oct_file.add_data(real_data, "data\\Image.data")
-        
-        # Save calibration files (includes Chirp.data, Offset.data, Apodization.data)
+
+        # Save calibration files: Chirp and Offset
         oct_file.save_calibration(_processing, 0)
-        
+
         # Set metadata from the scan
         oct_file.set_metadata(_device, _processing, _probe, scan_pattern)
-        
+
         # Set acquisition time
         acq_time = time_end - time_start
         oct_file.properties.set_scan_time_sec(acq_time)
-        
+
         # Add comment
         oct_file.properties.set_comment("Created using Python SDK - yOCTScan3DVolume()")
-        
+
         # Save to .oct file in the output folder
         oct_file_path = os.path.join(outputFolder, 'scan.oct')
         oct_file.save(oct_file_path)
-        
+
         # Extract .oct file for MATLAB compatibility
         # The .oct file is a ZIP archive, we need to extract it so MATLAB can read it
         import zipfile
         with zipfile.ZipFile(oct_file_path, 'r') as zip_ref:
             zip_ref.extractall(outputFolder)
-        
+
         # Delete the .oct file after extraction to avoid duplication
         # MATLAB expects to find extracted files, not the .oct archive
         os.remove(oct_file_path)
-        
+
         # Split the concatenated Spectral0.data into individual B-scan files
         # MATLAB expects Spectral0.data, Spectral1.data, ..., Spectral(N-1).data
         _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels)
-        
+
         # Fix Header.xml metadata for MATLAB compatibility
         _fix_header_xml_for_matlab(outputFolder, raw_data, _probe)
-        
+
         # Clean up OCT file object and data buffers
         del oct_file
         del raw_data
-        del real_data
         del scan_pattern
         
     except Exception as e:
