@@ -195,7 +195,7 @@ for scanI=1:length(in.scanOrder)
     s = awsModifyPathForCompetability(s);
 
     % Scan
-    octScan(in, s, octSystemModule, octSystemName);
+    octScan(in, s);
     
     % Unzip if needed (for Ganymede system)
     if strcmpi(in.octSystem, 'Ganymede') && in.unzipOCTFile
@@ -211,7 +211,6 @@ for scanI=1:length(in.scanOrder)
 end
 
 %% Finalize
-
 if (v)
     fprintf('%s Homing...\n', datestr(datetime));
 end
@@ -225,15 +224,15 @@ if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
 
-% Close hardware based on system type (octSystemModule/octSystemName already loaded at line 78)
+% Close hardware based on system type
 switch(octSystemName)
-    case 'gan632'
-        % GAN632: Close Python scanner
-        octSystemModule.yOCTScannerClose();
-        
     case 'ganymede'
-        % Ganymede: Close C# DLL scanner
-        ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
+        % Ganymede: C# DLL
+        ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+        
+    case 'gan632'
+        % Gan632: Python SDK
+        octSystemModule.yOCTScannerClose();
         
     otherwise
         error('Unknown OCT system: %s', octSystemName);
@@ -245,8 +244,8 @@ json = in;
 
 end
 
-%% Scan Using Thorlabs
-function octScan(in, s, octSystemModule, octSystemName)
+%% Scan using Thorlabs
+function octScan(in, s)
 
 % Define the number of retries
 numRetries = 3;
