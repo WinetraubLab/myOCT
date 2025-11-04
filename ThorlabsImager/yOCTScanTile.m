@@ -14,7 +14,7 @@ function [json] = yOCTScanTile(varargin)
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used.
 %   octProbeFOV_mm          []              Keep empty to use FOV frome probe, or set to override probe's value.
-%   octSystem               'Ganymede'      OCT system name ('Ganymede' or 'Gan632'). Default: 'Ganymede'.
+%   octSystem               'Ganymede'      OCT system name ('Ganymede' or 'Gan632').
 %   pixelSize_um            1               What is the pixel size (in xy plane).
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan.
 %   tissueRefractiveIndex   1.4             Refractive index of tissue.
@@ -260,36 +260,7 @@ for attempt = 1:numRetries
         end
 
         % Scan based on system type
-        switch(octSystemName)
-            case 'gan632'
-                % GAN632: Use Python module
-                octSystemModule.yOCTScan3DVolume(...
-                    in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-                    in.yOffset, ... centerY [mm]
-                    in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-                    in.tileRangeY_mm,  ... rangeY [mm]
-                    0,       ... rotationAngle [deg]
-                    int32(in.nXPixelsInEachTile), int32(in.nYPixelsInEachTile), ... SizeX,sizeY [# of pixels per tile]
-                    int32(in.nBScanAvg),       ... B Scan Average
-                    s ... Output directory, make sure this folder doesn't exist when starting the scan
-                    );
-                    
-            case 'ganymede'
-                % Ganymede: Use C# DLL
-                ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
-                    in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-                    in.yOffset, ... centerY [mm]
-                    in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-                    in.tileRangeY_mm,  ... rangeY [mm]
-                    0,       ... rotationAngle [deg]
-                    in.nXPixelsInEachTile, in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
-                    in.nBScanAvg,       ... B Scan Average
-                    s ... Output directory, make sure this folder doesn't exist when starting the scan
-                    );
-                    
-            otherwise
-                error('Unknown OCT system: %s', octSystemName);
-        end
+        yOCTScan3DVolume(in, s);
         
         % If the function call is successful, break out of the loop
         break;

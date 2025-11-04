@@ -26,7 +26,7 @@ if ~exist('v','var')
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
 
 %% Compute current and new coordinates in both OCT and stage coordinate systems
 global gStageCurrentStagePosition_StageCoordinates;
@@ -54,33 +54,39 @@ if (v)
 end
 
 %% Move stage - system-specific commands
-switch(octSystemName)
-    case 'gan632'
-        % GAN632: Python stage control
-        % TODO: Stage movement not yet implemented in Python module
-        % Skipping actual movement until yOCTStageSetPosition_1axis is available
-        if (v)
-            fprintf('[GAN632] Stage movement skipped - functions not yet implemented\n');
-        end
-        
-        % Future implementation:
-        % s = 'xyz';
-        % for i=1:3
-        %     if abs(d_(i)) > 0
-        %         octSystemModule.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
-        %     end
-        % end
-        
-    case 'ganymede'
-        % Ganymede: C# DLL stage control
-        s = 'xyz';
-        for i=1:3
-            if abs(d_(i)) > 0 % Move if motion of more than epsilon is needed 
-                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),gStageCurrentStagePosition_StageCoordinates(i)); %Movement [mm]
+if ~skipHardware
+    switch(octSystemName)
+        case 'gan632'
+            % GAN632: Python stage control
+            % TODO: Stage movement not yet implemented in Python module
+            % Skipping actual movement until yOCTStageSetPosition_1axis is available
+            if (v)
+                fprintf('[GAN632] Stage movement skipped - functions not yet implemented\n');
             end
-        end
-        
-    otherwise
-        error('Unknown OCT system: %s', octSystemName);
+            
+            % Future implementation:
+            % s = 'xyz';
+            % for i=1:3
+            %     if abs(d_(i)) > 0
+            %         octSystemModule.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
+            %     end
+            % end
+            
+        case 'ganymede'
+            % Ganymede: C# DLL stage control
+            s = 'xyz';
+            for i=1:3
+                if abs(d_(i)) > 0 % Move if motion of more than epsilon is needed 
+                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),gStageCurrentStagePosition_StageCoordinates(i)); %Movement [mm]
+                end
+            end
+            
+        otherwise
+            error('Unknown OCT system: %s', octSystemName);
+    end
+else
+    if (v)
+        fprintf('Stage movement skipped (skipHardware = true)\n');
+    end
 end
 

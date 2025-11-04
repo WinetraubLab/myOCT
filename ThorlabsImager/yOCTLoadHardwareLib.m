@@ -3,7 +3,7 @@ function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(oc
 %
 %   INPUTS:
 %       octSystemName: Name of the OCT system to load. 
-%           Supported values: 'Ganymede', 'GAN632'. Keep empty if library
+%           Supported values: 'Ganymede', 'Gan632'. Keep empty if library
 %           is already loaded.
 %       skipHardware: When set to true, will skip hardware.
 %
@@ -32,10 +32,10 @@ if ~exist('skipHardware','var')
     skipHardware = false;
 end
 
-validSystems = {'GAN632', 'Ganymede'};
+validSystems = {'Ganymede', 'Gan632'};
 if ~any(strcmpi(octSystemName, validSystems))
     error(['Invalid OCT System: %s' newline ...
-           'Valid options are: ''GAN632'' or ''Ganymede'''], octSystemName);
+           'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemName);
 end
 
 %% Skip hardware path

@@ -46,35 +46,46 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
 
-% Determine which system to use based on octSystemName
-switch(octSystemName)
-    case 'gan632'
-        % GAN632: Python stage control
-        % TODO: Stage functions not yet implemented in Python module
-        % Placeholder values until yOCTStageInit_1axis is implemented
-        if (v)
-            % fprintf('%s [GAN632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
-            fprintf('%s [GAN632] Stage control not yet implemented - using dummy values\n', datestr(datetime));
-        end
-        x0 = 0;
-        y0 = 0;
-        z0 = 0;
-        % Future implementation (once Python functions are ready):
-        % z0 = octSystemModule.yOCTStageInit_1axis('z');
-        % x0 = octSystemModule.yOCTStageInit_1axis('x');
-        % y0 = octSystemModule.yOCTStageInit_1axis('y');
-        
-    case 'ganymede'
-        % Ganymede: C# DLL stage control
-        ThorlabsImagerNETLoadLib();
-        z0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z');
-        x0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x');
-        y0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y');
-        
-    otherwise
-        error('Unknown OCT system: %s', octSystemName);
+% Initialize position values
+if ~skipHardware
+    % Determine which system to use based on octSystemName
+    switch(octSystemName)
+        case 'ganymede'
+            % Ganymede: C# DLL stage control
+            ThorlabsImagerNETLoadLib();
+            z0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z');
+            x0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x');
+            y0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y');
+            
+        case 'gan632'
+            % GAN632: Python stage control
+            % TODO: Stage functions not yet implemented in Python module
+            % Placeholder values until yOCTStageInit_1axis is implemented
+            if (v)
+                % fprintf('%s [GAN632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
+                fprintf('%s [GAN632] Stage control not yet implemented - using dummy values\n', datestr(datetime));
+            end
+            x0 = 0;
+            y0 = 0;
+            z0 = 0;
+            % Future implementation (once Python functions are ready):
+            % z0 = octSystemModule.yOCTStageInit_1axis('z');
+            % x0 = octSystemModule.yOCTStageInit_1axis('x');
+            % y0 = octSystemModule.yOCTStageInit_1axis('y');
+            
+        otherwise
+            error('Unknown OCT system: %s', octSystemName);
+    end
+else
+    % Skip hardware initialization - use simulation starting position
+    if (v)
+        fprintf('%s Stage initialization skipped (skipHardware = true), using origin (0,0,0)\n', datestr(datetime));
+    end
+    x0 = 0;
+    y0 = 0;
+    z0 = 0;
 end
 
 global goct2stageXYAngleDeg
@@ -101,47 +112,54 @@ if (v)
 end
 
 % Perform motion range test based on system type
-switch(octSystemName)
-    case 'gan632'
-        % GAN632: Use Python module for motion test
-        % TODO: Implement once yOCTStageSetPosition_1axis is available
-        % Future implementation:
-        % axes_list = 'xyz';
-        % for i=1:3
-        %     if (minPosition(i) ~= maxPosition(i))
-                % Test minimum position
-        %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
-        %             gStageCurrentStagePosition_StageCoordinates(i) + minPosition(i));
-        %         pause(0.5);
-        %         % Test maximum position
-        %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
-        %             gStageCurrentStagePosition_StageCoordinates(i) + maxPosition(i));
-        %         pause(0.5);
-        %         % Return home
-        %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
-        %             gStageCurrentStagePosition_StageCoordinates(i));
-        %         pause(0.5);
-        %     end
-        % end
-        
-    case 'ganymede'
-        % Ganymede: Use C# DLL for motion test
-        s = 'xyz';
-        for i=1:length(s)
-            if (minPosition(i) ~= maxPosition(i))
-                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                    gStageCurrentStagePosition_StageCoordinates(i)+minPosition(i));
-                pause(0.5);
-                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                    gStageCurrentStagePosition_StageCoordinates(i)+maxPosition(i));
-                pause(0.5);
-                
-                % Return home
-                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                    gStageCurrentStagePosition_StageCoordinates(i));
+if ~skipHardware
+    switch(octSystemName)
+        case 'ganymede'
+            % Ganymede: Use C# DLL for motion test
+            s = 'xyz';
+            for i=1:length(s)
+                if (minPosition(i) ~= maxPosition(i))
+                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+                        gStageCurrentStagePosition_StageCoordinates(i)+minPosition(i));
+                    pause(0.5);
+                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+                        gStageCurrentStagePosition_StageCoordinates(i)+maxPosition(i));
+                    pause(0.5);
+                    
+                    % Return home
+                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+                        gStageCurrentStagePosition_StageCoordinates(i));
+                end
             end
-        end
-        
-    otherwise
-        error('Unknown OCT system: %s', octSystemName);
+            
+        case 'gan632'
+            % GAN632: Use Python module for motion test
+            % TODO: Implement once yOCTStageSetPosition_1axis is available
+            % Future implementation:
+            % axes_list = 'xyz';
+            % for i=1:3
+            %     if (minPosition(i) ~= maxPosition(i))
+                    % Test minimum position
+            %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
+            %             gStageCurrentStagePosition_StageCoordinates(i) + minPosition(i));
+            %         pause(0.5);
+            %         % Test maximum position
+            %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
+            %             gStageCurrentStagePosition_StageCoordinates(i) + maxPosition(i));
+            %         pause(0.5);
+            %         % Return home
+            %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
+            %             gStageCurrentStagePosition_StageCoordinates(i));
+            %         pause(0.5);
+            %     end
+            % end
+            
+        otherwise
+            error('Unknown OCT system: %s', octSystemName);
+    end
+else
+    % Skip motion range test in simulation mode
+    if (v)
+        fprintf('%s Motion Range Test skipped (skipHardware = true)\n', datestr(datetime));
+    end
 end
