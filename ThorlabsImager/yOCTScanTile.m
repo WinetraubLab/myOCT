@@ -210,7 +210,7 @@ pause(0.5);
 if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
+yOCTScannerClose(v);
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
