@@ -3,30 +3,20 @@ function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(oc
 %
 %   INPUTS:
 %       octSystemName: Name of the OCT system to load. 
-%           Supported values: 'Ganymede', 'GAN632'. Keep empty if library
-%           is already loaded.
-%       skipHardware: When set to true, will skip hardware.
-%       v: Verbose mode. Default is false.
+%           Supported values: 'Ganymede', 'Gan632'. 
+%           Default: '' (empty, only valid if library is already loaded)
+%       skipHardware: When set to true, will skip hardware initialization.
+%           Default: false
+%       v: Verbose mode. 
+%           Default: false
 %
 %   OUTPUT:
 %       octSystemModule - Handle or structure representing the loaded 
 %                         hardware interface library.
 
-%% Store module in a global varible 
-persistent gOCTSystemModule;
-persistent gOCTSystemName;
-persistent gSkipHardware;
-
-if ~isempty(gOCTSystemName)
-    octSystemModule = gOCTSystemModule;
-    octSystemName = gOCTSystemName;
-    skipHardware = gSkipHardware;
-    return;
-end
-
 %% Input checks
-if ~exist('octSystemName','var') || isempty('octSystemName')
-    error("yOCTLoadHardwareLib must be called with a valid 'octSystemName' the first time it is executed.");
+if ~exist('octSystemName','var')
+    octSystemName = '';
 end
 
 if ~exist('skipHardware','var')
@@ -35,6 +25,24 @@ end
 
 if ~exist('v','var')
     v = false;
+end
+
+%% Store module in a global varible 
+persistent gOCTSystemModule;
+persistent gOCTSystemName;
+persistent gSkipHardware;
+
+%% Check if library is already loaded (early return)
+if ~isempty(gOCTSystemName)
+    octSystemModule = gOCTSystemModule;
+    octSystemName = gOCTSystemName;
+    skipHardware = gSkipHardware;
+    return;
+end
+
+%% Validate inputs that are only needed for first-time load
+if isempty(octSystemName)
+    error("yOCTLoadHardwareLib must be called with a valid 'octSystemName' the first time it is executed.");
 end
 
 validSystems = {'Ganymede', 'Gan632'};
