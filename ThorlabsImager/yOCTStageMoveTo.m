@@ -25,7 +25,10 @@ if ~exist('v','var')
     v = false;
 end
 
-%% Compute current and new coordinates in both OCT and stage coordinate sysetms
+% Load library (should already be loaded to memory)
+[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
+
+%% Compute current and new coordinates in both OCT and stage coordinate systems
 global gStageCurrentStagePosition_StageCoordinates;
 global gStageCurrentStagePosition_OCTCoordinates;
 
@@ -39,12 +42,12 @@ c = cos(goct2stageXYAngleDeg*pi/180);
 s = sin(goct2stageXYAngleDeg*pi/180);
 d_ = [c -s 0; s c 0; 0 0 1]*d;
 
-% Update
+% Update global position trackers
 gStageCurrentStagePosition_OCTCoordinates = gStageCurrentStagePosition_OCTCoordinates + d;
 gStageCurrentStagePosition_StageCoordinates = gStageCurrentStagePosition_StageCoordinates + d_;
 
 
-%% Update position and move
+%% Display new position
 
 if (v)
     fprintf('New Stage Position. ');
@@ -52,10 +55,32 @@ if (v)
     fprintf('At OCT Coordinate System: (%.3f, %.3f, %.3f) mm.\n',gStageCurrentStagePosition_OCTCoordinates);
 end
 
-s = 'xyz';
-for i=1:3
-    if abs(d_(i)) > 0 % Move if motion of more than epsilon is needed 
-        ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),gStageCurrentStagePosition_StageCoordinates(i)); %Movement [mm]
+%% Move stage - system-specific commands
+if ~skipHardware
+    switch(octSystemName)
+        case 'ganymede'
+            % Ganymede: C# DLL stage control
+            s = 'xyz';
+            for i=1:3
+                if abs(d_(i)) > 0
+                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i), gStageCurrentStagePosition_StageCoordinates(i));
+                end
+            end
+            
+        case 'gan632'
+            % Gan632: Python stage control
+            s = 'xyz';
+            for i=1:3
+                if abs(d_(i)) > 0
+                    octSystemModule.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
+                end
+            end
+            
+        otherwise
+            error('Unknown OCT system: %s', octSystemName);
+    end
+else
+    if (v)
+        fprintf('Stage movement skipped (skipHardware = true)\n');
     end
 end
-
