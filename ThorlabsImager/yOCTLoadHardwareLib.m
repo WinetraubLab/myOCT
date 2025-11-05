@@ -1,4 +1,4 @@
-function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(octSystemName, skipHardware)
+function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(octSystemName, skipHardware, v)
 % Load and return the hardware interface library for an OCT system.
 %
 %   INPUTS:
@@ -6,6 +6,7 @@ function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(oc
 %           Supported values: 'Ganymede', 'GAN632'. Keep empty if library
 %           is already loaded.
 %       skipHardware: When set to true, will skip hardware.
+%       v: Verbose mode. Default is false.
 %
 %   OUTPUT:
 %       octSystemModule - Handle or structure representing the loaded 
@@ -32,10 +33,14 @@ if ~exist('skipHardware','var')
     skipHardware = false;
 end
 
-validSystems = {'GAN632', 'Ganymede'};
+if ~exist('v','var')
+    v = false;
+end
+
+validSystems = {'Ganymede', 'Gan632'};
 if ~any(strcmpi(octSystemName, validSystems))
     error(['Invalid OCT System: %s' newline ...
-           'Valid options are: ''GAN632'' or ''Ganymede'''], octSystemName);
+           'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemName);
 end
 
 %% Skip hardware path
@@ -57,16 +62,8 @@ end
 octSystemName = lower(octSystemName);
 
 switch(octSystemName)
-    case 'gan632'
-        % GAN632: Use Python SDK (pyspectralradar)
-        error('Not implemented yet');
-        gOCTSystemModule = yOCTImportPythonModule(...
-            'packageName', 'thorlabs_imager_oct', ...
-            'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
-            'v', v);
-
     case 'ganymede'
-        % Load C# library 
+        % Ganymede: C# library 
 
         % Verify that library wasn't loaded before
         if ~isempty(which('ThorlabsImagerNET.ThorlabsImager')) 
@@ -89,6 +86,13 @@ switch(octSystemName)
     
         % Mark assembly as loaded
         gOCTSystemModule = asm; 
+        
+    case 'gan632'
+        % Gan632: Python SDK (pyspectralradar)
+        gOCTSystemModule = yOCTImportPythonModule(...
+            'packageName', 'thorlabs_imager_oct', ...
+            'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
+            'v', v);
         
     otherwise
         error('This should never happen')
