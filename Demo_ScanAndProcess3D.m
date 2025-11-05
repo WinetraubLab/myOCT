@@ -33,11 +33,14 @@ tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results.
 % Where to save scan files
 output_folder = '\';
 
+% OCT System Selection
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
+
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
 
 %% Load hardware
-yOCTLoadHardwareLib(octSystem,skipScanning)
+yOCTLoadHardwareLib(octSystem, skipScanning, true)
 
 %% Compute scanning parameters
 
