@@ -1,21 +1,38 @@
-function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(octSystemName, skipHardware)
+function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(octSystemName, skipHardware, v)
 % Load and return the hardware interface library for an OCT system.
 %
 %   INPUTS:
 %       octSystemName: Name of the OCT system to load. 
-%           Supported values: 'Ganymede', 'GAN632'. Keep empty if library
-%           is already loaded.
-%       skipHardware: When set to true, will skip hardware.
+%           Supported values: 'Ganymede', 'Gan632'. 
+%           Default: '' (empty, only valid if library is already loaded)
+%       skipHardware: When set to true, will skip hardware initialization.
+%           Default: false
+%       v: Verbose mode. 
+%           Default: false
 %
 %   OUTPUT:
 %       octSystemModule - Handle or structure representing the loaded 
 %                         hardware interface library.
+
+%% Input checks
+if ~exist('octSystemName','var')
+    octSystemName = '';
+end
+
+if ~exist('skipHardware','var')
+    skipHardware = false;
+end
+
+if ~exist('v','var')
+    v = false;
+end
 
 %% Store module in a global varible 
 persistent gOCTSystemModule;
 persistent gOCTSystemName;
 persistent gSkipHardware;
 
+%% Check if library is already loaded (early return)
 if ~isempty(gOCTSystemName)
     octSystemModule = gOCTSystemModule;
     octSystemName = gOCTSystemName;
@@ -23,19 +40,15 @@ if ~isempty(gOCTSystemName)
     return;
 end
 
-%% Input checks
-if ~exist('octSystemName','var') || isempty('octSystemName')
+%% Validate inputs that are only needed for first-time load
+if isempty(octSystemName)
     error("yOCTLoadHardwareLib must be called with a valid 'octSystemName' the first time it is executed.");
 end
 
-if ~exist('skipHardware','var')
-    skipHardware = false;
-end
-
-validSystems = {'GAN632', 'Ganymede'};
+validSystems = {'Ganymede', 'Gan632'};
 if ~any(strcmpi(octSystemName, validSystems))
     error(['Invalid OCT System: %s' newline ...
-           'Valid options are: ''GAN632'' or ''Ganymede'''], octSystemName);
+           'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemName);
 end
 
 %% Skip hardware path
@@ -57,16 +70,8 @@ end
 octSystemName = lower(octSystemName);
 
 switch(octSystemName)
-    case 'gan632'
-        % GAN632: Use Python SDK (pyspectralradar)
-        error('Not implemented yet');
-        gOCTSystemModule = yOCTImportPythonModule(...
-            'packageName', 'thorlabs_imager_oct', ...
-            'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
-            'v', v);
-
     case 'ganymede'
-        % Load C# library 
+        % Ganymede: C# library 
 
         % Verify that library wasn't loaded before
         if ~isempty(which('ThorlabsImagerNET.ThorlabsImager')) 
@@ -89,6 +94,13 @@ switch(octSystemName)
     
         % Mark assembly as loaded
         gOCTSystemModule = asm; 
+        
+    case 'gan632'
+        % Gan632: Python SDK (pyspectralradar)
+        gOCTSystemModule = yOCTImportPythonModule(...
+            'packageName', 'thorlabs_imager_oct', ...
+            'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
+            'v', v);
         
     otherwise
         error('This should never happen')
