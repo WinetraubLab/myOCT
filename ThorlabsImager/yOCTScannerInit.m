@@ -20,23 +20,22 @@ end
 
 %% Initialize scanner
 if ~skipHardware
-    switch(octSystemName)
-        case 'gan632'
-            % GAN632: Use Python SDK (pyspectralradar)
-        
-            % Close any existing scanner first (in case of previous error/incomplete run)
-            try
-                octSystemModule.yOCTScannerClose();
-            catch
-                % Ignore errors if scanner wasn't initialized
-            end
-        
-            % Init OCT using Python module
-            octSystemModule.yOCTScannerInit(octProbePath);
+    % Close any existing scanner first (in case of previous error/incomplete run)
+    try
+        yOCTScannerClose(v);
+    catch
+        % Ignore errors if scanner wasn't initialized
+    end
     
+    % Initialize scanner based on system type
+    switch(octSystemName)
         case 'ganymede'
             % Ganymede: Use C# DLL (ThorlabsImagerNET)
-            ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath); % Init OCT
+            ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath);
+    
+        case 'gan632'
+            % GAN632: Use Python SDK (pyspectralradar)
+            octSystemModule.yOCTScannerInit(octProbePath);
     
         otherwise
             error('This should never happen')
