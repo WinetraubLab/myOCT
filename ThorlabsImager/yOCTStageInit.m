@@ -1,5 +1,5 @@
 function [x0,y0,z0] = yOCTStageInit(oct2stageXYAngleDeg, ...
-    minPosition, maxPosition, v)
+    minPosition, maxPosition,v)
 % This function initializes translation stage and returns current position.
 % INPUTS:
 %   oct2stageXYAngleDeg - Optional, the rotation angle to convert between OCT
@@ -50,7 +50,6 @@ end
 
 % Initialize position values
 if ~skipHardware
-    % Determine which system to use based on octSystemName
     switch(octSystemName)
         case 'ganymede'
             % Ganymede: C# DLL stage control
@@ -60,28 +59,21 @@ if ~skipHardware
             y0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y');
             
         case 'gan632'
-            % GAN632: Python stage control
-            % TODO: Stage functions not yet implemented in Python module
-            % Placeholder values until yOCTStageInit_1axis is implemented
+            % Gan632: Stage control not yet implemented
             if (v)
-                % fprintf('%s [GAN632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
-                fprintf('%s [GAN632] Stage control not yet implemented - using dummy values\n', datestr(datetime));
+                fprintf('%s [Gan632] Stage control not yet implemented - returning (0,0,0)\n', datestr(datetime));
             end
             x0 = 0;
             y0 = 0;
             z0 = 0;
-            % Future implementation (once Python functions are ready):
-            % z0 = octSystemModule.yOCTStageInit_1axis('z');
-            % x0 = octSystemModule.yOCTStageInit_1axis('x');
-            % y0 = octSystemModule.yOCTStageInit_1axis('y');
             
         otherwise
             error('Unknown OCT system: %s', octSystemName);
     end
 else
-    % Skip hardware initialization - use simulation starting position
+    % Skip hardware initialization
     if (v)
-        fprintf('%s Stage initialization skipped (skipHardware = true), using origin (0,0,0)\n', datestr(datetime));
+        fprintf('%s Stage initialization skipped (skipHardware = true), returning (0,0,0)\n', datestr(datetime));
     end
     x0 = 0;
     y0 = 0;
@@ -111,55 +103,27 @@ if (v)
     fprintf('%s Motion Range Test...\n\t(if Matlab is taking more than 2 minutes to finish this step, stage might be at it''s limit and need to center)\n',datestr(datetime));
 end
 
-% Perform motion range test based on system type
-if ~skipHardware
-    switch(octSystemName)
-        case 'ganymede'
-            % Ganymede: Use C# DLL for motion test
-            s = 'xyz';
-            for i=1:length(s)
-                if (minPosition(i) ~= maxPosition(i))
-                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                        gStageCurrentStagePosition_StageCoordinates(i)+minPosition(i));
-                    pause(0.5);
-                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                        gStageCurrentStagePosition_StageCoordinates(i)+maxPosition(i));
-                    pause(0.5);
-                    
-                    % Return home
-                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                        gStageCurrentStagePosition_StageCoordinates(i));
-                end
-            end
+% Perform motion range test
+if ~skipHardware && strcmp(octSystemName, 'ganymede')
+    % Only Ganymede supports motion range test currently
+    s = 'xyz';
+    for i=1:length(s)
+        if (minPosition(i) ~= maxPosition(i))
+            ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+                gStageCurrentStagePosition_StageCoordinates(i)+minPosition(i));
+            pause(0.5);
+            ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+                gStageCurrentStagePosition_StageCoordinates(i)+maxPosition(i));
+            pause(0.5);
             
-        case 'gan632'
-            % GAN632: Use Python module for motion test
-            % TODO: Implement once yOCTStageSetPosition_1axis is available
-            % Future implementation:
-            % axes_list = 'xyz';
-            % for i=1:3
-            %     if (minPosition(i) ~= maxPosition(i))
-                    % Test minimum position
-            %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
-            %             gStageCurrentStagePosition_StageCoordinates(i) + minPosition(i));
-            %         pause(0.5);
-            %         % Test maximum position
-            %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
-            %             gStageCurrentStagePosition_StageCoordinates(i) + maxPosition(i));
-            %         pause(0.5);
-            %         % Return home
-            %         octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
-            %             gStageCurrentStagePosition_StageCoordinates(i));
-            %         pause(0.5);
-            %     end
-            % end
-            
-        otherwise
-            error('Unknown OCT system: %s', octSystemName);
+            % Return home
+            ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+                gStageCurrentStagePosition_StageCoordinates(i));
+        end
     end
-else
-    % Skip motion range test in simulation mode
+elseif ~skipHardware && strcmp(octSystemName, 'gan632')
+    % Gan632: Motion range test not yet implemented
     if (v)
-        fprintf('%s Motion Range Test skipped (skipHardware = true)\n', datestr(datetime));
+        fprintf('%s [Gan632] Motion Range Test not yet implemented - skipping\n', datestr(datetime));
     end
 end

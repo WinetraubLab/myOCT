@@ -6,7 +6,7 @@ function yOCTStageMoveTo (newx,newy,newz,v)
 %       OCT coordinate system units. A conversion between OCT coordinate
 %       system to the stage coordinate system is done via
 %       goct2stageXYAngleDeg which is set in yOCTStageInit
-%   v - verbose mode (default is false)          
+%   v - verbose mode (default is false)
 
 %% Input checks
 if ~exist('newx','var')
@@ -55,38 +55,22 @@ end
 
 %% Move stage - system-specific commands
 if ~skipHardware
-    switch(octSystemName)
-        case 'gan632'
-            % GAN632: Python stage control
-            % TODO: Stage movement not yet implemented in Python module
-            % Skipping actual movement until yOCTStageSetPosition_1axis is available
-            if (v)
-                fprintf('[GAN632] Stage movement skipped - functions not yet implemented\n');
+    if strcmp(octSystemName, 'ganymede')
+        % Ganymede: C# DLL stage control
+        s = 'xyz';
+        for i=1:3
+            if abs(d_(i)) > 0
+                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i), gStageCurrentStagePosition_StageCoordinates(i));
             end
-            
-            % Future implementation:
-            % s = 'xyz';
-            % for i=1:3
-            %     if abs(d_(i)) > 0
-            %         octSystemModule.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
-            %     end
-            % end
-            
-        case 'ganymede'
-            % Ganymede: C# DLL stage control
-            s = 'xyz';
-            for i=1:3
-                if abs(d_(i)) > 0 % Move if motion of more than epsilon is needed 
-                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),gStageCurrentStagePosition_StageCoordinates(i)); %Movement [mm]
-                end
-            end
-            
-        otherwise
-            error('Unknown OCT system: %s', octSystemName);
+        end
+    elseif strcmp(octSystemName, 'gan632')
+        % Gan632: Stage movement not yet implemented with python
+        if (v)
+            warning('[Gan632] Stage movement not yet implemented - position not moved');
+        end
     end
 else
     if (v)
         fprintf('Stage movement skipped (skipHardware = true)\n');
     end
 end
-

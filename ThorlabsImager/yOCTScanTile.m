@@ -14,7 +14,6 @@ function [json] = yOCTScanTile(varargin)
 %   Parameter               Default Value   Notes
 %   octProbePath            'probe.ini'     Where is the probe.ini is saved to be used.
 %   octProbeFOV_mm          []              Keep empty to use FOV frome probe, or set to override probe's value.
-%   octSystem               'Ganymede'      OCT system name ('Ganymede' or 'Gan632').
 %   pixelSize_um            1               What is the pixel size (in xy plane).
 %   isVerifyMotionRange     true            Try the full range of motion before scanning, to make sure we won't get 'stuck' through the scan.
 %   tissueRefractiveIndex   1.4             Refractive index of tissue.
@@ -194,8 +193,8 @@ for scanI=1:length(in.scanOrder)
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
-    % Scan
-    octScan(in, s);
+    % Scan OCT Volume
+    yOCTScan3DVolume(in, s);
     
     % Unzip if needed (for Ganymede system)
     if strcmpi(in.octSystem, 'Ganymede') && in.unzipOCTFile
@@ -224,56 +223,11 @@ if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
 
-% Close hardware based on system type
-switch(octSystemName)
-    case 'ganymede'
-        % Ganymede: C# DLL
-        ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
-        
-    case 'gan632'
-        % Gan632: Python SDK
-        octSystemModule.yOCTScannerClose();
-        
-    otherwise
-        error('Unknown OCT system: %s', octSystemName);
-end
+% Close OCT hardware based on system type
+yOCTScannerClose(v);
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
 json = in;
 
-end
-
-%% Scan using Thorlabs
-function octScan(in, s)
-
-% Define the number of retries
-numRetries = 3;
-pauseDuration = 1; % Duration to pause (in seconds) between retries
-
-for attempt = 1:numRetries
-    try
-        % Remove folder if it exists
-        if exist(s,'dir')
-            rmdir(s, 's');
-        end
-
-        % Scan based on system type
-        yOCTScan3DVolume(in, s);
-        
-        % If the function call is successful, break out of the loop
-        break;
-    catch ME
-        % Notify the user that an exception has occurred
-        fprintf('Attempt %d failed: %s\n', attempt, ME.message);
-
-        % If this is the last attempt, rethrow the error
-        if attempt == numRetries
-            rethrow(ME);
-        else
-            % Pause before the next retry attempt
-            pause(pauseDuration);
-        end
-    end
-end
 end
