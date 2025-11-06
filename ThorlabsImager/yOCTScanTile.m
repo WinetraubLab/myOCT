@@ -198,8 +198,7 @@ for scanI=1:length(in.scanOrder)
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
-    % Scan OCT Volume
-    yOCTScan3DVolume(in, s);
+    octScan(in,s);
     
     % Unzip if needed
     if in.unzipOCTFile
@@ -231,5 +230,49 @@ yOCTScannerClose(v);
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
 json = in;
+
+end
+
+%% Scan Using Thorlabs
+function octScan(in,s)
+
+% Define the number of retries
+numRetries = 3;
+pauseDuration = 1; % Duration to pause (in seconds) between retries
+
+for attempt = 1:numRetries
+    try
+        % Remove folder if it exists
+        if exist(s,'dir')
+            rmdir(s, 's');
+        end
+
+        % Scan
+        ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
+            in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
+            in.yOffset, ... centerY [mm]
+            in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
+            in.tileRangeY_mm,  ... rangeY [mm]
+            0,       ... rotationAngle [deg]
+            in.nXPixelsInEachTile,in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
+            in.nBScanAvg,       ... B Scan Average
+            s ... Output directory, make sure this folder doesn't exist when starting the scan
+            );
+        
+        % If the function call is successful, break out of the loop
+        break;
+    catch ME
+        % Notify the user that an exception has occurred
+        fprintf('Attempt %d failed: %s\n', attempt, ME.message);
+
+        % If this is the last attempt, rethrow the error
+        if attempt == numRetries
+            rethrow(ME);
+        else
+            % Pause before the next retry attempt
+            pause(pauseDuration);
+        end
+    end
+end
 
 end
