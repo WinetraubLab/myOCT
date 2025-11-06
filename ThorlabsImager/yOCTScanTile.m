@@ -195,7 +195,7 @@ for scanI=1:length(in.scanOrder)
     octScan(in,s);
     
     % Unzip if needed
-    if in.unzipOCTFile
+	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
     
