@@ -1,6 +1,5 @@
 function yOCTScannerClose(v)
-% Close OCT scanner
-% TODO: Implementation pending - dummy function for now
+% Close OCT scanner (Ganymede only for now)
 %
 % INPUTS:
 %   v: verbose mode, default: false
@@ -10,9 +9,14 @@ if ~exist('v','var')
     v = false;
 end
 
+%% Close scanner
 if (v)
-    fprintf('%s yOCTScannerClose called (dummy implementation)\n', datestr(datetime));
+    fprintf('%s Closing Scanner...\n', datestr(datetime));
 end
 
-% TODO: Will be implemented to call actual scanner close functions
+ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+
+if (v)
+    fprintf('%s Scanner Closed\n', datestr(datetime));
+end
 end
