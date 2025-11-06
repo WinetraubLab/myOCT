@@ -211,7 +211,7 @@ if (v)
     fprintf('%s Homing...\n', datestr(datetime));
 end
 
-% Home
+% Home 
 pause(0.5);
 yOCTStageMoveTo(x0,y0,z0);
 pause(0.5);
