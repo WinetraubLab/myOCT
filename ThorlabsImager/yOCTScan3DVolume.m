@@ -20,9 +20,6 @@ function yOCTScan3DVolume(scanParamsStruct, outputDirectory)
 %
 %   outputDirectory - Output folder path where scan data will be saved
 %
-% EXAMPLE:
-%   yOCTScan3DVolume(scanParamsStruct, 'C:\OCTData\Sample01\Scan_001');
-%
 % NOTE: 
 %   Hardware selection (Ganymede vs Gan632) is automatic based on the system
 %   loaded by yOCTLoadHardwareLib(). yOCTLoadHardwareLib() needs to be called before using this function.
