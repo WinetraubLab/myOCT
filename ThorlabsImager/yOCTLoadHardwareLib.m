@@ -70,14 +70,6 @@ end
 octSystemName = lower(octSystemName);
 
 switch(octSystemName)
-    case 'gan632'
-        % GAN632: Use Python SDK (pyspectralradar)
-        error('Not implemented yet');
-        gOCTSystemModule = yOCTImportPythonModule(...
-            'packageName', 'thorlabs_imager_oct', ...
-            'repoName', fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython'), ...
-            'v', v);
-
     case 'ganymede'
         % Ganymede: C# library 
 
