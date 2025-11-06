@@ -196,8 +196,8 @@ for scanI=1:length(in.scanOrder)
     
     % Unzip if needed
     if in.unzipOCTFile
-        yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
-    end
+		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
+	end
     
     if(scanI==1)
         [OCTSystem] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(s);
