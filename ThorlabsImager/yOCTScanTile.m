@@ -227,8 +227,7 @@ if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
 
-% Close OCT hardware based on system type
-yOCTScannerClose(v);
+ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
