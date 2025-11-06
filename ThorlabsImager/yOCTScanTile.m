@@ -170,7 +170,13 @@ if exist(octFolder,'dir')
 end
 mkdir(octFolder);
 
-%% Preform the scan
+%% Compute scan centers and ranges
+centerX_mm = in.xOffset + in.octProbe.DynamicOffsetX;
+centerY_mm = in.yOffset;
+rangeX_mm = in.tileRangeX_mm * in.octProbe.DynamicFactorX;
+rangeY_mm = in.tileRangeY_mm;
+
+%% Perform the scan
 for scanI=1:length(in.scanOrder)
     if (v)
         fprintf('%s Scanning Volume %02d of %d\n',datestr(datetime),scanI,length(in.scanOrder));
@@ -184,7 +190,16 @@ for scanI=1:length(in.scanOrder)
     s = awsModifyPathForCompetability(s);
 
     % Scan OCT Volume
-    yOCTScan3DVolume(in, s);
+    yOCTScan3DVolume(...
+        centerX_mm, ...
+        centerY_mm, ...
+        rangeX_mm, ...
+        rangeY_mm, ...
+        in.nXPixelsInEachTile, ...
+        in.nYPixelsInEachTile, ...
+        in.nBScanAvg, ...
+        s, ...
+        'v', v);
     
 	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
