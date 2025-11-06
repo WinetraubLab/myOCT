@@ -1,5 +1,6 @@
 function yOCTScannerClose(v)
-% Close OCT scanner
+% Close OCT scanner based on system type (Ganymede or Gan632).
+% Hardware library must be loaded via yOCTLoadHardwareLib before calling this function.
 %
 % INPUTS:
 %   v: verbose mode, default: false
@@ -17,7 +18,7 @@ end
 % Load library (should already be loaded to memory)
 [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
 
-%% Close scanner
+%% Close scanner based on system type
 if ~skipHardware
     switch(octSystemName)
         case 'ganymede'
