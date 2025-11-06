@@ -77,6 +77,11 @@ end
 [octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
 in.octSystem = octSystemName; % Store for compatibility and logging
 
+% Override unzipOCTFile flag for Ganymede system
+if strcmpi(octSystemName, 'Ganymede')
+    in.unzipOCTFile = false;
+end
+
 %% Parse our parameters from probe
 in.octProbe = yOCTReadProbeIniToStruct(in.octProbePath);
 
@@ -196,11 +201,10 @@ for scanI=1:length(in.scanOrder)
     % Scan OCT Volume
     yOCTScan3DVolume(in, s);
     
-    % Unzip if needed (for Ganymede system)
-    if strcmpi(in.octSystem, 'Ganymede') && in.unzipOCTFile
+    % Unzip if needed
+    if in.unzipOCTFile
         yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
     end
-    % NOTE: GAN632 Python module already extracts and splits files automatically
     
     if(scanI==1)
         [OCTSystem] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(s);
