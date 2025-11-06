@@ -1,44 +1,45 @@
-function yOCTScan3DVolume(in, outputDirectory)
-% This function automatically selects between Ganymede (C# DLL) or Gan632 (Python SDK)
-% based on the loaded hardware library and uses it to perform a 3D OCT volume scan.
+function yOCTScan3DVolume(scanParamsStruct, outputDirectory)
+% This function performs a single 3D OCT volume scan using the loaded OCT hardware (Ganymede or Gan632).
+% It is called by yOCTScanTile for each tile position during multi-tile scanning.
 %
 % USAGE:
-%   yOCTScan3DVolume(in, outputDirectory)
+%   yOCTScan3DVolume(scanParamsStruct, outputDirectory)
 %
 % INPUTS:
-%   in              - Structure containing scan parameters. Required fields:
-%                       in.xOffset              - X position offset [mm]
-%                       in.yOffset              - Y position offset [mm]
-%                       in.octProbe.DynamicOffsetX - Probe's dynamic X offset [mm]
-%                       in.octProbe.DynamicFactorX - Probe's dynamic X scaling factor
-%                       in.tileRangeX_mm        - Tile scan range in X [mm]
-%                       in.tileRangeY_mm        - Tile scan range in Y [mm]
-%                       in.nXPixelsInEachTile   - Number of X pixels (A-scans per B-scan)
-%                       in.nYPixelsInEachTile   - Number of Y pixels (B-scans in volume)
-%                       in.nBScanAvg            - Number of B-scans to average
+%   scanParamsStruct - Structure containing scan parameters. Required fields in the struct:
+%                       scanParamsStruct.xOffset              - X position offset [mm]
+%                       scanParamsStruct.yOffset              - Y position offset [mm]
+%                       scanParamsStruct.octProbe.DynamicOffsetX - Probe's dynamic X offset [mm]
+%                       scanParamsStruct.octProbe.DynamicFactorX - Probe's dynamic X scaling factor
+%                       scanParamsStruct.tileRangeX_mm        - Tile scan range in X [mm]
+%                       scanParamsStruct.tileRangeY_mm        - Tile scan range in Y [mm]
+%                       scanParamsStruct.nXPixelsInEachTile   - Number of X pixels (A-scans per B-scan)
+%                       scanParamsStruct.nYPixelsInEachTile   - Number of Y pixels (B-scans in volume)
+%                       scanParamsStruct.nBScanAvg            - Number of B-scans to average
+%                       scanParamsStruct.v                    - Verbose flag for logging (true/false)
 %
-%   outputDirectory - Output folder path
+%   outputDirectory - Output folder path where scan data will be saved
 %
 % EXAMPLE:
-%   yOCTScan3DVolume(in, 'C:\OCTData\Sample01\Scan_001');
+%   yOCTScan3DVolume(scanParamsStruct, 'C:\OCTData\Sample01\Scan_001');
 %
 % NOTE: 
-%   This function calls yOCTLoadHardwareLib() internally to get the loaded
-%   hardware library. Make sure to call yOCTLoadHardwareLib('Ganymede', false)
-%   or yOCTLoadHardwareLib('Gan632', false) at least once before using this function.
+%   Hardware selection (Ganymede vs Gan632) is automatic based on the system
+%   loaded by yOCTLoadHardwareLib(). yOCTLoadHardwareLib() needs to be called before using this function.
 
 %% Validate required fields exist
 missingFields = {};
-if ~isfield(in, 'xOffset'), missingFields{end+1} = 'xOffset'; end
-if ~isfield(in, 'yOffset'), missingFields{end+1} = 'yOffset'; end
-if ~isfield(in, 'octProbe'), missingFields{end+1} = 'octProbe'; end
-if ~isfield(in, 'tileRangeX_mm'), missingFields{end+1} = 'tileRangeX_mm'; end
-if ~isfield(in, 'tileRangeY_mm'), missingFields{end+1} = 'tileRangeY_mm'; end
-if ~isfield(in, 'nXPixelsInEachTile'), missingFields{end+1} = 'nXPixelsInEachTile'; end
-if ~isfield(in, 'nYPixelsInEachTile'), missingFields{end+1} = 'nYPixelsInEachTile'; end
-if ~isfield(in, 'nBScanAvg'), missingFields{end+1} = 'nBScanAvg'; end
-if ~isfield(in.octProbe, 'DynamicOffsetX'), missingFields{end+1} = 'octProbe.DynamicOffsetX'; end
-if ~isfield(in.octProbe, 'DynamicFactorX'), missingFields{end+1} = 'octProbe.DynamicFactorX'; end
+if ~isfield(scanParamsStruct, 'xOffset'), missingFields{end+1} = 'xOffset'; end
+if ~isfield(scanParamsStruct, 'yOffset'), missingFields{end+1} = 'yOffset'; end
+if ~isfield(scanParamsStruct, 'octProbe'), missingFields{end+1} = 'octProbe'; end
+if ~isfield(scanParamsStruct, 'tileRangeX_mm'), missingFields{end+1} = 'tileRangeX_mm'; end
+if ~isfield(scanParamsStruct, 'tileRangeY_mm'), missingFields{end+1} = 'tileRangeY_mm'; end
+if ~isfield(scanParamsStruct, 'nXPixelsInEachTile'), missingFields{end+1} = 'nXPixelsInEachTile'; end
+if ~isfield(scanParamsStruct, 'nYPixelsInEachTile'), missingFields{end+1} = 'nYPixelsInEachTile'; end
+if ~isfield(scanParamsStruct, 'nBScanAvg'), missingFields{end+1} = 'nBScanAvg'; end
+if ~isfield(scanParamsStruct, 'v'), missingFields{end+1} = 'v'; end
+if ~isfield(scanParamsStruct.octProbe, 'DynamicOffsetX'), missingFields{end+1} = 'octProbe.DynamicOffsetX'; end
+if ~isfield(scanParamsStruct.octProbe, 'DynamicFactorX'), missingFields{end+1} = 'octProbe.DynamicFactorX'; end
 if ~isempty(missingFields)
     error('Missing required fields: %s', strjoin(missingFields, ', '));
 end
@@ -47,14 +48,15 @@ end
 [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
 
 %% Compute scan parameters
-centerX_mm = in.xOffset + in.octProbe.DynamicOffsetX;       % X position offset [mm]
-centerY_mm = in.yOffset;                                    % Y position offset [mm]
-rangeX_mm  = in.tileRangeX_mm * in.octProbe.DynamicFactorX; % Tile scan range in X [mm]
-rangeY_mm  = in.tileRangeY_mm;                              % Tile scan range in Y [mm]
+centerX_mm = scanParamsStruct.xOffset + scanParamsStruct.octProbe.DynamicOffsetX;       % X position offset [mm]
+centerY_mm = scanParamsStruct.yOffset;                                    % Y position offset [mm]
+rangeX_mm  = scanParamsStruct.tileRangeX_mm * scanParamsStruct.octProbe.DynamicFactorX; % Tile scan range in X [mm]
+rangeY_mm  = scanParamsStruct.tileRangeY_mm;                              % Tile scan range in Y [mm]
 rotationAngle_deg = 0;                                      % Rotation angle [deg]
-sizeX_pix  = in.nXPixelsInEachTile;                         % Number of X pixels (A-scans per B-scan)
-sizeY_pix  = in.nYPixelsInEachTile;                         % Number of Y pixels (B-scans in volume)
-nBScanAvg  = in.nBScanAvg;                                  % Number of B-scans to average
+sizeX_pix  = scanParamsStruct.nXPixelsInEachTile;                         % Number of X pixels (A-scans per B-scan)
+sizeY_pix  = scanParamsStruct.nYPixelsInEachTile;                         % Number of Y pixels (B-scans in volume)
+nBScanAvg  = scanParamsStruct.nBScanAvg;                                  % Number of B-scans to average
+v = scanParamsStruct.v;                                                   % Verbose flag for logging
 
 %% Dispatch to appropriate implementation based on system type
 if ~skipHardware
@@ -104,7 +106,9 @@ if ~skipHardware
             
         catch ME
             % Notify the user that an exception has occurred
-            fprintf('Scan attempt %d failed: %s\n', attempt, ME.message);
+            if v
+                fprintf('%s Scan attempt %d failed: %s\n', datestr(datetime), attempt, ME.message);
+            end
             
             % If this is the last attempt, rethrow the error
             if attempt == numRetries
@@ -116,7 +120,9 @@ if ~skipHardware
         end
     end
 else
-    % Skip hardware scan
-    fprintf('3D volume scan skipped (skipHardware = true)\n');
+    % Skip hardware scan 
+    if v
+        fprintf('%s 3D volume scan skipped (skipHardware = true)\n', datestr(datetime));
+    end
 end
 end
