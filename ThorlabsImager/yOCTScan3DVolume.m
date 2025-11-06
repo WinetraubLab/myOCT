@@ -24,21 +24,31 @@ function yOCTScan3DVolume(scanParamsStruct, outputDirectory)
 %   Hardware selection (Ganymede vs Gan632) is automatic based on the system
 %   loaded by yOCTLoadHardwareLib(). yOCTLoadHardwareLib() needs to be called before using this function.
 
-%% Validate required fields exist
+%% Input validation
+p = inputParser;
+addRequired(p, 'scanParamsStruct', @isstruct);
+addRequired(p, 'outputDirectory', @ischar);
+parse(p, scanParamsStruct, outputDirectory);
+
+% Validate required fields in scanParamsStruct
+requiredFields = {'xOffset', 'yOffset', 'octProbe', 'tileRangeX_mm', 'tileRangeY_mm', ...
+                  'nXPixelsInEachTile', 'nYPixelsInEachTile', 'nBScanAvg', 'v'};
 missingFields = {};
-if ~isfield(scanParamsStruct, 'xOffset'), missingFields{end+1} = 'xOffset'; end
-if ~isfield(scanParamsStruct, 'yOffset'), missingFields{end+1} = 'yOffset'; end
-if ~isfield(scanParamsStruct, 'octProbe'), missingFields{end+1} = 'octProbe'; end
-if ~isfield(scanParamsStruct, 'tileRangeX_mm'), missingFields{end+1} = 'tileRangeX_mm'; end
-if ~isfield(scanParamsStruct, 'tileRangeY_mm'), missingFields{end+1} = 'tileRangeY_mm'; end
-if ~isfield(scanParamsStruct, 'nXPixelsInEachTile'), missingFields{end+1} = 'nXPixelsInEachTile'; end
-if ~isfield(scanParamsStruct, 'nYPixelsInEachTile'), missingFields{end+1} = 'nYPixelsInEachTile'; end
-if ~isfield(scanParamsStruct, 'nBScanAvg'), missingFields{end+1} = 'nBScanAvg'; end
-if ~isfield(scanParamsStruct, 'v'), missingFields{end+1} = 'v'; end
-if ~isfield(scanParamsStruct.octProbe, 'DynamicOffsetX'), missingFields{end+1} = 'octProbe.DynamicOffsetX'; end
-if ~isfield(scanParamsStruct.octProbe, 'DynamicFactorX'), missingFields{end+1} = 'octProbe.DynamicFactorX'; end
+for i = 1:length(requiredFields)
+    if ~isfield(scanParamsStruct, requiredFields{i})
+        missingFields{end+1} = requiredFields{i};
+    end
+end
+if isfield(scanParamsStruct, 'octProbe')
+    if ~isfield(scanParamsStruct.octProbe, 'DynamicOffsetX')
+        missingFields{end+1} = 'octProbe.DynamicOffsetX';
+    end
+    if ~isfield(scanParamsStruct.octProbe, 'DynamicFactorX')
+        missingFields{end+1} = 'octProbe.DynamicFactorX';
+    end
+end
 if ~isempty(missingFields)
-    error('Missing required fields: %s', strjoin(missingFields, ', '));
+    error('Missing required fields in scanParamsStruct: %s', strjoin(missingFields, ', '));
 end
 
 %% Get the loaded hardware library
