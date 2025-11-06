@@ -4,7 +4,6 @@ function yOCTScan3DVolume(centerX_mm, centerY_mm, rangeX_mm, rangeY_mm, sizeX_pi
 %
 % USAGE:
 %   yOCTScan3DVolume(centerX_mm, centerY_mm, rangeX_mm, rangeY_mm, sizeX_pix, sizeY_pix, nBScanAvg, outputDirectory)
-%   yOCTScan3DVolume(..., 'v', true)
 %
 % INPUTS:
 %   centerX_mm       - X position center [mm]
