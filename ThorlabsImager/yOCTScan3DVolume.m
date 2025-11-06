@@ -41,7 +41,7 @@ v = in.v;
 %% Get the loaded hardware library
 [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
 
-%% Scan parameters
+%% Set rotation angle
 rotationAngle_deg = 0; % Rotation angle [deg]
 
 %% Dispatch to appropriate implementation based on system type
