@@ -176,7 +176,13 @@ if exist(octFolder,'dir')
 end
 mkdir(octFolder);
 
-%% Preform the scan
+%% Compute scan centers and ranges
+centerX_mm = in.xOffset + in.octProbe.DynamicOffsetX;
+centerY_mm = in.yOffset;
+rangeX_mm = in.tileRangeX_mm * in.octProbe.DynamicFactorX;
+rangeY_mm = in.tileRangeY_mm;
+
+%% Perform the scan
 for scanI=1:length(in.scanOrder)
     if (v)
         fprintf('%s Scanning Volume %02d of %d\n',datestr(datetime),scanI,length(in.scanOrder));
@@ -189,7 +195,17 @@ for scanI=1:length(in.scanOrder)
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
-    octScan(in,s);
+    % Scan OCT Volume
+    yOCTScan3DVolume(...
+        centerX_mm, ...
+        centerY_mm, ...
+        rangeX_mm, ...
+        rangeY_mm, ...
+        in.nXPixelsInEachTile, ...
+        in.nYPixelsInEachTile, ...
+        in.nBScanAvg, ...
+        s, ...
+        'v', v);
     
 	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
@@ -222,48 +238,6 @@ yOCTScannerClose(v);
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
 json = in;
 
-end
-
-%% Scan Using Thorlabs
-function octScan(in,s)
-
-% Define the number of retries
-numRetries = 3;
-pauseDuration = 1; % Duration to pause (in seconds) between retries
-
-for attempt = 1:numRetries
-    try
-        % Rmove folder if it exists
-        if exist(s,'dir')
-            rmdir(s, 's');
-        end
-
-        % Scan
-        ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
-            in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-            in.yOffset, ... centerY [mm]
-            in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-            in.tileRangeY_mm,  ... rangeY [mm]
-            0,       ... rotationAngle [deg]
-            in.nXPixelsInEachTile,in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
-            in.nBScanAvg,       ... B Scan Average
-            s ... Output directory, make sure this folder doesn't exist when starting the scan
-            );
-        
-        % If the function call is successful, break out of the loop
-        break;
-    catch ME
-        % Notify the user that an exception has occurred
-        fprintf('Attempt %d failed: %s\n', attempt, ME.message);
-
-        % If this is the last attempt, rethrow the error
-        if attempt == numRetries
-            rethrow(ME);
-        else
-            % Pause before the next retry attempt
-            pause(pauseDuration);
-        end
-    end
 end
 
 end
