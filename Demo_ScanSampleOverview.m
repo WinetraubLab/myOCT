@@ -6,6 +6,7 @@
 yOCTSetLibraryPath(); % Set path
 
 %% Inputs
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
 % Define the scan
 sampleSize_mm = 2; % Will scan from -sampleSize_mm to +sampleSize_mm

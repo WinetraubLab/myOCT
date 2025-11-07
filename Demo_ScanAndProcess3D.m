@@ -9,6 +9,7 @@
 yOCTSetLibraryPath(); % Set path
 
 %% Inputs
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
 % Define the 3D Volume
 pixelSize_um = 1; % x-y Pixel size in microns

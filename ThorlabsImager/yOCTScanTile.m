@@ -73,6 +73,15 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
+% Get OCT system from persistent library
+[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+in.octSystem = octSystemName; % Store for compatibility and logging
+
+% Override unzipOCTFile flag for Gan632 system which doesn't generate .oct files
+if strcmpi(octSystemName, 'Gan632')
+    in.unzipOCTFile = false;
+end
+
 %% Parse our parameters from probe
 in.octProbe = yOCTReadProbeIniToStruct(in.octProbePath);
 
@@ -207,6 +216,7 @@ for scanI=1:length(in.scanOrder)
         s, ...
         'v', v);
     
+    % Unzip if needed
 	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
@@ -219,7 +229,6 @@ for scanI=1:length(in.scanOrder)
 end
 
 %% Finalize
-
 if (v)
     fprintf('%s Homing...\n', datestr(datetime));
 end
@@ -237,7 +246,5 @@ yOCTScannerClose(v);
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
 json = in;
-
-end
 
 end
