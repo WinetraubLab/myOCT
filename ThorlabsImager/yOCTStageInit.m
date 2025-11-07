@@ -2,7 +2,7 @@ function [x0,y0,z0] = yOCTStageInit(oct2stageXYAngleDeg, ...
     minPosition, maxPosition,v)
 % This function initializes translation stage and returns current position.
 % INPUTS:
-%   oct2stageXYAngleDeg - Optional, the rotation angle to convert between OCT
+%   goct2stageXYAngleDeg - Optional, the rotation angle to convert between OCT
 %       system and the stage, usually this angle is close to 0, but woth
 %       calibration. See findMotorAngleCalibration.m for more information.
 %       Rotation along X-Y plane
@@ -44,41 +44,10 @@ end
 if (v)
     fprintf('%s Initialzing Stage Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
-
-% Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
-
-% Initialize position values
-if ~skipHardware
-    switch(octSystemName)
-        case 'ganymede'
-            % Ganymede: C# DLL stage control
-            ThorlabsImagerNETLoadLib();
-            z0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z');
-            x0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x');
-            y0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y');
-            
-        case 'gan632'
-            % Gan632: Stage control not yet implemented
-            if (v)
-                fprintf('%s [Gan632] Stage control not yet implemented - returning (0,0,0)\n', datestr(datetime));
-            end
-            x0 = 0;
-            y0 = 0;
-            z0 = 0;
-            
-        otherwise
-            error('Unknown OCT system: %s', octSystemName);
-    end
-else
-    % Skip hardware initialization
-    if (v)
-        fprintf('%s Stage initialization skipped (skipHardware = true), returning (0,0,0)\n', datestr(datetime));
-    end
-    x0 = 0;
-    y0 = 0;
-    z0 = 0;
-end
+ThorlabsImagerNETLoadLib();
+z0=ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z'); %Init stage
+x0=ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x'); %Init stage
+y0=ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y'); %Init stage
 
 global goct2stageXYAngleDeg
 if exist('oct2stageXYAngleDeg','var') && ~isnan(oct2stageXYAngleDeg)
@@ -98,32 +67,22 @@ gStageCurrentStagePosition_StageCoordinates = [x0;y0;z0]; % The same as OCT
 if ~any(minPosition ~= maxPosition)
     return; % No motion range test
 end
-
 if (v)
     fprintf('%s Motion Range Test...\n\t(if Matlab is taking more than 2 minutes to finish this step, stage might be at it''s limit and need to center)\n',datestr(datetime));
 end
 
-% Perform motion range test
-if ~skipHardware && strcmp(octSystemName, 'ganymede')
-    % Only Ganymede supports motion range test currently
-    s = 'xyz';
-    for i=1:length(s)
-        if (minPosition(i) ~= maxPosition(i))
-            ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                gStageCurrentStagePosition_StageCoordinates(i)+minPosition(i));
-            pause(0.5);
-            ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                gStageCurrentStagePosition_StageCoordinates(i)+maxPosition(i));
-            pause(0.5);
-            
-            % Return home
-            ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
-                gStageCurrentStagePosition_StageCoordinates(i));
-        end
-    end
-elseif ~skipHardware && strcmp(octSystemName, 'gan632')
-    % Gan632: Motion range test not yet implemented
-    if (v)
-        fprintf('%s [Gan632] Motion Range Test not yet implemented - skipping\n', datestr(datetime));
+s = 'xyz';
+for i=1:length(s)
+    if (minPosition(i) ~= maxPosition(i))
+        ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+            gStageCurrentStagePosition_StageCoordinates(i)+minPosition(i)); %Movement [mm]
+        pause(0.5);
+        ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+            gStageCurrentStagePosition_StageCoordinates(i)+maxPosition(i)); %Movement [mm]
+        pause(0.5);
+        
+        % Return home
+        ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
+            gStageCurrentStagePosition_StageCoordinates(i)); %Movement [mm]
     end
 end
