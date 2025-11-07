@@ -1,22 +1,17 @@
-function yOCTScan3DVolume(centerX_mm, centerY_mm, rangeX_mm, rangeY_mm, sizeX_pix, sizeY_pix, nBScanAvg, outputDirectory, varargin)
+function yOCTScan3DVolume(varargin)
 % This function performs a single 3D OCT volume scan using the loaded OCT hardware (Ganymede or Gan632).
 % It is called by yOCTScanTile for each tile position during multi-tile scanning.
-%
-% USAGE:
-%   yOCTScan3DVolume(centerX_mm, centerY_mm, rangeX_mm, rangeY_mm, sizeX_pix, sizeY_pix, nBScanAvg, outputDirectory)
 %
 % INPUTS:
 %   centerX_mm       - X position center [mm]
 %   centerY_mm       - Y position center [mm]
 %   rangeX_mm        - Scan range in X [mm]
 %   rangeY_mm        - Scan range in Y [mm]
-%   sizeX_pix        - Number of X pixels (A-scans per B-scan)
-%   sizeY_pix        - Number of Y pixels (B-scans in volume)
+%   sizeX_pix        - Number of pixels in the X direction, also known as scanning direction (A-scans per B-scan)
+%   sizeY_pix        - Number of pixels in the Y direction (B-scans in volume)
 %   nBScanAvg        - Number of B-scans to average
 %   outputDirectory  - Output folder path where scan data will be saved
-%
-% OPTIONAL PARAMETERS:
-%   'v'              - Verbose flag for logging. Default: false
+%   v                - Verbose flag for logging. Default: false
 %
 % NOTE: 
 %   Hardware selection (Ganymede vs Gan632) is based on the system loaded by yOCTLoadHardwareLib().
@@ -33,10 +28,9 @@ addRequired(p, 'sizeY_pix', @isnumeric);
 addRequired(p, 'nBScanAvg', @isnumeric);
 addRequired(p, 'outputDirectory', @ischar);
 addParameter(p, 'v', false, @islogical);
-parse(p, centerX_mm, centerY_mm, rangeX_mm, rangeY_mm, sizeX_pix, sizeY_pix, nBScanAvg, outputDirectory, varargin{:});
+parse(p, varargin{:});
 
 in = p.Results;
-v = in.v;
 
 %% Set rotation angle
 rotationAngle_deg = 0; % Rotation angle [deg]
@@ -53,8 +47,8 @@ if ~skipHardware
     for attempt = 1:numRetries
         try
             % Remove folder if it exists
-            if exist(outputDirectory,'dir')
-                rmdir(outputDirectory, 's');
+            if exist(in.outputDirectory,'dir')
+                rmdir(in.outputDirectory, 's');
             end
             
             % Perform scan based on system type
@@ -62,26 +56,26 @@ if ~skipHardware
                 case 'ganymede'
                     % Ganymede: Use C# DLL
                     ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
-                        centerX_mm, ...
-                        centerY_mm, ...
-                        rangeX_mm, ...
-                        rangeY_mm, ...
+                        in.centerX_mm, ...
+                        in.centerY_mm, ...
+                        in.rangeX_mm, ...
+                        in.rangeY_mm, ...
                         rotationAngle_deg, ...
-                        sizeX_pix, sizeY_pix, ...
-                        nBScanAvg, ...
-                        outputDirectory); % Output folder (must not exist before scan)
+                        in.sizeX_pix, in.sizeY_pix, ...
+                        in.nBScanAvg, ...
+                        in.outputDirectory); % Output folder (must not exist before scan)
                         
                 case 'gan632'
                     % Gan632: Use Python module
                     octSystemModule.yOCTScan3DVolume(...
-                        centerX_mm, ...
-                        centerY_mm, ...
-                        rangeX_mm, ...
-                        rangeY_mm, ...
+                        in.centerX_mm, ...
+                        in.centerY_mm, ...
+                        in.rangeX_mm, ...
+                        in.rangeY_mm, ...
                         rotationAngle_deg, ...
-                        int32(sizeX_pix), int32(sizeY_pix), ...
-                        int32(nBScanAvg), ...
-                        outputDirectory); % Output folder (must not exist before scan)
+                        int32(in.sizeX_pix), int32(in.sizeY_pix), ...
+                        int32(in.nBScanAvg), ...
+                        in.outputDirectory); % Output folder (must not exist before scan)
                         
                 otherwise
                     error('Unknown OCT system: %s. Must call yOCTLoadHardwareLib() first.', octSystemName);
@@ -92,7 +86,7 @@ if ~skipHardware
             
         catch ME
             % Notify the user that an exception has occurred
-            if v
+            if in.v
                 fprintf('%s Scan attempt %d failed: %s\n', datestr(datetime), attempt, ME.message);
             end
             
@@ -107,7 +101,7 @@ if ~skipHardware
     end
 else
     % Skip hardware scan 
-    if v
+    if in.v
         fprintf('%s 3D volume scan skipped (skipHardware = true)\n', datestr(datetime));
     end
 end
