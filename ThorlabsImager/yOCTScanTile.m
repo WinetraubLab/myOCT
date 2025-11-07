@@ -156,7 +156,6 @@ if (v)
     fprintf('%s Initializing Stage (3 axes)...\n', datestr(datetime));
 end
 
-% Initialize stage
 if in.isVerifyMotionRange
     rg_min = [min(in.xCenters_mm) min(in.yCenters_mm) min(in.zDepths)];
     rg_max = [max(in.xCenters_mm) max(in.yCenters_mm) max(in.zDepths)];
@@ -164,6 +163,7 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
+
 [x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
 
 if (v)
