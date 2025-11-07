@@ -25,10 +25,7 @@ if ~exist('v','var')
     v = false;
 end
 
-% Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
-
-%% Compute current and new coordinates in both OCT and stage coordinate systems
+%% Compute current and new coordinates in both OCT and stage coordinate sysetms
 global gStageCurrentStagePosition_StageCoordinates;
 global gStageCurrentStagePosition_OCTCoordinates;
 
@@ -42,35 +39,23 @@ c = cos(goct2stageXYAngleDeg*pi/180);
 s = sin(goct2stageXYAngleDeg*pi/180);
 d_ = [c -s 0; s c 0; 0 0 1]*d;
 
-% Update global position trackers
+% Update
 gStageCurrentStagePosition_OCTCoordinates = gStageCurrentStagePosition_OCTCoordinates + d;
 gStageCurrentStagePosition_StageCoordinates = gStageCurrentStagePosition_StageCoordinates + d_;
 
-%% Display new position
+
+%% Update position and move
+
 if (v)
     fprintf('New Stage Position. ');
     fprintf('At Stage Coordinate System: (%.3f, %.3f, %.3f) mm. ',gStageCurrentStagePosition_StageCoordinates);
     fprintf('At OCT Coordinate System: (%.3f, %.3f, %.3f) mm.\n',gStageCurrentStagePosition_OCTCoordinates);
 end
 
-%% Move stage - system-specific commands
-if ~skipHardware
-    if strcmp(octSystemName, 'ganymede')
-        % Ganymede: C# DLL stage control
-        s = 'xyz';
-        for i=1:3
-            if abs(d_(i)) > 0
-                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i), gStageCurrentStagePosition_StageCoordinates(i));
-            end
-        end
-    elseif strcmp(octSystemName, 'gan632')
-        % Gan632: Stage movement not yet implemented with python
-        if (v)
-            warning('[Gan632] Stage movement not yet implemented - position not moved');
-        end
-    end
-else
-    if (v)
-        fprintf('Stage movement skipped (skipHardware = true)\n');
+s = 'xyz';
+for i=1:3
+    if abs(d_(i)) > 0 % Move if motion of more than epsilon is needed 
+        ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),gStageCurrentStagePosition_StageCoordinates(i)); %Movement [mm]
     end
 end
+
