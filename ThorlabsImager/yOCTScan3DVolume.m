@@ -38,11 +38,11 @@ parse(p, centerX_mm, centerY_mm, rangeX_mm, rangeY_mm, sizeX_pix, sizeY_pix, nBS
 in = p.Results;
 v = in.v;
 
-%% Get the loaded hardware library
-[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
-
 %% Set rotation angle
 rotationAngle_deg = 0; % Rotation angle [deg]
+
+%% Get the loaded hardware library
+[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
 
 %% Dispatch to appropriate implementation based on system type
 if ~skipHardware
