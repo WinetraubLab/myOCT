@@ -77,8 +77,8 @@ end
 [octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
 in.octSystem = octSystemName; % Store for compatibility and logging
 
-% Override unzipOCTFile flag for Ganymede system
-if strcmpi(octSystemName, 'Ganymede')
+% Override unzipOCTFile flag for Gan632 system which doesn't generate .oct files
+if strcmpi(octSystemName, 'Gan632')
     in.unzipOCTFile = false;
 end
 
