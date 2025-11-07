@@ -127,7 +127,7 @@ if ~skipHardware
                         gStageCurrentStagePosition_StageCoordinates(i));
                     
                 case 'gan632'
-                    % GAN632: Use Python module for motion test
+                    % Gan632: Use Python module for motion test
                     octSystemModule.yOCTStageSetPosition_1axis(s(i), ...
                         gStageCurrentStagePosition_StageCoordinates(i) + minPosition(i));
                     pause(0.5);
