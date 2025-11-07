@@ -143,6 +143,7 @@ end
 
 yOCTScannerInit(in.octProbePath,v); % Init OCT
 
+%% Check working distance
 % Make sure depths are ok for working distance's sake 
 if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         - 0.5) % Buffer
@@ -150,7 +151,11 @@ if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         min(in.zDepths), max(in.zDepths), objectiveWorkingDistance);
 end
 
-% Init stage and verify range if needed
+%% Initialize Stage
+if (v)
+    fprintf('%s Initializing Stage (3 axes)...\n', datestr(datetime));
+end
+
 if in.isVerifyMotionRange
     rg_min = [min(in.xCenters_mm) min(in.yCenters_mm) min(in.zDepths)];
     rg_max = [max(in.xCenters_mm) max(in.yCenters_mm) max(in.zDepths)];
@@ -158,10 +163,11 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
+
+[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
 
 if (v)
-    fprintf('%s Done\n',datestr(datetime));
+    fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
 end
 
 %% Make sure folder is empty
