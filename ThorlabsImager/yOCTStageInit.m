@@ -109,12 +109,12 @@ end
 
 % Perform motion range test based on system type
 if ~skipHardware
-    switch(octSystemName)
-        case 'ganymede'
-            % Ganymede: Use C# DLL for motion test
-            s = 'xyz';
-            for i=1:length(s)
-                if (minPosition(i) ~= maxPosition(i))
+    s = 'xyz';
+    for i=1:length(s)
+        if (minPosition(i) ~= maxPosition(i))
+            switch(octSystemName)
+                case 'ganymede'
+                    % Ganymede: Use C# DLL for motion test
                     ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
                         gStageCurrentStagePosition_StageCoordinates(i)+minPosition(i));
                     pause(0.5);
@@ -125,31 +125,25 @@ if ~skipHardware
                     % Return home
                     ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i),...
                         gStageCurrentStagePosition_StageCoordinates(i));
-                end
-            end
-            
-        case 'gan632'
-            % GAN632: Use Python module for motion test
-            axes_list = 'xyz';
-            for i=1:3
-                if (minPosition(i) ~= maxPosition(i))
-                    % Test minimum position
-                    octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
+                    
+                case 'gan632'
+                    % GAN632: Use Python module for motion test
+                    octSystemModule.yOCTStageSetPosition_1axis(s(i), ...
                         gStageCurrentStagePosition_StageCoordinates(i) + minPosition(i));
                     pause(0.5);
-                    % Test maximum position
-                    octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
+                    octSystemModule.yOCTStageSetPosition_1axis(s(i), ...
                         gStageCurrentStagePosition_StageCoordinates(i) + maxPosition(i));
                     pause(0.5);
+                    
                     % Return home
-                    octSystemModule.yOCTStageSetPosition_1axis(axes_list(i), ...
+                    octSystemModule.yOCTStageSetPosition_1axis(s(i), ...
                         gStageCurrentStagePosition_StageCoordinates(i));
-                    pause(0.5);
-                end
+                    
+                otherwise
+                    error('Unknown OCT system: %s', octSystemName);
             end
-            
-        otherwise
-            error('Unknown OCT system: %s', octSystemName);
+            pause(0.5);
+        end
     end
 else
     % Skip motion range test in simulation mode
