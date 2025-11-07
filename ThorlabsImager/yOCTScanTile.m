@@ -152,6 +152,7 @@ end
 
 yOCTScannerInit(in.octProbePath,v); % Init OCT
 
+%% Check working distance
 % Make sure depths are ok for working distance's sake 
 if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         - 0.5) % Buffer
@@ -159,7 +160,11 @@ if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         min(in.zDepths), max(in.zDepths), objectiveWorkingDistance);
 end
 
-% Init stage and verify range if needed
+%% Initialize Stage
+if (v)
+    fprintf('%s Initializing Stage (3 axes)...\n', datestr(datetime));
+end
+
 if in.isVerifyMotionRange
     rg_min = [min(in.xCenters_mm) min(in.yCenters_mm) min(in.zDepths)];
     rg_max = [max(in.xCenters_mm) max(in.yCenters_mm) max(in.zDepths)];
@@ -167,10 +172,11 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
+
+[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
 
 if (v)
-    fprintf('%s Done\n',datestr(datetime));
+    fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
 end
 
 %% Make sure folder is empty
@@ -179,20 +185,36 @@ if exist(octFolder,'dir')
 end
 mkdir(octFolder);
 
-%% Preform the scan
+%% Compute scan centers and ranges
+centerX_mm = in.xOffset + in.octProbe.DynamicOffsetX;
+centerY_mm = in.yOffset;
+rangeX_mm = in.tileRangeX_mm * in.octProbe.DynamicFactorX;
+rangeY_mm = in.tileRangeY_mm;
+
+%% Perform the scan
 for scanI=1:length(in.scanOrder)
     if (v)
         fprintf('%s Scanning Volume %02d of %d\n',datestr(datetime),scanI,length(in.scanOrder));
     end
         
     % Move to position
-    yOCTStageMoveTo(x0+in.gridXcc(scanI),y0+in.gridYcc(scanI),z0+in.gridZcc(scanI));
+    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI));
 
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
-    octScan(in,s);
+    % Scan OCT Volume
+    yOCTScan3DVolume(...
+        centerX_mm, ...
+        centerY_mm, ...
+        rangeX_mm, ...
+        rangeY_mm, ...
+        in.nXPixelsInEachTile, ...
+        in.nYPixelsInEachTile, ...
+        in.nBScanAvg, ...
+        s, ...
+        'v', v);
     
     % Unzip if needed
 	if in.unzipOCTFile
@@ -211,7 +233,7 @@ if (v)
     fprintf('%s Homing...\n', datestr(datetime));
 end
 
-% Home 
+% Return stage to home position
 pause(0.5);
 yOCTStageMoveTo(x0,y0,z0);
 pause(0.5);
@@ -236,7 +258,7 @@ pauseDuration = 1; % Duration to pause (in seconds) between retries
 
 for attempt = 1:numRetries
     try
-        % Remove folder if it exists
+        % Rmove folder if it exists
         if exist(s,'dir')
             rmdir(s, 's');
         end
