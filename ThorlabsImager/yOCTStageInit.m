@@ -2,7 +2,7 @@ function [x0,y0,z0] = yOCTStageInit(oct2stageXYAngleDeg, ...
     minPosition, maxPosition,v)
 % This function initializes translation stage and returns current position.
 % INPUTS:
-%   goct2stageXYAngleDeg - Optional, the rotation angle to convert between OCT
+%   oct2stageXYAngleDeg - Optional, the rotation angle to convert between OCT
 %       system and the stage, usually this angle is close to 0, but woth
 %       calibration. See findMotorAngleCalibration.m for more information.
 %       Rotation along X-Y plane
@@ -104,7 +104,7 @@ if ~any(minPosition ~= maxPosition)
 end
 
 if (v)
-    fprintf('%s Motion Range Test...\n\t(if Matlab is taking more than 2 minutes to finish this step, stage might be at it''s limit and need to center)\n',datestr(datetime));
+    fprintf('%s Motion Range Test...\n\t(if Matlab is taking more than 2 minutes to finish this step, stage might be at its limit and need to center)\n',datestr(datetime));
 end
 
 % Perform motion range test based on system type
