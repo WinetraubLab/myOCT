@@ -57,27 +57,22 @@ end
 
 %% Move stage - system-specific commands
 if ~skipHardware
-    switch(octSystemName)
-        case 'ganymede'
-            % Ganymede: C# DLL stage control
-            s = 'xyz';
-            for i=1:3
-                if abs(d_(i)) > 0
+    s = 'xyz';
+    for i=1:3
+        if abs(d_(i)) > 0
+            switch(octSystemName)
+                case 'ganymede'
+                    % Ganymede: C# DLL stage control
                     ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i), gStageCurrentStagePosition_StageCoordinates(i));
-                end
-            end
-            
-        case 'gan632'
-            % Gan632: Python stage control
-            s = 'xyz';
-            for i=1:3
-                if abs(d_(i)) > 0
+                    
+                case 'gan632'
+                    % Gan632: Python stage control
                     octSystemModule.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
-                end
+                    
+                otherwise
+                    error('Unknown OCT system: %s', octSystemName);
             end
-            
-        otherwise
-            error('Unknown OCT system: %s', octSystemName);
+        end
     end
 else
     if (v)
