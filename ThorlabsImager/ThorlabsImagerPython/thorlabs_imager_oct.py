@@ -40,6 +40,18 @@ _laser_power = 0
 
 _optical_switch_on = False
 
+# -------------------------------
+# Kinesis (Stage) globals
+# -------------------------------
+_kinesis_devices = {}
+_kinesis_serial_map = {
+    'x': '26006464',
+    'y': '26006471',
+    'z': '26006482',
+}
+_kinesis_loaded = False
+_kinesis_error = None
+
 
 # ============================================================================
 # OCT SCANNER FUNCTIONS
@@ -381,6 +393,184 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
             probe.properties.set_apo_volt_y(value)
         except Exception:
             pass  # Could not set ApoVoltageY
+
+# ============================================================================
+# Stage control via Thorlabs Kinesis (.NET via pythonnet)
+# API mirrors the legacy C++: yOCTStageInit_1axis, yOCTStageSetPosition_1axis, yOCTStageClose_1axis
+# ============================================================================
+
+def _ensure_kinesis_loaded():
+    """Lazy-load Kinesis .NET assemblies using pythonnet and prepare required types.
+
+    Uses the default install path C:\\Program Files\\Thorlabs\\Kinesis unless overridden
+    by THORLABS_KINESIS_DIR environment variable.
+    """
+    global _kinesis_loaded, _kinesis_error
+    if _kinesis_loaded:
+        return
+    try:
+        import os as _os
+        import time as _time
+        import clr  # pythonnet
+
+        kinesis_dir = _os.environ.get('THORLABS_KINESIS_DIR', r"C:\\Program Files\\Thorlabs\\Kinesis")
+        # Add references
+        clr.AddReference(f"{kinesis_dir}\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
+        clr.AddReference(f"{kinesis_dir}\\Thorlabs.MotionControl.GenericMotorCLI.dll")
+        # Prefer Stepper library; adjust here if using DCServo hardware
+        clr.AddReference(f"{kinesis_dir}\\Thorlabs.MotionControl.KCube.StepperMotorCLI.dll")
+
+        # Imports
+        from Thorlabs.MotionControl.DeviceManagerCLI import DeviceManagerCLI, SimulationManager  # type: ignore
+        from Thorlabs.MotionControl.GenericMotorCLI import DeviceConfiguration  # type: ignore
+        from Thorlabs.MotionControl.KCube.StepperMotorCLI import KCubeStepper  # type: ignore
+        from System import Decimal  # type: ignore  # noqa: F401 (used in functions)
+
+        # Stash types on module for reuse
+        globals()['DeviceManagerCLI'] = DeviceManagerCLI
+        globals()['SimulationManager'] = SimulationManager
+        globals()['DeviceConfiguration'] = DeviceConfiguration
+        globals()['KCubeStepper'] = KCubeStepper
+        globals()['Decimal'] = Decimal
+
+        # Build device list once
+        try:
+            DeviceManagerCLI.BuildDeviceList()
+        except Exception:
+            pass
+
+        _kinesis_loaded = True
+        _kinesis_error = None
+    except Exception as e:
+        _kinesis_loaded = False
+        _kinesis_error = e
+        raise RuntimeError(f"Failed to load Thorlabs Kinesis .NET libraries: {e}")
+
+
+def _get_kinesis_device_for_axis(axis: str):
+    axis = axis.lower()
+    if axis not in _kinesis_serial_map:
+        raise ValueError(f"Invalid axis '{axis}'")
+    serial = _kinesis_serial_map[axis]
+    dev = _kinesis_devices.get(axis)
+    return serial, dev
+
+
+def yOCTStageInit_1axis(axis: str) -> float:
+    """Initialize stage for one axis; returns current position in mm.
+
+    Mirrors legacy C++ behavior: open device, start polling at 200 ms, brief wait,
+    and return the current position in real-world units (mm) as reported by Kinesis.
+    """
+    _ensure_kinesis_loaded()
+    serial, existing = _get_kinesis_device_for_axis(axis)
+    if existing is not None:
+        # Best-effort close before re-open
+        try:
+            existing.StopPolling()
+        except Exception:
+            pass
+        try:
+            existing.Disconnect()
+        except Exception:
+            pass
+        _kinesis_devices.pop(axis.lower(), None)
+
+    # Create and connect device (KCube Stepper by default)
+    KCS = globals().get('KCubeStepper')
+    if KCS is None:
+        raise RuntimeError("Kinesis KCubeStepper type not loaded")
+    dev = KCS.CreateKCubeStepper(serial)
+    dev.Connect(serial)
+
+    # Start polling and enable
+    dev.StartPolling(200)
+    time.sleep(3.0)
+    dev.EnableDevice()
+    time.sleep(0.25)
+
+    # Load configuration so Position is in real-world units
+    DC = globals().get('DeviceConfiguration')
+    use_file_settings = DC.DeviceSettingsUseOptionType.UseFileSettings if DC else None
+    try:
+        if use_file_settings is not None:
+            dev.LoadMotorConfiguration(dev.DeviceID, use_file_settings)
+    except Exception:
+        pass
+
+    # Optional: set velocity/acc like legacy (guarded)
+    try:
+        vp = dev.GetVelocityParams()
+        # Keep existing acceleration, modestly increase velocity if desired
+        dev.SetVelocityParams(vp.Acceleration, vp.MaxVelocity)
+    except Exception:
+        pass
+
+    # Read current position (Decimal -> float mm)
+    try:
+        pos_mm = float(dev.Position)
+    except Exception:
+        pos_mm = 0.0
+
+    _kinesis_devices[axis.lower()] = dev
+    return pos_mm
+
+
+def yOCTStageSetPosition_1axis(axis: str, position_mm: float) -> None:
+    """Set absolute stage position in mm (blocking until move completes)."""
+    _ensure_kinesis_loaded()
+    serial, dev = _get_kinesis_device_for_axis(axis)
+    if dev is None:
+        raise RuntimeError(f"Axis '{axis}' not initialized. Call yOCTStageInit_1axis first.")
+
+    # Try absolute move via SetMoveAbsolutePosition + MoveAbsolute
+    _Decimal = globals().get('Decimal')
+    if _Decimal is None:
+        raise RuntimeError("Kinesis System.Decimal not loaded")
+    target = _Decimal(position_mm)
+    try:
+        if hasattr(dev, 'SetMoveAbsolutePosition'):
+            dev.SetMoveAbsolutePosition(target)
+            if hasattr(dev, 'MoveAbsolute'):
+                dev.MoveAbsolute(600000)  # 10 minutes
+                return
+        # Fallback: direct MoveTo(pos, timeout)
+        if hasattr(dev, 'MoveTo'):
+            dev.MoveTo(target, 600000)
+            return
+        # Fallback: relative (compute delta)
+        try:
+            current = float(dev.Position)
+        except Exception:
+            current = 0.0
+        delta = _Decimal(position_mm - current)
+        if hasattr(dev, 'SetMoveRelativeDistance') and hasattr(dev, 'MoveRelative'):
+            dev.SetMoveRelativeDistance(delta)
+            dev.MoveRelative(600000)
+            return
+        raise RuntimeError('No supported absolute/relative move method found on device')
+    except Exception as e:
+        raise RuntimeError(f"Move failed for axis '{axis}': {e}")
+
+
+def yOCTStageClose_1axis(axis: str) -> None:
+    """Close/disconnect stage for one axis."""
+    _ensure_kinesis_loaded()
+    axis_l = axis.lower()
+    dev = _kinesis_devices.pop(axis_l, None)
+    if dev is None:
+        return
+    try:
+        try:
+            dev.StopPolling()
+        except Exception:
+            pass
+        try:
+            dev.Disconnect()
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
     """
