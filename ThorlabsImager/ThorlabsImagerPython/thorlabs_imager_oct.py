@@ -19,10 +19,10 @@ from pyspectralradar import OCTSystem, RawData, RealData, OCTFile
 import pyspectralradar.types as pt
 import os
 import time
+import gc  # For explicit garbage collection
 from datetime import datetime
 import configparser
 import threading
-import atexit
 import zipfile
 import shutil
 
@@ -55,9 +55,9 @@ _laser_power = 0
 
 _optical_switch_on = False
 
-# Lock and flag to make shutdown/close operations idempotent and thread-safe
-_shutdown_lock = threading.Lock()
-_closed_all = False
+# Lock to make shutdown/close operations thread-safe. Use RLock so nested
+# cleanup calls (e.g., yOCTCloseAll -> yOCTScannerClose) don't deadlock.
+_shutdown_lock = threading.RLock()
 
 
 # ============================================================================
@@ -69,6 +69,9 @@ def yOCTScannerInit(octProbePath : str) -> None:
     
     Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath)
     
+    If scanner is already initialized, closes it first to release hardware.
+    This ensures clean re-initialization on subsequent runs.
+    
     Args:
         octProbePath (str): Path to the probe configuration .ini file
     
@@ -77,50 +80,63 @@ def yOCTScannerInit(octProbePath : str) -> None:
     
     Raises:
         FileNotFoundError: If probe file does not exist
-        RuntimeError: If scanner is already initialized or OCT system initialization fails
+        RuntimeError: If OCT system initialization fails
     """
     global _oct_system, _device, _probe, _processing, _probe_config, _scanner_initialized
-    
-    # Check if scanner is already initialized
-    if _scanner_initialized:
-        raise RuntimeError("Scanner is already initialized. Call yOCTScannerClose() first.")
     
     # Check file exists early for clearer error message
     if not os.path.exists(octProbePath):
         raise FileNotFoundError(f"Probe configuration file not found: {octProbePath}")
     
+    # If scanner is already initialized, close it first
+    # This is critical for repeated runs - hardware must be released properly
+    if _scanner_initialized or _oct_system is not None:
+        try:
+            yOCTScannerClose()
+            # Give USB hardware extra time to fully release and reset
+            # SpectralRadar SDK needs this to avoid "No initialization response" errors
+            time.sleep(1.0)
+        except Exception as e:
+            # Best-effort cleanup - log but continue to try init
+            print(f"Warning: Error during cleanup before re-init: {e}")
+            # Still wait even if cleanup failed
+            time.sleep(1.0)
+    
+    # Initialize OCT system - SDK will connect to hardware
     try:
-        # Initialize OCT system
         _oct_system = OCTSystem()
         _device = _oct_system.dev
-        
-        # Load probe configuration from .ini file
-        # This dictionary contains all parameters, including myOCT-specific ones
-        # (like DynamicFactorX, Oct2StageXYAngleDeg) that aren't SDK properties
-        _probe_config = _read_probe_ini(octProbePath)
-        
-        # Create probe with default settings, then configure from .ini file
-        _probe = _oct_system.probe_factory.create_default()
-        
-        # Apply calibration parameters from .ini file to probe
-        _apply_probe_config_to_probe(_probe, _probe_config)
-        
-        # Create processing pipeline
-        _processing = _oct_system.processing_factory.from_device()
-        
-        _scanner_initialized = True
-        
     except Exception as e:
-        # Proper cleanup: delete SDK objects then set globals to None
-        for obj_name in ['_processing', '_probe', '_device', '_oct_system']:
-            if globals().get(obj_name) is not None:
-                try:
-                    del globals()[obj_name]  # Actually delete the global, not the loop variable
-                except Exception:
-                    pass  # Best effort
-                globals()[obj_name] = None
-        _scanner_initialized = False
-        raise
+        # Provide helpful error message for common hardware issues
+        error_msg = str(e)
+        if "No initialization response" in error_msg or "Failed to open data device" in error_msg:
+            raise RuntimeError(
+                f"Failed to connect to OCT device: {error_msg}\n"
+                "Common causes:\n"
+                "  1. OCT base unit is powered OFF - check power LED\n"
+                "  2. USB cable is disconnected or loose\n"
+                "  3. Device still held by previous connection - try restarting MATLAB\n"
+                "  4. USB hub/port issue - try different USB port"
+            ) from e
+        else:
+            # Re-raise other errors as-is
+            raise
+    
+    # Load probe configuration from .ini file
+    # This dictionary contains all parameters, including myOCT-specific ones
+    # (like DynamicFactorX, Oct2StageXYAngleDeg) that aren't SDK properties
+    _probe_config = _read_probe_ini(octProbePath)
+    
+    # Create probe with default settings, then configure from .ini file
+    _probe = _oct_system.probe_factory.create_default()
+    
+    # Apply calibration parameters from .ini file to probe
+    _apply_probe_config_to_probe(_probe, _probe_config)
+    
+    # Create processing pipeline
+    _processing = _oct_system.processing_factory.from_device()
+    
+    _scanner_initialized = True
 
 
 def yOCTScannerClose():
@@ -128,8 +144,8 @@ def yOCTScannerClose():
     
     Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose()
     
-    In Python SDK, cleanup is done by deleting objects in reverse order of creation,
-    following Thorlabs best practice (del object, then set to None).
+    Sets scanner objects to None to release resources. Python's garbage collector
+    will clean up naturally without forcing immediate destructors.
     
     Args:
         None
@@ -143,16 +159,52 @@ def yOCTScannerClose():
     global _oct_system, _device, _probe, _processing, _scanner_initialized, _shutdown_lock
 
     with _shutdown_lock:
-        # Delete objects in reverse order of creation (Thorlabs SDK best practice)
-        for name in ['_processing', '_probe', '_device', '_oct_system']:
-            if globals().get(name) is not None:
-                try:
-                    del globals()[name]  # Trigger SDK destructor
-                except Exception:
-                    pass  # Best effort - continue cleanup
-                globals()[name] = None  # Clear reference
-
+        # Stop any ongoing acquisition before closing
+        if _device is not None:
+            try:
+                # Ensure acquisition is fully stopped
+                _device.acquisition.stop()
+                time.sleep(0.1)
+            except:
+                pass  # May already be stopped
+        
+        # Explicitly delete objects in reverse order to force destructors
+        # This ensures SDK releases USB device immediately
+        if _processing is not None:
+            try:
+                del _processing
+            except:
+                pass
+        if _probe is not None:
+            try:
+                del _probe
+            except:
+                pass
+        if _device is not None:
+            try:
+                del _device
+            except:
+                pass
+        if _oct_system is not None:
+            try:
+                del _oct_system
+            except:
+                pass
+        
+        # Now set all to None to clear references
+        _processing = None
+        _probe = None
+        _device = None
+        _oct_system = None
         _scanner_initialized = False
+        
+        # Force garbage collection NOW - critical in MATLAB environment
+        # Without this, Python might keep objects alive indefinitely
+        gc.collect()
+        
+        # Give hardware extra time to fully release USB connection
+        # This is critical for SpectralRadar SDK - it needs time to release USB properly
+        time.sleep(1.0)
 
 
 def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float, 
@@ -351,10 +403,11 @@ def yOCTStageInit_1axis(axes: str) -> float:
         raise ValueError(f"Invalid axis: {axes}")
     serial_no = _stage_serial_numbers[axis]
     
-    # Thread-safe XA SDK startup
-    if not hasattr(XASDK, '_oct_xa_started'):
+    # Thread-safe XA SDK startup (or restart if previously shut down)
+    # This refreshes the device list, similar to C++ TLI_BuildDeviceList()
+    if not hasattr(XASDK, '_oct_xa_started') or not XASDK._oct_xa_started:
         with _shutdown_lock:  # Use existing lock for thread safety
-            if not hasattr(XASDK, '_oct_xa_started'):  # Double-check inside lock
+            if not hasattr(XASDK, '_oct_xa_started') or not XASDK._oct_xa_started:  # Double-check inside lock
                 dll_path = os.path.dirname(__file__)
                 XASDK.try_load_library(dll_path)
                 XASDK.startup("")
@@ -505,19 +558,29 @@ def yOCTCloseAll():
     garbage collector but it doesn't always work reliably.
     
     This function is idempotent and thread-safe - safe to call multiple times.
+    It checks actual resource state rather than using a flag, so it will properly
+    clean up even if previous cleanup attempts failed.
     
     Args:
         None
     Returns:
         None
     """
-    global _stage_handles, _oct_system, _device, _probe, _processing, _shutdown_lock, _closed_all, _scanner_initialized
+    global _stage_handles, _oct_system, _device, _probe, _processing, _shutdown_lock, _scanner_initialized
 
-    # Make the full cleanup idempotent and thread-safe. Use a lock and a flag so
-    # repeated calls (from finally blocks, atexit, or multiple threads) are safe.
+    # Make cleanup thread-safe using a lock
     with _shutdown_lock:
-        if _closed_all:
-            return
+        # Check actual resource state - no separate flag needed
+        # If nothing is open, return early
+        has_resources = (
+            bool(_stage_handles) or 
+            _scanner_initialized or 
+            (_oct_system is not None) or
+            (hasattr(XASDK, '_oct_xa_started') and XASDK._oct_xa_started)
+        )
+        
+        if not has_resources:
+            return  # Nothing to clean up
 
         # 1. Close all stage handles first (hardware before software SDK)
         #    Use popitem() to safely empty dict during iteration
@@ -542,25 +605,29 @@ def yOCTCloseAll():
         except Exception:
             pass  # Best effort - continue to SDK shutdown
 
-        # 3. Shutdown XA SDK last (only if we started it)
-        try:
-            if hasattr(XASDK, '_oct_xa_started') and XASDK._oct_xa_started:
-                try:
-                    XASDK.shutdown()
-                except Exception:
-                    pass
-                XASDK._oct_xa_started = False
-        except Exception:
-            # Best-effort: ignore SDK attribute access errors during interpreter teardown
-            pass
+        # 3. DO NOT shutdown XA SDK - this causes crashes
+        #    The SDK will be restarted automatically on next init (idempotent behavior)
+        #    Leaving SDK running between calls is safer than shutting it down
+        
+        # 4. Force final garbage collection to ensure all resources released
+        gc.collect()
 
-        _closed_all = True
 
-# Register automatic cleanup at program exit
-# NOTE: When used from MATLAB, atexit may not fire because MATLAB controls
-# the Python interpreter lifecycle. MATLAB users MUST call yOCTCloseAll() 
-# explicitly at the end of their scripts!
-atexit.register(yOCTCloseAll)
+def yOCTForceGarbageCollection():
+    """Force Python garbage collection to run.
+    
+    Call this from MATLAB between script runs to ensure Python releases all hardware.
+    This is especially important in MATLAB's persistent Python environment where
+    objects can stay alive across multiple script executions.
+    
+    Usage from MATLAB:
+        py.thorlabs_imager_oct.yOCTForceGarbageCollection()
+    
+    Returns:
+        None
+    """
+    gc.collect()
+    time.sleep(0.1)  # Brief pause for cleanup to complete
 
 # ============================================================================
 # Helper Functions  
