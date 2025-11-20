@@ -408,10 +408,24 @@ def yOCTStageInit_1axis(axes: str) -> float:
     if not hasattr(XASDK, '_oct_xa_started') or not XASDK._oct_xa_started:
         with _shutdown_lock:  # Use existing lock for thread safety
             if not hasattr(XASDK, '_oct_xa_started') or not XASDK._oct_xa_started:  # Double-check inside lock
-                dll_path = os.path.dirname(__file__)
-                XASDK.try_load_library(dll_path)
-                XASDK.startup("")
-                XASDK._oct_xa_started = True
+                # Get absolute path to directory containing this Python module
+                dll_path = os.path.abspath(os.path.dirname(__file__))
+                
+                # Add DLL directory to Windows DLL search path (Python 3.8+)
+                if hasattr(os, 'add_dll_directory'):
+                    os.add_dll_directory(dll_path)
+                
+                # WORKAROUND: XASDK.try_load_library() ignores the path parameter
+                # and looks in current working directory. Temporarily change CWD.
+                original_cwd = os.getcwd()
+                try:
+                    os.chdir(dll_path)
+                    XASDK.try_load_library(dll_path)
+                    XASDK.startup("")
+                    XASDK._oct_xa_started = True
+                finally:
+                    # Always restore original working directory
+                    os.chdir(original_cwd)
     
     device = None
     try:
