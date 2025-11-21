@@ -67,9 +67,6 @@ def yOCTScannerInit(octProbePath : str) -> None:
     
     Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath)
     
-    If scanner is already initialized, closes it first to release hardware.
-    This ensures clean re-initialization on subsequent runs.
-    
     Args:
         octProbePath (str): Path to the probe configuration .ini file
     
@@ -85,20 +82,6 @@ def yOCTScannerInit(octProbePath : str) -> None:
     # Check file exists early for clearer error message
     if not os.path.exists(octProbePath):
         raise FileNotFoundError(f"Probe configuration file not found: {octProbePath}")
-    
-    # If scanner is already initialized, close it first
-    # This is critical for repeated runs - hardware must be released properly
-    if _scanner_initialized or _oct_system is not None:
-        try:
-            yOCTScannerClose()
-            # Give USB hardware extra time to fully release and reset
-            # SpectralRadar SDK needs this to avoid "No initialization response" errors
-            time.sleep(1.0)
-        except Exception as e:
-            # Best-effort cleanup - log but continue to try init
-            print(f"Warning: Error during cleanup before re-init: {e}")
-            # Still wait even if cleanup failed
-            time.sleep(1.0)
     
     # Initialize OCT system - SDK will connect to hardware
     try:
@@ -142,8 +125,8 @@ def yOCTScannerClose():
     
     Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose()
     
-    Sets scanner objects to None to release resources. Python's garbage collector
-    will clean up naturally without forcing immediate destructors.
+    Explicitly deletes scanner objects and forces garbage collection to ensure
+    immediate resource cleanup and USB device release.
     
     Args:
         None
@@ -253,7 +236,7 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
     acquisition_started = False
     
     try:
-        # Set B-scan averaging on probe and processing (persists like C++ version)
+        # Set B-scan averaging on probe and processing
         if nBScanAvg > 1:
             _probe.properties.set_oversampling_slow_axis(nBScanAvg)
             _processing.properties.set_bscan_avg(nBScanAvg)
@@ -402,7 +385,6 @@ def yOCTStageInit_1axis(axes: str) -> float:
     serial_no = _stage_serial_numbers[axis]
     
     # Thread-safe XA SDK startup (or restart if previously shut down)
-    # This refreshes the device list, similar to C++ TLI_BuildDeviceList()
     if not hasattr(XASDK, '_oct_xa_started') or not XASDK._oct_xa_started:
         with _shutdown_lock:  # Use existing lock for thread safety
             if not hasattr(XASDK, '_oct_xa_started') or not XASDK._oct_xa_started:  # Double-check inside lock
@@ -566,8 +548,7 @@ def yOCTCloseAll():
     3. Shutdown XA SDK if we started it
     
     Per Thorlabs: Always call disconnect() before close() to avoid sporadic 
-    cleanup issues, especially with benchtop controllers. The XA SDK has a 
-    garbage collector but it doesn't always work reliably.
+    cleanup issues, especially with benchtop controllers.
     
     This function is idempotent and thread-safe - safe to call multiple times.
     It checks actual resource state rather than using a flag, so it will properly
@@ -718,7 +699,7 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
         'RangeMaxY': ('set_range_max_y', float),
         
         # Apodization
-        'ApoVoltage': ('set_apo_volt_x', float),  # Note: setting both X and Y to same value
+        'ApoVoltage': ('set_apo_volt_x', float),  # Sets both X and Y to same value
         'FlybackTime': ('set_flyback_time_sec', float),
         
         # Camera calibration
