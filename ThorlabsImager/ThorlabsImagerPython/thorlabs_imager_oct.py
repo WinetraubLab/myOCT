@@ -15,13 +15,11 @@ Function Naming Convention:
 - Optical switch: yOCTTurnOpticalSwitch
 """
 
-from pyspectralradar import OCTSystem, RawData, RealData, OCTFile
+from pyspectralradar import OCTSystem, RawData, OCTFile
 import pyspectralradar.types as pt
 import os
 import time
-import gc  # For explicit garbage collection
-from datetime import datetime
-import configparser
+import gc  
 import threading
 import zipfile
 import shutil
@@ -626,22 +624,6 @@ def yOCTCloseAll():
         # 4. Force final garbage collection to ensure all resources released
         gc.collect()
 
-
-def yOCTForceGarbageCollection():
-    """Force Python garbage collection to run.
-    
-    Call this from MATLAB between script runs to ensure Python releases all hardware.
-    This is especially important in MATLAB's persistent Python environment where
-    objects can stay alive across multiple script executions.
-    
-    Usage from MATLAB:
-        py.thorlabs_imager_oct.yOCTForceGarbageCollection()
-    
-    Returns:
-        None
-    """
-    gc.collect()
-    time.sleep(0.1)  # Brief pause for cleanup to complete
 
 # ============================================================================
 # Helper Functions  
