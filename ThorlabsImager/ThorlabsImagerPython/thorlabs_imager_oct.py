@@ -43,15 +43,6 @@ _processing = None
 _probe_config = {}
 _scanner_initialized = False
 
-_stage_initialized = False
-_stage_origin = {'x': 0, 'y': 0, 'z': 0}
-_stage_angle = 0
-
-_laser_on = False
-_laser_power = 0
-
-_optical_switch_on = False
-
 
 # ============================================================================
 # OCT SCANNER FUNCTIONS
@@ -139,7 +130,6 @@ def yOCTScannerClose():
         try:
             # Ensure acquisition is fully stopped
             _device.acquisition.stop()
-            time.sleep(0.1)
         except:
             pass  # May already be stopped
     
@@ -178,7 +168,6 @@ def yOCTScannerClose():
     gc.collect()
     
     # Give hardware extra time to fully release USB connection
-    # This is critical for SpectralRadar SDK - it needs time to release USB properly
     time.sleep(1.0)
 
 
