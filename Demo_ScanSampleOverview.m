@@ -6,6 +6,7 @@
 yOCTSetLibraryPath(); % Set path
 
 %% Inputs
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
 % Define the scan
 sampleSize_mm = 2; % Will scan from -sampleSize_mm to +sampleSize_mm
@@ -19,8 +20,14 @@ pixelSize_um = 25; % x-y Pixel size in microns
 % Other scanning parameters
 tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 
+% OCT System Selection
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
+
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipHardware = false;
+
+%% Load hardware
+yOCTLoadHardwareLib(octSystem, skipHardware, true)
 
 %% Compute scanning parameters
 

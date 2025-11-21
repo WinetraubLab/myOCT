@@ -15,7 +15,11 @@ Function Naming Convention:
 - Optical switch: yOCTTurnOpticalSwitch
 """
 
+<<<<<<< HEAD
 from pyspectralradar import OCTSystem, RawData, OCTFile
+=======
+from pyspectralradar import OCTSystem, RawData, RealData, OCTFile
+>>>>>>> origin/master
 import pyspectralradar.types as pt
 import os
 import time
@@ -606,6 +610,138 @@ def yOCTCloseAll():
         gc.collect()
 
 
+def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float, 
+                     rangeX_mm: float, rangeY_mm: float,
+                     rotationAngle_deg: float,
+                     nXPixels: int, nYPixels: int,
+                     nBScanAvg: int,
+                     outputFolder: str):
+    """Scan 3D OCT volume and save MATLAB-compatible data files.
+    
+    Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume()
+    
+    Creates an output folder with Header.xml, data/Spectral*.data files, and calibration files
+    
+    Args:
+        centerX_mm (float): Center position X in mm
+        centerY_mm (float): Center position Y in mm
+        rangeX_mm (float): Scan range X in mm
+        rangeY_mm (float): Scan range Y in mm
+        rotationAngle_deg (float): Rotation angle in degrees
+        nXPixels (int): Number of pixels in X (A-scans per B-scan)
+        nYPixels (int): Number of pixels in Y (B-scans in volume)
+        nBScanAvg (int): Number of B-scans to average
+        outputFolder (str): Output directory path (must not exist)
+    
+    Returns:
+        None (data is saved to outputFolder/Header.xml and outputFolder/data/*.data)
+    
+    Raises:
+        RuntimeError: If scanner is not initialized
+        FileExistsError: If outputFolder already exists
+    """
+    global _scanner_initialized, _device, _probe, _processing
+    
+    if not _scanner_initialized:
+        raise RuntimeError("Scanner not initialized. Call yOCTScannerInit() first.")
+    
+    # Check if output folder already exists
+    if os.path.exists(outputFolder):
+        raise FileExistsError(f"Output folder already exists: {outputFolder}")
+    
+    # Create output directory
+    os.makedirs(outputFolder, exist_ok=True)
+    
+    try:
+        # Set B-scan averaging on probe and processing
+        if nBScanAvg > 1:
+            _probe.properties.set_oversampling_slow_axis(nBScanAvg)
+            _processing.properties.set_bscan_avg(nBScanAvg)
+        
+        # Create volume scan pattern
+        scan_pattern = _probe.scan_pattern.create_volume_pattern(
+            rangeX_mm,  # range X in mm
+            nXPixels,   # A-scans per B-scan
+            rangeY_mm,  # range Y in mm
+            nYPixels,   # B-scans in volume
+            pt.ApodizationType.EACH_BSCAN,  # Apodization type
+            pt.AcquisitionOrder.ACQ_ORDER_ALL  # Acquisition order
+        )
+        
+        # Apply center offset (shift scan pattern to center position)
+        scan_pattern.shift(centerX_mm, centerY_mm)
+        
+        # Apply rotation if specified
+        if rotationAngle_deg != 0:
+            scan_pattern.rotate(rotationAngle_deg * 3.14159265359 / 180.0)  # Convert to radians
+        
+        # Allocate data buffers
+        raw_data = RawData()
+        
+        # Start acquisition
+        time_start = time.time()
+        _device.acquisition.start(scan_pattern, pt.AcqType.ASYNC_FINITE)
+        
+        # Get raw data from acquisition
+        _device.acquisition.get_raw_data(buffer=raw_data)
+        
+        # Stop acquisition
+        _device.acquisition.stop()
+        time_end = time.time()
+        
+        # Create OCT file with proper metadata 
+        oct_file = OCTFile(filetype=pt.FileFormat.OCITY)
+
+        # Add raw data to OCT file
+        oct_file.add_data(raw_data, "data\\Spectral0.data")
+
+        # Save calibration files: Chirp and Offset
+        oct_file.save_calibration(_processing, 0)
+
+        # Set metadata from the scan
+        oct_file.set_metadata(_device, _processing, _probe, scan_pattern)
+
+        # Set acquisition time
+        acq_time = time_end - time_start
+        oct_file.properties.set_scan_time_sec(acq_time)
+
+        # Add comment
+        oct_file.properties.set_comment("Created using Python SDK - yOCTScan3DVolume()")
+
+        # Save to .oct file in the output folder
+        oct_file_path = os.path.join(outputFolder, 'scan.oct')
+        oct_file.save(oct_file_path)
+
+        # Extract .oct file for MATLAB compatibility
+        # The .oct file is a ZIP archive, we need to extract it so MATLAB can read it
+        import zipfile
+        with zipfile.ZipFile(oct_file_path, 'r') as zip_ref:
+            zip_ref.extractall(outputFolder)
+
+        # Delete the .oct file after extraction to avoid duplication
+        # MATLAB expects to find extracted files, not the .oct archive
+        os.remove(oct_file_path)
+
+        # Split the concatenated Spectral0.data into individual B-scan files
+        # MATLAB expects Spectral0.data, Spectral1.data, ..., Spectral(N-1).data
+        _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels)
+
+        # Fix Header.xml metadata for MATLAB compatibility
+        _fix_header_xml_for_matlab(outputFolder, raw_data, _probe)
+
+        # Clean up OCT file object and data buffers
+        del oct_file
+        del raw_data
+        del scan_pattern
+        
+    except Exception as e:
+        # Clean up output folder on error
+        if os.path.exists(outputFolder):
+            import shutil
+            shutil.rmtree(outputFolder)
+        raise
+
+
 # ============================================================================
 # Helper Functions  
 # ============================================================================
@@ -732,7 +868,10 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
         except Exception:
             pass  # Could not set ApoVoltageY
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/master
 def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
     """
     Split concatenated Spectral0.data into individual B-scan files for MATLAB compatibility.

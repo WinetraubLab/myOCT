@@ -73,6 +73,15 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
+% Get OCT system from persistent library
+[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+in.octSystem = octSystemName; % Store for compatibility and logging
+
+% Override unzipOCTFile flag for Gan632 system which doesn't generate .oct files
+if strcmpi(octSystemName, 'Gan632')
+    in.unzipOCTFile = false;
+end
+
 %% Parse our parameters from probe
 in.octProbe = yOCTReadProbeIniToStruct(in.octProbePath);
 
@@ -141,17 +150,9 @@ if in.skipHardware
     return;
 end
 
-if (v)
-    fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
-end
- 
-ThorlabsImagerNETLoadLib(); % Init library
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); % Init OCT
+yOCTScannerInit(in.octProbePath,v); % Init OCT
 
-if (v)
-    fprintf('%s Initialzing Hardware Completed\n',datestr(datetime));
-end
-
+%% Check working distance
 % Make sure depths are ok for working distance's sake 
 if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         - 0.5) % Buffer
@@ -159,7 +160,11 @@ if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         min(in.zDepths), max(in.zDepths), objectiveWorkingDistance);
 end
 
-% Init stage and verify range if needed
+%% Initialize Stage
+if (v)
+    fprintf('%s Initializing Stage (3 axes)...\n', datestr(datetime));
+end
+
 if in.isVerifyMotionRange
     rg_min = [min(in.xCenters_mm) min(in.yCenters_mm) min(in.zDepths)];
     rg_max = [max(in.xCenters_mm) max(in.yCenters_mm) max(in.zDepths)];
@@ -167,10 +172,11 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
+
+[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
 
 if (v)
-    fprintf('%s Done\n',datestr(datetime));
+    fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
 end
 
 %% Make sure folder is empty
@@ -179,21 +185,38 @@ if exist(octFolder,'dir')
 end
 mkdir(octFolder);
 
-%% Preform the scan
+%% Compute scan centers and ranges
+centerX_mm = in.xOffset + in.octProbe.DynamicOffsetX;
+centerY_mm = in.yOffset;
+rangeX_mm = in.tileRangeX_mm * in.octProbe.DynamicFactorX;
+rangeY_mm = in.tileRangeY_mm;
+
+%% Perform the scan
 for scanI=1:length(in.scanOrder)
     if (v)
         fprintf('%s Scanning Volume %02d of %d\n',datestr(datetime),scanI,length(in.scanOrder));
     end
         
     % Move to position
-    yOCTStageMoveTo(x0+in.gridXcc(scanI),y0+in.gridYcc(scanI),z0+in.gridZcc(scanI));
+    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI));
 
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
 
-    octScan(in,s);
+    % Scan OCT Volume
+    yOCTScan3DVolume(...
+        centerX_mm, ...
+        centerY_mm, ...
+        rangeX_mm, ...
+        rangeY_mm, ...
+        in.nXPixelsInEachTile, ...
+        in.nYPixelsInEachTile, ...
+        in.nBScanAvg, ...
+        s, ...
+        'v', v);
     
+    % Unzip if needed
 	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
@@ -206,12 +229,11 @@ for scanI=1:length(in.scanOrder)
 end
 
 %% Finalize
-
 if (v)
     fprintf('%s Homing...\n', datestr(datetime));
 end
 
-% Home 
+% Return stage to home position
 pause(0.5);
 yOCTStageMoveTo(x0,y0,z0);
 pause(0.5);
@@ -219,54 +241,10 @@ pause(0.5);
 if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
+yOCTScannerClose(v);
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
 json = in;
-
-end
-
-%% Scan Using Thorlabs
-function octScan(in,s)
-
-% Define the number of retries
-numRetries = 3;
-pauseDuration = 1; % Duration to pause (in seconds) between retries
-
-for attempt = 1:numRetries
-    try
-        % Rmove folder if it exists
-        if exist(s,'dir')
-            rmdir(s, 's');
-        end
-
-        % Scan
-        ThorlabsImagerNET.ThorlabsImager.yOCTScan3DVolume(...
-            in.xOffset + in.octProbe.DynamicOffsetX, ... centerX [mm]
-            in.yOffset, ... centerY [mm]
-            in.tileRangeX_mm * in.octProbe.DynamicFactorX, ... rangeX [mm]
-            in.tileRangeY_mm,  ... rangeY [mm]
-            0,       ... rotationAngle [deg]
-            in.nXPixelsInEachTile,in.nYPixelsInEachTile, ... SizeX,sizeY [# of pixels per tile]
-            in.nBScanAvg,       ... B Scan Average
-            s ... Output directory, make sure this folder doesn't exist when starting the scan
-            );
-        
-        % If the function call is successful, break out of the loop
-        break;
-    catch ME
-        % Notify the user that an exception has occurred
-        fprintf('Attempt %d failed: %s\n', attempt, ME.message);
-
-        % If this is the last attempt, rethrow the error
-        if attempt == numRetries
-            rethrow(ME);
-        else
-            % Pause before the next retry attempt
-            pause(pauseDuration);
-        end
-    end
-end
 
 end
