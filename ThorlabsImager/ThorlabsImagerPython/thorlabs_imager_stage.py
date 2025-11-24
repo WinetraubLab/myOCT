@@ -1,9 +1,7 @@
 """
-Stage control helper functions extracted from `thorlabs_imager_oct.py`.
-
+ThorlabsImager Python module for controlling Thorlabs motorized stages via XA SDK.
 This module provides: yOCTStageInit_1axis, yOCTStageSetPosition_1axis,
-yOCTStageClose_1axis, and yOCTCloseAllStages. It isolates XA SDK usage so
-the main OCT module can remain focused on OCT device functions.
+yOCTStageClose_1axis, and yOCTCloseAllStages. 
 """
 import os
 import gc
