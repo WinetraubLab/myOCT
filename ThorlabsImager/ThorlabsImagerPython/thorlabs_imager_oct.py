@@ -322,65 +322,6 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         raise
 
     
-def yOCTCloseAll():
-    """Close all open hardware resources (stages and OCT scanner).
-
-    This is the primary cleanup function that should be called at program exit.
-    It coordinates cleanup of all resources in the correct order:
-    1. Close all stage axes (disconnect → close each device)
-    2. Close OCT scanner resources
-    3. Shutdown XA SDK if we started it
-    
-    Per Thorlabs: Always call disconnect() before close() to avoid sporadic 
-    cleanup issues, especially with benchtop controllers.
-    
-    This function is idempotent - safe to call multiple times.
-    It checks actual resource state rather than using a flag, so it will properly
-    clean up even if previous cleanup attempts failed.
-    
-    Args:
-        None
-        
-    Returns:
-        None
-    """
-    global _oct_system, _device, _probe, _processing, _scanner_initialized
-
-    # Check actual resource state - no separate flag needed
-    # If nothing is open, return early. Stage resources live in the
-    # `thorlabs_imager_stage` module and are cleaned there.
-    has_resources = (_scanner_initialized or (_oct_system is not None))
-    
-    if not has_resources:
-        return  # Nothing to clean up
-
-    # 1. Close all stage handles first (hardware before software SDK)
-    #    The stage functions were moved into `thorlabs_imager_stage.py`; call
-    #    its cleanup helper if available.
-    try:
-        # Local import to avoid circular import at module import time
-        from .thorlabs_imager_stage import yOCTCloseAllStages
-        yOCTCloseAllStages()
-    except Exception:
-        # Best-effort fallback: ignore if stage module not available
-        pass
-
-    # 2. Close OCT scanner resources (in reverse order of creation)
-    #    Call yOCTScannerClose() to ensure consistent cleanup
-    try:
-        if _scanner_initialized:
-            yOCTScannerClose()
-    except Exception:
-        pass  # Best effort - continue to SDK shutdown
-
-    # 3. DO NOT shutdown XA SDK - this causes crashes
-    #    The SDK will be restarted automatically on next init (idempotent behavior)
-    #    Leaving SDK running between calls is safer than shutting it down
-    
-    # 4. Force final garbage collection to ensure all resources released
-    gc.collect()
-
-
 # ============================================================================
 # Helper Functions  
 # ============================================================================
