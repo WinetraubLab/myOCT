@@ -6,21 +6,21 @@ These functions are called by high-level scanning functions like yOCTScanTile an
 
 Function Naming Convention:
 (Implemented)
-- OCT functions: yOCTScannerInit,  yOCTScannerClose
+- OCT functions: yOCTScannerInit,  yOCTScannerClose, yOCTScan3DVolume
 
 (not yet implemented)
-- OCT functions: yOCTScan3DVolume, yOCTPhotobleachLine
-- Stage functions: yOCTStageInit_1axis, yOCTStageSetPosition_1axis
+- OCT functions: yOCTPhotobleachLine
 - Laser functions: (DiodeCtrl equivalent functions)
 - Optical switch: yOCTTurnOpticalSwitch
 """
 
-from pyspectralradar import OCTSystem, RawData, RealData, OCTFile
+from pyspectralradar import OCTSystem, RawData, OCTFile
 import pyspectralradar.types as pt
 import os
 import time
-from datetime import datetime
-import configparser
+import gc  
+import zipfile
+import shutil
 
 
 # Global variables to maintain state across function calls
@@ -31,19 +31,6 @@ _processing = None
 _probe_config = {}
 _scanner_initialized = False
 
-_stage_initialized = False
-_stage_origin = {'x': 0, 'y': 0, 'z': 0}
-_stage_angle = 0
-
-_laser_on = False
-_laser_power = 0
-
-_optical_switch_on = False
-
-
-# ============================================================================
-# OCT SCANNER FUNCTIONS
-# ============================================================================
 
 def yOCTScannerInit(octProbePath : str) -> None:
     """Initialize scanner with a probe file.
@@ -58,38 +45,49 @@ def yOCTScannerInit(octProbePath : str) -> None:
     
     Raises:
         FileNotFoundError: If probe file does not exist
-        RuntimeError: If scanner is already initialized or OCT system initialization fails
+        RuntimeError: If OCT system initialization fails
     """
     global _oct_system, _device, _probe, _processing, _probe_config, _scanner_initialized
     
-    # Check if scanner is already initialized
-    if _scanner_initialized:
-        raise RuntimeError("Scanner is already initialized. Call yOCTScannerClose() first.")
+    # Check file exists early for clearer error message
+    if not os.path.exists(octProbePath):
+        raise FileNotFoundError(f"Probe configuration file not found: {octProbePath}")
     
+    # Initialize OCT system - SDK will connect to hardware
     try:
-        # Initialize OCT system
         _oct_system = OCTSystem()
         _device = _oct_system.dev
-        
-        # Load probe configuration from .ini file
-        # This dictionary contains all parameters, including myOCT-specific ones
-        # (like DynamicFactorX, Oct2StageXYAngleDeg) that aren't SDK properties
-        _probe_config = _read_probe_ini(octProbePath)
-        
-        # Create probe with default settings, then configure from .ini file
-        _probe = _oct_system.probe_factory.create_default()
-        
-        # Apply calibration parameters from .ini file to probe
-        _apply_probe_config_to_probe(_probe, _probe_config)
-        
-        # Create processing pipeline
-        _processing = _oct_system.processing_factory.from_device()
-        
-        _scanner_initialized = True
-        
     except Exception as e:
-        _scanner_initialized = False
-        raise
+        # Provide helpful error message for common hardware issues
+        error_msg = str(e)
+        if "No initialization response" in error_msg or "Failed to open data device" in error_msg:
+            raise RuntimeError(
+                f"Failed to connect to OCT device: {error_msg}\n"
+                "Common causes:\n"
+                "  1. OCT base unit is powered OFF - check power LED\n"
+                "  2. USB cable is disconnected or loose\n"
+                "  3. Device still held by previous connection - try restarting MATLAB\n"
+                "  4. USB hub/port issue - try different USB port"
+            ) from e
+        else:
+            # Re-raise other errors as-is
+            raise
+    
+    # Load probe configuration from .ini file
+    # This dictionary contains all parameters, including myOCT-specific ones
+    # (like DynamicFactorX, Oct2StageXYAngleDeg) that aren't SDK properties
+    _probe_config = _read_probe_ini(octProbePath)
+    
+    # Create probe with default settings, then configure from .ini file
+    _probe = _oct_system.probe_factory.create_default()
+    
+    # Apply calibration parameters from .ini file to probe
+    _apply_probe_config_to_probe(_probe, _probe_config)
+    
+    # Create processing pipeline
+    _processing = _oct_system.processing_factory.from_device()
+    
+    _scanner_initialized = True
 
 
 def yOCTScannerClose():
@@ -97,7 +95,8 @@ def yOCTScannerClose():
     
     Equivalent to C++/DLL: ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose()
     
-    In Python SDK, cleanup is done by deleting objects in reverse order of creation.
+    Explicitly deletes scanner objects and forces garbage collection to ensure
+    immediate resource cleanup and USB device release.
     
     Args:
         None
@@ -109,19 +108,51 @@ def yOCTScannerClose():
         None
     """
     global _oct_system, _device, _probe, _processing, _scanner_initialized
-    
-    # Delete objects in reverse order of creation (from most derived to base)
-    # This follows the pattern shown in the official pySpectralRadar demos
-    if _processing is not None:
-        del _processing
-    if _probe is not None:
-        del _probe
+
+    # Stop any ongoing acquisition before closing
     if _device is not None:
-        del _device
-    if _oct_system is not None:
-        del _oct_system
+        try:
+            # Ensure acquisition is fully stopped
+            _device.acquisition.stop()
+        except:
+            pass  # May already be stopped
     
+    # Explicitly delete objects in reverse order to force destructors
+    # This ensures SDK releases USB device immediately
+    if _processing is not None:
+        try:
+            del _processing
+        except:
+            pass
+    if _probe is not None:
+        try:
+            del _probe
+        except:
+            pass
+    if _device is not None:
+        try:
+            del _device
+        except:
+            pass
+    if _oct_system is not None:
+        try:
+            del _oct_system
+        except:
+            pass
+    
+    # Now set all to None to clear references
+    _processing = None
+    _probe = None
+    _device = None
+    _oct_system = None
     _scanner_initialized = False
+    
+    # Force garbage collection NOW - critical in MATLAB environment
+    # Without this, Python might keep objects alive indefinitely
+    gc.collect()
+    
+    # Give hardware extra time to fully release USB connection
+    time.sleep(1.0)
 
 
 def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float, 
@@ -163,8 +194,13 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
     if os.path.exists(outputFolder):
         raise FileExistsError(f"Output folder already exists: {outputFolder}")
     
-    # Create output directory
-    os.makedirs(outputFolder, exist_ok=True)
+    # Create output directory (without exist_ok since we already checked)
+    os.makedirs(outputFolder)
+    
+    scan_pattern = None
+    raw_data = None
+    oct_file = None
+    acquisition_started = False
     
     try:
         # Set B-scan averaging on probe and processing
@@ -195,12 +231,14 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         # Start acquisition
         time_start = time.time()
         _device.acquisition.start(scan_pattern, pt.AcqType.ASYNC_FINITE)
+        acquisition_started = True
         
         # Get raw data from acquisition
         _device.acquisition.get_raw_data(buffer=raw_data)
         
         # Stop acquisition
         _device.acquisition.stop()
+        acquisition_started = False
         time_end = time.time()
         
         # Create OCT file with proper metadata 
@@ -228,7 +266,6 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
 
         # Extract .oct file for MATLAB compatibility
         # The .oct file is a ZIP archive, we need to extract it so MATLAB can read it
-        import zipfile
         with zipfile.ZipFile(oct_file_path, 'r') as zip_ref:
             zip_ref.extractall(outputFolder)
 
@@ -247,15 +284,44 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         del oct_file
         del raw_data
         del scan_pattern
+        oct_file = None
+        raw_data = None
+        scan_pattern = None
         
     except Exception as e:
+        # Ensure acquisition is stopped if it was started
+        if acquisition_started:
+            try:
+                _device.acquisition.stop()
+            except Exception:
+                pass  # Best effort
+        
+        # Clean up partially created objects
+        if oct_file is not None:
+            try:
+                del oct_file
+            except Exception:
+                pass
+        if raw_data is not None:
+            try:
+                del raw_data
+            except Exception:
+                pass
+        if scan_pattern is not None:
+            try:
+                del scan_pattern
+            except Exception:
+                pass
+        
         # Clean up output folder on error
         if os.path.exists(outputFolder):
-            import shutil
-            shutil.rmtree(outputFolder)
+            try:
+                shutil.rmtree(outputFolder)
+            except Exception:
+                pass  # Best effort
         raise
 
-
+    
 # ============================================================================
 # Helper Functions  
 # ============================================================================
@@ -349,7 +415,7 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
         'RangeMaxY': ('set_range_max_y', float),
         
         # Apodization
-        'ApoVoltage': ('set_apo_volt_x', float),  # Note: setting both X and Y to same value
+        'ApoVoltage': ('set_apo_volt_x', float),  # Sets both X and Y to same value
         'FlybackTime': ('set_flyback_time_sec', float),
         
         # Camera calibration
@@ -381,6 +447,7 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
             probe.properties.set_apo_volt_y(value)
         except Exception:
             pass  # Could not set ApoVoltageY
+
 
 def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
     """
