@@ -22,8 +22,6 @@ import gc
 import zipfile
 import shutil
 
-# Stage control has been split into `thorlabs_imager_stage.py` to keep this
-# module focused on OCT device functions. Stage/XA SDK imports live there.
 
 # Global variables to maintain state across function calls
 _oct_system = None
@@ -323,10 +321,7 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
                 pass  # Best effort
         raise
 
-
- 
-
-
+    
 def yOCTCloseAll():
     """Close all open hardware resources (stages and OCT scanner).
 
