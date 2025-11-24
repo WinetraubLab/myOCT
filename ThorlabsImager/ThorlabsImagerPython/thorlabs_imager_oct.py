@@ -7,7 +7,6 @@ These functions are called by high-level scanning functions like yOCTScanTile an
 Function Naming Convention:
 (Implemented)
 - OCT functions: yOCTScannerInit,  yOCTScannerClose, yOCTScan3DVolume
-- Stage functions: yOCTStageInit_1axis, yOCTStageSetPosition_1axis, yOCTStageClose_1axis
 
 (not yet implemented)
 - OCT functions: yOCTPhotobleachLine
@@ -23,17 +22,8 @@ import gc
 import zipfile
 import shutil
 
-from xa_sdk.native_sdks.xa_sdk import XASDK
-from xa_sdk.shared.tlmc_type_structures import (
-    TLMC_Wait,
-    TLMC_ScaleType,
-    TLMC_Unit,
-    TLMC_MoveModes,
-    TLMC_OperatingModes,
-    TLMC_ChannelEnableStates,
-)
-from xa_sdk.shared.xa_error_factory import XADeviceException
-from xa_sdk.products.kst201 import KST201
+# Stage control has been split into `thorlabs_imager_stage.py` to keep this
+# module focused on OCT device functions. Stage/XA SDK imports live there.
 
 # Global variables to maintain state across function calls
 _oct_system = None
@@ -43,10 +33,6 @@ _processing = None
 _probe_config = {}
 _scanner_initialized = False
 
-
-# ============================================================================
-# OCT SCANNER FUNCTIONS
-# ============================================================================
 
 def yOCTScannerInit(octProbePath : str) -> None:
     """Initialize scanner with a probe file.
@@ -338,198 +324,7 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         raise
 
 
-# ============================================================================
-# STAGE CONTROL FUNCTIONS
-# ============================================================================
-
-
-# Axis to serial number mapping
-_stage_serial_numbers = {
-    'x': '26006464',
-    'y': '26006471',
-    'z': '26006482'
-}
-
-# Stage handles for each axis
-_stage_handles = {}
-
-def yOCTStageInit_1axis(axes: str) -> float:
-    """
-    Initialize stage for one axis (C++ style: axes='x','y','z'). Returns current position in mm.
-
-    Args:
-        axes (str): Axis character ('x', 'y', or 'z')
-
-    Returns:
-        float: Current position in mm
-
-    Raises:
-        RuntimeError: If initialization fails   
-    """
-    axis = axes.lower()
-    actuator_model = "ZST225"  
-    if axis not in _stage_serial_numbers:
-        raise ValueError(f"Invalid axis: {axes}")
-    serial_no = _stage_serial_numbers[axis]
-    
-    # XA SDK startup (or restart if previously shut down)
-    if not hasattr(XASDK, '_oct_xa_started') or not XASDK._oct_xa_started:
-        # Get absolute path to directory containing this Python module
-        dll_path = os.path.abspath(os.path.dirname(__file__))
-        
-        # Add DLL directory to Windows DLL search path (Python 3.8+)
-        if hasattr(os, 'add_dll_directory'):
-            os.add_dll_directory(dll_path)
-        
-        # WORKAROUND: XASDK.try_load_library() ignores the path parameter
-        # and looks in current working directory. Temporarily change CWD.
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(dll_path)
-            XASDK.try_load_library(dll_path)
-            XASDK.startup("")
-            XASDK._oct_xa_started = True
-        finally:
-            # Always restore original working directory
-            os.chdir(original_cwd)
-    
-    device = None
-    try:
-        # Create device instance (KST201 handles open internally)
-        device = KST201(serial_no, "", TLMC_OperatingModes.Default)
-        device.set_enable_state(TLMC_ChannelEnableStates.ChannelEnabled)
-        device.set_connected_product(actuator_model)
-        
-        # Read initial position
-        pos_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
-        pos_conv = device.convert_from_device_units_to_physical(
-            TLMC_ScaleType.TLMC_ScaleType_Distance,
-            pos_counts
-        )
-        pos_mm = pos_conv.converted_value
-        
-        # Only save to handles if everything succeeded
-        _stage_handles[axis] = device
-        return pos_mm
-        
-    except XADeviceException as e:
-        # Cleanup on XA-specific errors
-        if device is not None:
-            try:
-                device.disconnect()
-            except Exception:
-                pass
-            try:
-                device.close()
-            except Exception:
-                pass
-        if axis in _stage_handles:
-            del _stage_handles[axis]
-        raise RuntimeError(f"XADeviceException during stage init: {e.error_code}")
-        
-    except Exception as e:
-        # Cleanup on general errors
-        if device is not None:
-            try:
-                device.disconnect()
-            except Exception:
-                pass
-            try:
-                device.close()
-            except Exception:
-                pass
-        if axis in _stage_handles:
-            del _stage_handles[axis]
-        raise RuntimeError(f"Error initializing stage for axis '{axis}': {e}")
-
-
-def yOCTStageSetPosition_1axis(axis: str, position_mm: float) -> None:
-    """
-    Move stage axis to position in mm using XA SDK.
-    Negative targets are allowed; the device will enforce its own travel limits.
-
-    Args:
-        axis (str): 'x', 'y', or 'z'
-        position_mm (float): Target position in mm
-
-    Returns:
-        None
-
-    Raises:
-
-        RuntimeError: If move fails
-    """
-    axis = axis.lower()
-    if axis not in _stage_handles:
-        raise RuntimeError(f"Stage for axis {axis} not initialized.")
-    device = _stage_handles[axis]
-    try:
-        # Convert position from mm to device units
-        abs_param = device.convert_from_physical_to_device(
-            TLMC_ScaleType.TLMC_ScaleType_Distance,
-            TLMC_Unit.TLMC_Unit_Millimetres,
-            float(position_mm)
-        )
-        
-        # Use SDK's built-in timeout (120 seconds = 120000 ms)
-        MOVE_TIMEOUT_MS = 120000
-        
-        # MoveMode_Absolute requires passing the position inline
-        device.move_absolute(
-            TLMC_MoveModes.MoveMode_Absolute,
-            abs_param,
-            MOVE_TIMEOUT_MS
-        )
-
-    except XADeviceException as e:
-        # Provide richer error info for diagnosis
-        err_msg = getattr(e, 'message', None) or str(e)
-        raise RuntimeError(f"XADeviceException during move: code={getattr(e,'error_code',None)} msg={err_msg}")
-    except Exception as e:
-        # Surface native/ctypes errors plainly (useful for access-violation cases)
-        raise RuntimeError(f"Error during move for axis {axis}: {e}")
-
-
-def yOCTStageClose_1axis(axis: str) -> None:
-    """
-    Close stage for one axis using XA SDK.
-    
-    Per Thorlabs recommendation: disconnect() → close() to avoid sporadic cleanup issues,
-    especially with benchtop controllers.
-    
-    Args:
-        axis (str): 'x', 'y', or 'z'
-
-    Returns:
-        None
-
-    Raises:
-        RuntimeError: If cleanup fails (but still removes handle from dict)
-    """
-    axis = axis.lower()
-    if axis in _stage_handles:
-        device = _stage_handles[axis]
-        error_occurred = None
-        
-        # Always try disconnect before close (Thorlabs recommendation for benchtops)
-        try:
-            device.disconnect()
-        except Exception as e:
-            error_occurred = e
-        
-        # Always try close even if disconnect failed
-        try:
-            device.close()
-        except Exception as e:
-            if error_occurred is None:
-                error_occurred = e
-        
-        # Always remove from dict even if errors occurred
-        del _stage_handles[axis]
-        
-        # Raise error after cleanup to inform caller but not leave stale handle
-        if error_occurred is not None:
-            raise RuntimeError(f"Error closing stage for axis {axis}: {error_occurred}")
+ 
 
 
 def yOCTCloseAll():
@@ -554,34 +349,26 @@ def yOCTCloseAll():
     Returns:
         None
     """
-    global _stage_handles, _oct_system, _device, _probe, _processing, _scanner_initialized
+    global _oct_system, _device, _probe, _processing, _scanner_initialized
 
     # Check actual resource state - no separate flag needed
-    # If nothing is open, return early
-    has_resources = (
-        bool(_stage_handles) or 
-        _scanner_initialized or 
-        (_oct_system is not None) or
-        (hasattr(XASDK, '_oct_xa_started') and XASDK._oct_xa_started)
-    )
+    # If nothing is open, return early. Stage resources live in the
+    # `thorlabs_imager_stage` module and are cleaned there.
+    has_resources = (_scanner_initialized or (_oct_system is not None))
     
     if not has_resources:
         return  # Nothing to clean up
 
     # 1. Close all stage handles first (hardware before software SDK)
-    #    Use popitem() to safely empty dict during iteration
-    while _stage_handles:
-        axis, dev = _stage_handles.popitem()
-        # Best effort: disconnect → close (Thorlabs recommendation)
-        try:
-            dev.disconnect()
-        except Exception:
-            pass  # Continue to close even if disconnect fails
-        
-        try:
-            dev.close()
-        except Exception:
-            pass  # Best effort - don't stop cleanup
+    #    The stage functions were moved into `thorlabs_imager_stage.py`; call
+    #    its cleanup helper if available.
+    try:
+        # Local import to avoid circular import at module import time
+        from .thorlabs_imager_stage import yOCTCloseAllStages
+        yOCTCloseAllStages()
+    except Exception:
+        # Best-effort fallback: ignore if stage module not available
+        pass
 
     # 2. Close OCT scanner resources (in reverse order of creation)
     #    Call yOCTScannerClose() to ensure consistent cleanup
