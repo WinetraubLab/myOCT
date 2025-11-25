@@ -7,7 +7,7 @@ the shutdown of both OCT scanner and stage control hardware.
 import gc
 
 
-def yOCTCloseAll():
+def yOCTCloseAllHardware():
     """Close all open hardware resources (stages and OCT scanner).
 
     This is the primary cleanup function that should be called at program exit.
@@ -38,10 +38,10 @@ def yOCTCloseAll():
         if yOCTScannerIsInitialized():
             yOCTScannerClose()
     except Exception:
-        pass  # Best effort
+        pass  
 
     # 3. Force final garbage collection to ensure all resources released
     gc.collect()
 
 
-__all__ = ['yOCTCloseAll']
+__all__ = ['yOCTCloseAllHardware']
