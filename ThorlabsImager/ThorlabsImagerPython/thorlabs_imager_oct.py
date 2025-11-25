@@ -90,6 +90,15 @@ def yOCTScannerInit(octProbePath : str) -> None:
     _scanner_initialized = True
 
 
+def yOCTScannerIsInitialized():
+    """Check if scanner is initialized.
+    
+    Returns:
+        bool: True if scanner is initialized, False otherwise
+    """
+    return _scanner_initialized
+
+
 def yOCTScannerClose():
     """Free-up scanner resources.
     
