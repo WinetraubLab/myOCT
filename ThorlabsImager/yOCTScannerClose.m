@@ -27,7 +27,7 @@ if ~skipHardware
             
         case 'gan632'
             % Gan632: Python SDK
-            octSystemModule.yOCTScannerClose();
+            octSystemModule.oct.yOCTScannerClose();
             
         otherwise
             error('Unknown OCT system: %s', octSystemName);
