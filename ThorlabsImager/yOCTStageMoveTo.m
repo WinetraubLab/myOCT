@@ -67,7 +67,7 @@ if ~skipHardware
                     
                 case 'gan632'
                     % Gan632: Python stage control
-                    octSystemModule.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
+                    octSystemModule.stage.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
                     
                 otherwise
                     error('Unknown OCT system: %s', octSystemName);

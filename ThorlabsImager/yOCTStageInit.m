@@ -67,9 +67,9 @@ if ~skipHardware
             if (v)
                 fprintf('%s [Gan632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
             end
-            z0 = octSystemModule.yOCTStageInit_1axis('z');
-            x0 = octSystemModule.yOCTStageInit_1axis('x');
-            y0 = octSystemModule.yOCTStageInit_1axis('y');
+            z0 = octSystemModule.stage.yOCTStageInit_1axis('z');
+            x0 = octSystemModule.stage.yOCTStageInit_1axis('x');
+            y0 = octSystemModule.stage.yOCTStageInit_1axis('y');
             
         otherwise
             error('Unknown OCT system: %s', octSystemName);
@@ -128,15 +128,15 @@ if ~skipHardware
                     
                 case 'gan632'
                     % Gan632: Use Python module for motion test
-                    octSystemModule.yOCTStageSetPosition_1axis(s(i), ...
+                    octSystemModule.stage.yOCTStageSetPosition_1axis(s(i), ...
                         gStageCurrentStagePosition_StageCoordinates(i) + minPosition(i));
                     pause(0.5);
-                    octSystemModule.yOCTStageSetPosition_1axis(s(i), ...
+                    octSystemModule.stage.yOCTStageSetPosition_1axis(s(i), ...
                         gStageCurrentStagePosition_StageCoordinates(i) + maxPosition(i));
                     pause(0.5);
                     
                     % Return home
-                    octSystemModule.yOCTStageSetPosition_1axis(s(i), ...
+                    octSystemModule.stage.yOCTStageSetPosition_1axis(s(i), ...
                         gStageCurrentStagePosition_StageCoordinates(i));
                     
                 otherwise

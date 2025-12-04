@@ -35,7 +35,7 @@ if ~skipHardware
     
         case 'gan632'
             % GAN632: Use Python SDK (pyspectralradar)
-            octSystemModule.yOCTScannerInit(octProbePath);
+            octSystemModule.oct.yOCTScannerInit(octProbePath);
     
         otherwise
             error('This should never happen')
