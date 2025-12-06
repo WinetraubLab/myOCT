@@ -199,7 +199,6 @@ for scanI=1:length(in.scanOrder)
         
     % Move to position
     yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI));
-
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
     s = awsModifyPathForCompetability(s);
@@ -241,7 +240,9 @@ pause(0.5);
 if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
-yOCTScannerClose(v);
+
+% Close all hardware (scanner + stages)
+octSystemModule.cleanup.yOCTCloseAllHardware();
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);

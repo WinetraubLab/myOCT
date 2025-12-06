@@ -30,7 +30,20 @@ _stage_handles = {}
 
 
 def yOCTStageInit_1axis(axes: str) -> float:
-    """Initialize stage for one axis and return current position in mm."""
+    """Initialize stage for one axis and return current position in mm.
+    
+    Automatically sets velocity to 2.0 mm/s and acceleration to 3.0 mm/s².
+    
+    Args:
+        axes (str): Axis identifier ('x', 'y', or 'z')
+    
+    Returns:
+        float: Current position in mm
+    
+    Raises:
+        ValueError: If axis is not 'x', 'y', or 'z'
+        RuntimeError: If initialization fails
+    """
     axis = axes.lower()
     actuator_model = "ZST225"
     if axis not in _stage_serial_numbers:
@@ -56,6 +69,19 @@ def yOCTStageInit_1axis(axes: str) -> float:
         device = KST201(serial_no, "", TLMC_OperatingModes.Default)
         device.set_enable_state(TLMC_ChannelEnableStates.ChannelEnabled)
         device.set_connected_product(actuator_model)
+
+        # Set velocity and acceleration
+        vel_param = device.convert_from_physical_to_device(
+            TLMC_ScaleType.TLMC_ScaleType_Velocity,
+            TLMC_Unit.TLMC_Unit_Millimetres,
+            2.0  # 2.0 mm/s
+        )
+        accel_param = device.convert_from_physical_to_device(
+            TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+            TLMC_Unit.TLMC_Unit_Millimetres,
+            3.0  # 3.0 mm/s²
+        )
+        device.set_velocity_params(0, accel_param, vel_param)
 
         pos_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
         pos_conv = device.convert_from_device_units_to_physical(
@@ -158,9 +184,101 @@ def yOCTCloseAllStages():
     gc.collect()
 
 
+def yOCTStageSetVelocity_1axis(axis: str, max_velocity_mm_s: float, acceleration_mm_s2: float) -> None:
+    """Set velocity and acceleration for one stage axis.
+    
+    Args:
+        axis (str): 'x', 'y', or 'z'
+        max_velocity_mm_s (float): Maximum velocity in mm/s
+        acceleration_mm_s2 (float): Acceleration in mm/s²
+    
+    Returns:
+        None
+    
+    Raises:
+        RuntimeError: If stage not initialized or setting fails
+    """
+    axis = axis.lower()
+    if axis not in _stage_handles:
+        raise RuntimeError(f"Stage for axis {axis} not initialized.")
+    
+    device = _stage_handles[axis]
+    
+    try:
+        # Convert velocity from mm/s to device units
+        vel_conv = device.convert_from_physical_to_device(
+            TLMC_ScaleType.TLMC_ScaleType_Velocity,
+            TLMC_Unit.TLMC_Unit_Millimetres,
+            float(max_velocity_mm_s)
+        )
+        
+        # Convert acceleration from mm/s² to device units
+        accel_conv = device.convert_from_physical_to_device(
+            TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+            TLMC_Unit.TLMC_Unit_Millimetres,
+            float(acceleration_mm_s2)
+        )
+        
+        # Set velocity parameters (min=0, accel=acceleration, max=max_velocity)
+        device.set_velocity_params(
+            0,  # min_velocity (always 0)
+            accel_conv,  # acceleration (already in device units as int)
+            vel_conv  # max_velocity (already in device units as int)
+        )
+        
+    except XADeviceException as e:
+        raise RuntimeError(f"XADeviceException setting velocity: {e.error_code}")
+    except Exception as e:
+        raise RuntimeError(f"Error setting velocity for axis {axis}: {e}")
+
+
+def yOCTStageGetVelocity_1axis(axis: str) -> tuple:
+    """Get current velocity and acceleration settings for one stage axis.
+    
+    Args:
+        axis (str): 'x', 'y', or 'z'
+    
+    Returns:
+        tuple: (max_velocity_mm_s, acceleration_mm_s2)
+    
+    Raises:
+        RuntimeError: If stage not initialized or getting fails
+    """
+    axis = axis.lower()
+    if axis not in _stage_handles:
+        raise RuntimeError(f"Stage for axis {axis} not initialized.")
+    
+    device = _stage_handles[axis]
+    
+    try:
+        # Get velocity parameters from device
+        vel_params = device.get_velocity_params(TLMC_Wait.TLMC_InfiniteWait)
+        
+        # Convert max velocity from device units to mm/s
+        vel_converted = device.convert_from_device_units_to_physical(
+            TLMC_ScaleType.TLMC_ScaleType_Velocity,
+            vel_params.max_velocity
+        )
+        
+        # Convert acceleration from device units to mm/s²
+        accel_converted = device.convert_from_device_units_to_physical(
+            TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+            vel_params.acceleration
+        )
+        
+        return (vel_converted.converted_value, accel_converted.converted_value)
+        
+    except XADeviceException as e:
+        raise RuntimeError(f"XADeviceException getting velocity: {e.error_code}")
+    except Exception as e:
+        raise RuntimeError(f"Error getting velocity for axis {axis}: {e}")
+
+
 __all__ = [
     'yOCTStageInit_1axis',
     'yOCTStageSetPosition_1axis',
     'yOCTStageClose_1axis',
     'yOCTCloseAllStages',
+    'yOCTStageSetVelocity_1axis',
+    'yOCTStageGetVelocity_1axis',
 ]
