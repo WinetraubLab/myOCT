@@ -8,6 +8,37 @@
 % by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
 yOCTSetLibraryPath(); % Set path
 
+% Configure Python environment for hardware SDK robustness
+% Force out-of-process Python to isolate SDK crashes/state issues
+% This prevents native extension (PySpectralRadar, XA SDK) problems from crashing MATLAB
+try
+    pe = pyenv;
+    if pe.Status ~= "NotLoaded"
+        % Check if we need to restart or change execution mode
+        needsRestart = false;
+        if isprop(pe, 'ExecutionMode')
+            % MATLAB R2019b+ supports out-of-process execution
+            if ~strcmp(pe.ExecutionMode, 'OutOfProcess')
+                needsRestart = true;
+            end
+        end
+
+        if needsRestart
+            fprintf('Restarting Python in OutOfProcess mode for SDK robustness...\n');
+            terminate(pyenv);
+            pyenv('ExecutionMode', 'OutOfProcess');
+        end
+    else
+        % Python not loaded yet, set mode before first load
+        if isprop(pyenv, 'ExecutionMode')
+            pyenv('ExecutionMode', 'OutOfProcess');
+        end
+    end
+catch
+    % pyenv not available (older MATLAB), continue with in-process
+    warning('Could not configure out-of-process Python. Using in-process mode.');
+end
+
 %% Inputs
 octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
@@ -18,7 +49,7 @@ yOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [
 % Uncomment below to scan one B-Scan.
 % yOverall_mm = 0;
 
-% Define probe 
+% Define probe
 octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x' or '40x', and scanning system dependent 'OCTP900' or ''
 octProbeFOV_mm = 0.5; % How much of the field of view to use from the probe. OBJECTIVE_DEPENDENT: For 10x use 1, for 40x use 0.5
 
@@ -33,14 +64,11 @@ tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results.
 % Where to save scan files
 output_folder = '\';
 
-% OCT System Selection
-octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
-
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
 
 %% Load hardware
-yOCTLoadHardwareLib(octSystem, skipScanning, true)
+yOCTLoadHardwareLib(octSystem, skipScanning, true);
 
 %% Compute scanning parameters
 
@@ -98,6 +126,18 @@ scanParameters = yOCTScanTile (...
     'skipHardware',skipScanning, ...
     'v',true  ...
     );
+
+%% Cleanup for next run
+
+% Fully restart Python interpreter between runs for maximum robustness
+% This ensures clean USB device state for SpectralRadar SDK
+% Comment out if you want faster reruns (but may require hardware power cycle)
+
+clear functions
+
+% Terminate Python interpreter
+terminate(pyenv);
+
 	
 %% Process the scan
 fprintf('%s Processing\n',datestr(datetime));
