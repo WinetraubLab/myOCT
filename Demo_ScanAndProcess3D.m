@@ -91,14 +91,14 @@ fprintf('%s Please adjust the OCT focus such that it is precisely at the interse
     'skipHardware',skipScanning);
 
 % Uncomment below to set manually
-dispersionQuadraticTerm=-1.549e08;
-focusPositionInImageZpix = 200; % 
+%dispersionQuadraticTerm=-1.549e08;
+%focusPositionInImageZpix = 200; % 
 % focusPositionInImageZpix = yOCTFindFocusTilledScan(volumeOutputFolder,...
 %   'reconstructConfig',{'dispersionQuadraticTerm',dispersionQuadraticTerm},'verbose',true);
 
 %% Focus check
 
-Quick pre-scan to identify tissue surface and verify it is at OCT focus
+% Quick pre-scan to identify tissue surface and verify it is at OCT focus
 [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(... 
         'xRange_mm', xOverall_mm,...
         'yRange_mm', yOverall_mm,...
