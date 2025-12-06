@@ -40,29 +40,29 @@ catch
 end
 
 %% Inputs
-octSystem = 'Gan632'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
 % Define the 3D Volume
-pixelSize_um = 2; % x-y Pixel size in microns
-xOverall_mm = [-1 3]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
-yOverall_mm = [-0.5 0.5]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
+pixelSize_um = 1; % x-y Pixel size in microns
+xOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
+yOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
 % Uncomment below to scan one B-Scan.
 % yOverall_mm = 0;
 
 % Define probe
-octProbePath = yOCTGetProbeIniPath('10x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x' or '40x', and scanning system dependent 'OCTP900' or ''
-octProbeFOV_mm = 1; % How much of the field of view to use from the probe. OBJECTIVE_DEPENDENT: For 10x use 1, for 40x use 0.5
+octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x' or '40x', and scanning system dependent 'OCTP900' or ''
+octProbeFOV_mm = 0.5; % How much of the field of view to use from the probe. OBJECTIVE_DEPENDENT: For 10x use 1, for 40x use 0.5
 
 % Define z stack and z-stitching
 scanZJump_um = 5; % microns. OBJECTIVE_DEPENDENT: For 10x use 15, for 40x use 5
-zToScan_mm = 0; %[mm]
+zToScan_mm = unique([-100 (-30:scanZJump_um:400), 0])*1e-3; %[mm]
 focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 1
 
 % Other scanning parameters
 tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 
 % Where to save scan files
-output_folder = 'C:\Users\OCT User\Desktop\TestD\testAll2';
+output_folder = '\';
 
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
