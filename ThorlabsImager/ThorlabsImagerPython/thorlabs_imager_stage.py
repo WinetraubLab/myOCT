@@ -29,8 +29,21 @@ _stage_serial_numbers = {
 _stage_handles = {}
 
 
-def yOCTStageInit_1axis(axes: str) -> float:
-    """Initialize stage for one axis and return current position in mm."""
+def yOCTStageInit_1axis(axes: str, max_velocity_mm_sec: float = 2.0, max_acceleration_mm_s_2: float = 3.0) -> float:
+    """Initialize stage for one axis and return current position in mm.
+    
+    Args:
+        axes (str): Axis identifier ('x', 'y', or 'z')
+        max_velocity_mm_sec (float): Maximum velocity in mm/s (default: 2.0)
+        max_acceleration_mm_s_2 (float): Maximum acceleration in mm/s² (default: 3.0)
+    
+    Returns:
+        float: Current position in mm
+    
+    Raises:
+        ValueError: If axis is not 'x', 'y', or 'z'
+        RuntimeError: If initialization fails
+    """
     axis = axes.lower()
     actuator_model = "ZST225"
     if axis not in _stage_serial_numbers:
@@ -56,6 +69,19 @@ def yOCTStageInit_1axis(axes: str) -> float:
         device = KST201(serial_no, "", TLMC_OperatingModes.Default)
         device.set_enable_state(TLMC_ChannelEnableStates.ChannelEnabled)
         device.set_connected_product(actuator_model)
+
+        # Set velocity and acceleration
+        vel_param = device.convert_from_physical_to_device(
+            TLMC_ScaleType.TLMC_ScaleType_Velocity,
+            TLMC_Unit.TLMC_Unit_Millimetres,
+            max_velocity_mm_sec
+        )
+        accel_param = device.convert_from_physical_to_device(
+            TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+            TLMC_Unit.TLMC_Unit_Millimetres,
+            max_acceleration_mm_s_2
+        )
+        device.set_velocity_params(0, accel_param, vel_param)
 
         pos_counts = device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
         pos_conv = device.convert_from_device_units_to_physical(
@@ -162,5 +188,5 @@ __all__ = [
     'yOCTStageInit_1axis',
     'yOCTStageSetPosition_1axis',
     'yOCTStageClose_1axis',
-    'yOCTCloseAllStages',
+    'yOCTCloseAllStages'
 ]
