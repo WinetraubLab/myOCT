@@ -241,10 +241,11 @@ if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
 
-% Close all hardware (scanner + stages) - only for Gan632
+% Close all hardware 
 if strcmpi(octSystemName, 'gan632')
     octSystemModule.cleanup.yOCTCloseAllHardware();
-end
+else
+    yOCTScannerClose(v);    
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
