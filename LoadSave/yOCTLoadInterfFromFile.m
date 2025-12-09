@@ -202,15 +202,22 @@ end
 %% Correct For Apodization
 switch (apodizationCorrection)
     case 'subtract'
-        if isnan(apodization)
+        % Check if apodization array contains NaN values from corrupted/missing files FIRST
+        % This must be checked before the scalar NaN check
+        if ~isscalar(apodization) && any(isnan(apodization(:)))
+            % Skip correction: interferogram already contains NaN and will propagate through processing
+        elseif isnan(apodization)
+            % This catches the scalar NaN case
             error('No Apodization Data, Cannot Correct. Please set ''ApodizationCorrection'' to ''None''');
-        end
-        [~, sizeX, sizeY, AScanAvgN, BScanAvgN] = yOCTLoadInterfFromFile_DataSizing(dimensions);   
-        apod = mean(apodization,2); %Mean across x axis
-        s = size(apod);
-        s = [s 1 1 1 1 1]; %Pad with ones
+        else
+            % Normal case where we perform apodization correction
+            [~, sizeX, sizeY, AScanAvgN, BScanAvgN] = yOCTLoadInterfFromFile_DataSizing(dimensions);   
+            apod = mean(apodization,2); %Mean across x axis
+            s = size(apod);
+            s = [s 1 1 1 1 1]; %Pad with ones
 
-        interferogram = interferogram - repmat(apod,[1 sizeX sizeY/s(3) AScanAvgN BScanAvgN/s(5)]);
+            interferogram = interferogram - repmat(apod,[1 sizeX sizeY/s(3) AScanAvgN BScanAvgN/s(5)]);
+        end
     case 'none'
         %No correction required
     otherwise

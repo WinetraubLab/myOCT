@@ -88,12 +88,37 @@ for fi=1:length(fileIndex)
     % MATLAB 2021a. Due to this bug, we have replaced all calls to 
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-    ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
-    temp=double(ds.read);
-
-    if (isempty(temp))
-        error(['Missing file / file size wrong' spectralFilePath]);
+    
+    % Try to load the file, if it fails due to file being missing or corrupted, create a NaN replacement
+    temp = [];
+    try
+        % Check if file exists first
+        if ~isfile(spectralFilePath)
+            error('File does not exist: %s', spectralFilePath);
+        end
+        
+        ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
+        temp=double(ds.read);
+        
+        if (isempty(temp))
+            error('File read returned empty data');
+        end
+        
+        % Validate file size: corrupted files may have wrong size
+        expectedSize = N * interfSize;
+        if length(temp) ~= expectedSize
+            error('File has incorrect size: expected %d elements, got %d', expectedSize, length(temp));
+        end
+    catch ME
+        % File is missing or corrupted: create replacement with NaNs
+        warning('yOCTLoadInterfFromFile_ThorlabsData:CorruptedFile', ...
+            'File missing or corrupted: %s\nError: %s\nReplacing with NaN data to continue processing.', ...
+            spectralFilePath, ME.message);
+        
+        % Create NaN replacement with correct dimensions
+        temp = nan(N * interfSize, 1);
     end
+    
     prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
     temp = reshape(temp,[N,interfSize]);
 
