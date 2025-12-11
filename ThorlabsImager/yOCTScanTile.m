@@ -1,4 +1,3 @@
-function [json] = yOCTScanTile(varargin)
 % This function preforms an OCT Scan of a volume, and them tile around to
 % stitch together multiple scans. Tiling will be done by 3D translation
 % stage.
@@ -241,7 +240,9 @@ pause(0.5);
 if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
-yOCTScannerClose(v);
+
+% Close all hardware 
+yOCTCloseAllHardware();
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
