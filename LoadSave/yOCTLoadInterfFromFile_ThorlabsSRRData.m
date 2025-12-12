@@ -1,4 +1,4 @@
-function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_ThorlabsSRRData(varargin)
+function [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsSRRData(varargin)
 %Interface implementation of yOCTLoadInterfFromFile. See help yOCTLoadInterfFromFile
 %Reads SRR files
 % OUTPUTS:
@@ -8,7 +8,8 @@ function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_ThorlabsSRRD
 %   - apodization - OCT baseline intensity, without the tissue scatterers.
 %       Dimensions order (lambda,apodization #,y,BScanAvg). 
 %       If dimension size is 1 it does not appear at the final matrix
-%   - prof - profiling data - for debug purposes 
+%   - prof - profiling data - for debug purposes
+%   - isFileValid - true if all files loaded successfully, false if any file was corrupted/missing 
 
 %% Input Checks
 if (iscell(varargin{1}))
@@ -59,6 +60,7 @@ apodization   = zeros(sizeLambda,apodSize,sizeY,1,BScanAvgN);
 N = sizeLambda;
 prof.numberOfFramesLoaded = length(fileIndex);
 prof.totalFrameLoadTimeSec = 0;
+isFileValid = true; %Track if all files loaded successfully
 for fi=1:length(fileIndex)
     td=tic;
     filePath = sprintf('%s/Data_Y%04d_YTotal%d_B%04d_BTotal%d_%s.srr',...
@@ -78,12 +80,17 @@ for fi=1:length(fileIndex)
     try
         temp=ds.read;
     catch ME
-        disp(['Error reading ' filePath]);
-        rethrow(ME);
+        warning('yOCTLoadInterfFromFile_ThorlabsSRRData:ReadError', ...
+            'Error reading file: %s. Error: %s. Replacing with NaN data.', filePath, ME.message);
+        temp = [];
+        isFileValid = false;
     end
 
     if (isempty(temp))
-        error(['Missing file / file size wrong' filePath]);
+        warning('yOCTLoadInterfFromFile_ThorlabsSRRData:EmptyFile', ...
+            'Missing file or file size wrong: %s. Replacing with NaN data.', filePath);
+        temp = nan(N, dimensions.aux.scanend);
+        isFileValid = false;
     end
     prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
     temp = reshape(temp,N,[]);
