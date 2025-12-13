@@ -1,5 +1,6 @@
-function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib(octSystemName, skipHardware, v)
+function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLibSetUp(octSystemName, skipHardware, v)
 % Load and return the hardware interface library for an OCT system.
+% This function also configures the Python environment for Gan632 systems.
 %
 %   INPUTS:
 %       octSystemName: Name of the OCT system to load. 
@@ -27,6 +28,43 @@ if ~exist('v','var')
     v = false;
 end
 
+%% Configure Python environment for Gan632 (before loading library)
+if ~isempty(octSystemName) && strcmpi(octSystemName, 'Gan632')
+    % Force out-of-process Python to isolate SDK crashes/state issues
+    % This prevents native extension (PySpectralRadar, XA SDK) problems from crashing MATLAB
+    try
+        pe = pyenv;
+        if pe.Status ~= "NotLoaded"
+            % Check if we need to restart or change execution mode
+            needsRestart = false;
+            if isprop(pe, 'ExecutionMode')
+                % MATLAB R2019b+ supports out-of-process execution
+                if ~strcmp(pe.ExecutionMode, 'OutOfProcess')
+                    needsRestart = true;
+                end
+            end
+
+            if needsRestart
+                if v
+                    fprintf('Restarting Python in OutOfProcess mode for SDK robustness...\n');
+                end
+                terminate(pyenv);
+                pyenv('ExecutionMode', 'OutOfProcess');
+            end
+        else
+            % Python not loaded yet, set mode before first load
+            if isprop(pyenv, 'ExecutionMode')
+                pyenv('ExecutionMode', 'OutOfProcess');
+            end
+        end
+    catch
+        % pyenv not available (older MATLAB), continue with in-process
+        if v
+            warning('Could not configure out-of-process Python. Using in-process mode.');
+        end
+    end
+end
+
 %% Store module in a global varible 
 persistent gOCTSystemModule;
 persistent gOCTSystemName;
@@ -42,7 +80,7 @@ end
 
 %% Validate inputs that are only needed for first-time load
 if isempty(octSystemName)
-    error("yOCTLoadHardwareLib must be called with a valid 'octSystemName' the first time it is executed.");
+    error("yOCTLoadHardwareLibSetUp must be called with a valid 'octSystemName' the first time it is executed.");
 end
 
 validSystems = {'Ganymede', 'Gan632'};

@@ -46,7 +46,7 @@ skipScanning = false;
 scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
 
 %% Load hardware
-yOCTLoadHardwareLib(octSystem, skipScanning, true)
+yOCTLoadHardwareLibSetUp(octSystem, skipScanning, true)
 
 %% Compute scanning parameters
 
