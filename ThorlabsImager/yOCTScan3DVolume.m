@@ -14,8 +14,8 @@ function yOCTScan3DVolume(varargin)
 %   v                - Verbose flag for logging. Default: false
 %
 % NOTE: 
-%   Hardware selection (Ganymede vs Gan632) is based on the system loaded by yOCTLoadHardwareLib().
-%   yOCTLoadHardwareLib() needs to be called before using this function.
+%   Hardware selection (Ganymede vs Gan632) is based on the system loaded by yOCTLoadHardwareLibSetUp().
+%   yOCTLoadHardwareLibSetUp() needs to be called before using this function.
 
 %% Input validation
 p = inputParser;
@@ -36,7 +36,7 @@ in = p.Results;
 rotationAngle_deg = 0; % Rotation angle [deg]
 
 %% Get the loaded hardware library
-[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
+[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLibSetUp();
 
 %% Dispatch to appropriate implementation based on system type
 if ~skipHardware
@@ -78,7 +78,7 @@ if ~skipHardware
                         in.outputDirectory); % Output folder (must not exist before scan)
                         
                 otherwise
-                    error('Unknown OCT system: %s. Must call yOCTLoadHardwareLib() first.', octSystemName);
+                    error('Unknown OCT system: %s. Must call yOCTLoadHardwareLibSetUp() first.', octSystemName);
             end
             
             % If successful, break out of retry loop
