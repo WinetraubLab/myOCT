@@ -75,7 +75,7 @@ if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
  
-ThorlabsImagerNETLoadLib(); %Init library
+% Library already loaded by yOCTLoadHardwareLib()
 ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); %Init OCT
 [x0,y0] = yOCTStageInit(in.oct2stageXYAngleDeg);
 
