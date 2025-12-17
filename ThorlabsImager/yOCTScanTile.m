@@ -178,6 +178,9 @@ if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
 end
 
+%% Store OCT system name
+in.OCTSystem = [upper(octSystemName(1)) octSystemName(2:end)];
+
 %% Make sure folder is empty
 if exist(octFolder,'dir')
     rmdir(octFolder,'s');
@@ -219,11 +222,6 @@ for scanI=1:length(in.scanOrder)
 	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
-    
-    if(scanI==1)
-        [OCTSystem] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(s);
-        in.OCTSystem = OCTSystem;
-    end
     
 end
 

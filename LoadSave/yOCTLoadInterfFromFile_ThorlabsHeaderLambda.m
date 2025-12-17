@@ -7,7 +7,7 @@ function dimensions = yOCTLoadInterfFromFile_ThorlabsHeaderLambda(inputDataFolde
 
 %To get lambda min & max we contacted thorlabs
 switch(OCTSystem)
-    case {'Ganymede','Ganymede_SRR'}
+    case {'Ganymede','Ganymede_SRR','Gan632'}
         chirpFileName = 'ChirpGanymede.dat';
         lambdaMin = 796.23;%[nm] Manufacturer number: 824.16, See 2019-08-31GanymedeFilterCalibration Report for more details
         lambdaMax = 1010.02;%[nm]Manufacturer number: 1038.03, See 2019-08-31GanymedeFilterCalibration Report for more details

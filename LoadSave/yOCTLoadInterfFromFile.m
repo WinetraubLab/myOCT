@@ -103,7 +103,7 @@ if isempty(OCTSystem)
     [OCTSystem,OCTSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder);
 else
     switch(OCTSystem)
-        case {'Ganymede','Telesto'}
+        case {'Ganymede','Telesto','Gan632'}
             OCTSystemManufacturer = 'Thorlabs';
         case {'Ganymede_SRR','Telesto_SRR'}
             OCTSystemManufacturer = 'Thorlabs_SRR';

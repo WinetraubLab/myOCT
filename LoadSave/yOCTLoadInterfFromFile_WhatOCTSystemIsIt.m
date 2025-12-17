@@ -14,8 +14,30 @@ end
 if ~awsExist(inputDataFolder,'dir')
     error('"%s" doesn''t exist, mistake?',inputDataFolder)
 end
+
+%% Check ScanInfo.json first using parent folder and current folder
+scanInfoLocations = {
+    [inputDataFolder '/../ScanInfo.json']
+    [inputDataFolder '/ScanInfo.json']
+};
+
+for i = 1:length(scanInfoLocations)
+    scanInfoPath = awsModifyPathForCompetability(scanInfoLocations{i});
+    if awsExist(scanInfoPath, 'file')
+        try
+            scanInfo = awsReadJSON(scanInfoPath);
+            if isfield(scanInfo, 'OCTSystem') && ~isempty(scanInfo.OCTSystem)
+                OCTSystem = scanInfo.OCTSystem;
+                OCTSystemManufacturer = 'Thorlabs';
+                return;
+            end
+        catch
+            % Continue to next location or file detection
+        end
+    end
+end
     
-%% Select manufacturer by looking at file types
+%% Fallback: select manufacturer by looking at file types
 try
 % Any fileDatastore request to AWS S3 is limited to 1000 files in 
 % MATLAB 2021a. Due to this bug, we have replaced all calls to 
