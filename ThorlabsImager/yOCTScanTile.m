@@ -73,7 +73,7 @@ if ~exist(in.octProbePath,'file')
 end
 
 % Get OCT system from persistent library
-[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLibSetUp();
+[octSystemModule, octSystemName, ~] = yOCTHardwareLibSetUp();
 in.octSystem = octSystemName; % Store for compatibility and logging
 
 % Override unzipOCTFile flag for Gan632 system which doesn't generate .oct files

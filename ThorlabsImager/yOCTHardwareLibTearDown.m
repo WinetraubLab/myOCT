@@ -1,4 +1,4 @@
-function yOCTLoadHardwareLibTearDown(octSystemName, v)
+function yOCTHardwareLibTearDown(octSystemName, v)
 % Tear down hardware library and clean up resources.
 % For Gan632 systems, this terminates the Python interpreter to ensure
 % clean USB device state for the SpectralRadar SDK.

@@ -2,7 +2,7 @@ function yOCTCloseAllHardware()
 %yOCTCloseAllHardware Closes all hardware connections for the OCT system
 
     % Load library (should already be loaded to memory)
-    [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLibSetUp();
+    [octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
 
     %% Close hardware based on system type
     if ~skipHardware

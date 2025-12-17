@@ -1,4 +1,4 @@
-function [octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLibSetUp(octSystemName, skipHardware, v)
+function [octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp(octSystemName, skipHardware, v)
 % Load and return the hardware interface library for an OCT system.
 % This function also configures the Python environment for Gan632 systems.
 %
@@ -80,7 +80,7 @@ end
 
 %% Validate inputs that are only needed for first-time load
 if isempty(octSystemName)
-    error("yOCTLoadHardwareLibSetUp must be called with a valid 'octSystemName' the first time it is executed.");
+    error("yOCTHardwareLibSetUp must be called with a valid 'octSystemName' the first time it is executed.");
 end
 
 validSystems = {'Ganymede', 'Gan632'};

@@ -27,7 +27,7 @@ octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OC
 skipHardware = false;
 
 %% Load hardware
-yOCTLoadHardwareLibSetUp(octSystem, skipHardware, true)
+yOCTHardwareLibSetUp(octSystem, skipHardware, true)
 
 %% Compute scanning parameters
 
@@ -62,3 +62,6 @@ ylabel('y [mm]');
 title('Tissue Interface Depth [mm]');
 colorbar;
 grid on;
+
+%% Cleanup for next run
+yOCTHardwareLibTearDown(octSystem, true);
