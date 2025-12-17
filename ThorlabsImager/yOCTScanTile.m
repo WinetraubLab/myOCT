@@ -241,8 +241,7 @@ if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
 
-% Close all hardware 
-yOCTCloseAllHardware();
+yOCTScannerClose();
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
