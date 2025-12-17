@@ -15,25 +15,18 @@ if ~awsExist(inputDataFolder,'dir')
     error('"%s" doesn''t exist, mistake?',inputDataFolder)
 end
 
-%% Check ScanInfo.json first using parent folder and current folder
-scanInfoLocations = {
-    [inputDataFolder '/../ScanInfo.json']
-    [inputDataFolder '/ScanInfo.json']
-};
-
-for i = 1:length(scanInfoLocations)
-    scanInfoPath = awsModifyPathForCompetability(scanInfoLocations{i});
-    if awsExist(scanInfoPath, 'file')
-        try
-            scanInfo = awsReadJSON(scanInfoPath);
-            if isfield(scanInfo, 'OCTSystem') && ~isempty(scanInfo.OCTSystem)
-                OCTSystem = scanInfo.OCTSystem;
-                OCTSystemManufacturer = 'Thorlabs';
-                return;
-            end
-        catch
-            % Continue to next location or file detection
+%% Check ScanInfo.json in parent folder first (saved during scan)
+scanInfoPath = awsModifyPathForCompetability([inputDataFolder '/../ScanInfo.json']);
+if awsExist(scanInfoPath, 'file')
+    try
+        scanInfo = awsReadJSON(scanInfoPath);
+        if isfield(scanInfo, 'OCTSystem') && ~isempty(scanInfo.OCTSystem)
+            OCTSystem = scanInfo.OCTSystem;
+            OCTSystemManufacturer = 'Thorlabs';
+            return;
         end
+    catch
+        % Continue to file detection
     end
 end
     
