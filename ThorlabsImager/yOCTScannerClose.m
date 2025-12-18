@@ -23,7 +23,14 @@ if ~skipHardware
     switch(octSystemName)
         case 'ganymede'
             % Ganymede: C# DLL
-            ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+            % Only close if ThorlabsImagerNET is loaded (scanner is initialized) to prevent crashes
+            if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
+                ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+            else
+                if (v)
+                    fprintf('%s Scanner already closed or not initialized\n', datestr(datetime));
+                end
+            end
             
         case 'gan632'
             % Gan632: Python SDK
