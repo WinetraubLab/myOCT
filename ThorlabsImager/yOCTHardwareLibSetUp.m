@@ -110,15 +110,25 @@ octSystemName = lower(octSystemName);
 switch(octSystemName)
     case 'ganymede'
         % Ganymede: C# library 
-
-        % Verify that library wasn't loaded before
-        if ~isempty(which('ThorlabsImagerNET.ThorlabsImager')) 
-            error('ThorlabsImagerNET loaded before, this should never happen.');
-        end
     
         % Find the folder that c# dll is at.
         currentFileFolder = fileparts(mfilename('fullpath'));
 	    libFolder = [currentFileFolder '\Lib\'];
+        
+        % Verify that library wasn't loaded before. If so, reuse without re-initializing
+        if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
+            % DLL already in memory: get existing reference
+            asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
+            gOCTSystemModule = asm;
+            gOCTSystemName = lower(octSystemName);
+            octSystemModule = gOCTSystemModule;
+            octSystemName = gOCTSystemName;
+            skipHardware = gSkipHardware;
+            if v
+                fprintf('ThorlabsImagerNET already loaded. Using existing instance. To fully reset, restart MATLAB.\n');
+            end
+            return;
+        end
 	    
 	    if ~exist([libFolder 'SpectralRadar.dll'],'file')
 		    % Copy Subfolders to main lib folder
@@ -127,7 +137,7 @@ switch(octSystemName)
 		    copyfile([libFolder 'ThorlabsOCT\*.*'],libFolder,'f');
 	    end
         
-        % Load Assembly
+        % Load Assembly (first time only)
         asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
     
         % Mark assembly as loaded
