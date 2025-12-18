@@ -75,22 +75,19 @@ for fI=1:length(fileIndex)
     % fileDatastore by encompassing the file path or folder name using matlab.io.datastore.DsFileSet
     % Note: This change results it a much longer runtime 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-    try
-        ds=fileDatastore(matlab.io.datastore.DsFileSet(rawFilePath(fileIndex(fI))),'ReadFcn',@(a)(DSRead(a)));
-        temp=double(ds.read);
-    catch ME
-        warning('yOCTLoadInterfFromFile_WasatchData:ReadError', ...
-            'Error reading file index %d. Error: %s. Replacing with NaN data.', fileIndex(fI), ME.message);
-        temp = [];
+    
+    % Read file with validation: returns NaN array if corrupted/missing to allow processing to continue
+    ds=fileDatastore(matlab.io.datastore.DsFileSet(rawFilePath(fileIndex(fI))),'ReadFcn',@(a)(DSRead(a)));
+    [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
+        rawFilePath(fileIndex(fI)), ...
+        [sizeLambda, sizeX], ...
+        @()(double(ds.read)), ...
+        'WasatchData');
+    
+    if ~fileValid
         isFileValid = false;
     end
     
-    if (isempty(temp))
-        warning('yOCTLoadInterfFromFile_WasatchData:EmptyFile', ...
-            'Missing file or file size wrong at index %d. Replacing with NaN data.', fileIndex(fI));
-        temp = nan(sizeLambda, sizeX);
-        isFileValid = false;
-    end
     prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
     
     interferogram(:,:,yI(fI),1,BScanAvgI(fI)) = temp;

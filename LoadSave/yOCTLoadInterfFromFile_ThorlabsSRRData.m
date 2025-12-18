@@ -76,22 +76,19 @@ for fi=1:length(fileIndex)
     % MATLAB 2021a. Due to this bug, we have replaced all calls to 
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
+    
+    % Read file with validation: returns NaN array if corrupted/missing to allow processing to continue
     ds=imageDatastore(filePath,'ReadFcn',@(a)(DSRead(a,dimensions.aux.headerTotalBytes)),'FileExtensions','.srr');
-    try
-        temp=ds.read;
-    catch ME
-        warning('yOCTLoadInterfFromFile_ThorlabsSRRData:ReadError', ...
-            'Error reading file: %s. Error: %s. Replacing with NaN data.', filePath, ME.message);
-        temp = [];
+    [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
+        filePath, ...
+        [N, dimensions.aux.scanend], ...
+        @()(ds.read), ...
+        'ThorlabsSRRData');
+    
+    if ~fileValid
         isFileValid = false;
     end
-
-    if (isempty(temp))
-        warning('yOCTLoadInterfFromFile_ThorlabsSRRData:EmptyFile', ...
-            'Missing file or file size wrong: %s. Replacing with NaN data.', filePath);
-        temp = nan(N, dimensions.aux.scanend);
-        isFileValid = false;
-    end
+    
     prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
     temp = reshape(temp,N,[]);
 

@@ -92,45 +92,16 @@ for fi=1:length(fileIndex)
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     
-    % Load the file with explicit validation checks
-    temp = [];
+    % Read file with validation: returns NaN array if corrupted/missing to allow processing to continue
+    ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
+    [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
+        spectralFilePath, ...
+        N * interfSize, ...
+        @()(double(ds.read)), ...
+        'ThorlabsData');
     
-    % Check if file exists first
-    if ~isfile(spectralFilePath)
-        warning('yOCTLoadInterfFromFile_ThorlabsData:FileMissing', ...
-            'File does not exist: %s. Replacing with NaN data.', spectralFilePath);
-        temp = nan(N * interfSize, 1);
+    if ~fileValid
         isFileValid = false;
-    else
-        try
-            ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
-            temp=double(ds.read);
-            
-            % Validate read was successful
-            if isempty(temp)
-                warning('yOCTLoadInterfFromFile_ThorlabsData:EmptyFile', ...
-                    'File read returned empty data: %s. Replacing with NaN data.', spectralFilePath);
-                temp = nan(N * interfSize, 1);
-                isFileValid = false;
-            else
-                % Validate file size
-                expectedSize = N * interfSize;
-                if length(temp) ~= expectedSize
-                    warning('yOCTLoadInterfFromFile_ThorlabsData:IncorrectSize', ...
-                        'File has incorrect size: %s. Expected %d elements, got %d. Replacing with NaN data.', ...
-                        spectralFilePath, expectedSize, length(temp));
-                    temp = nan(N * interfSize, 1);
-                    isFileValid = false;
-                end
-            end
-        catch ME
-            % Unexpected read error (binary corruption, file locks, unknown issue with file)
-            warning('yOCTLoadInterfFromFile_ThorlabsData:ReadError', ...
-                'Unexpected error reading file: %s. Error: %s. Replacing with NaN data.', ...
-                spectralFilePath, ME.message);
-            temp = nan(N * interfSize, 1);
-            isFileValid = false;
-        end
     end
     
     prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
