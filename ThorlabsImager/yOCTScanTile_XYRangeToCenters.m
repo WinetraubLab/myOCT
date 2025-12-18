@@ -24,12 +24,16 @@ yRange_mm = sort(yRange_mm);
 % Check that the size is a multiplier of the FOV
 xSize_mm = diff(xRange_mm);
 ySize_mm = diff(yRange_mm);
+
+% Use tolerance for floating point comparison (avoid precision issues)
+tolerance_mm = 1e-6;
+
 if ((xSize_mm > octProbeFOV_mm) && ...
-    (round(xSize_mm/octProbeFOV_mm) ~= (xSize_mm/octProbeFOV_mm)))
+    (abs(round(xSize_mm/octProbeFOV_mm) - (xSize_mm/octProbeFOV_mm)) > tolerance_mm))
     error('User requested to scan x=[%.2f to %.2f], but the size of the scan is not a multiplier of the FOV: %.2f. This is not implemented', xRange_mm(1),xRange_mm(2),octProbeFOV_mm);
 end
 if ((ySize_mm > octProbeFOV_mm) && ...
-    (round(ySize_mm/octProbeFOV_mm) ~= (ySize_mm/octProbeFOV_mm)))
+    (abs(round(ySize_mm/octProbeFOV_mm) - (ySize_mm/octProbeFOV_mm)) > tolerance_mm))
     error('User requested to scan y=[%.2f to %.2f], but the size of the scan is not a multiplier of the FOV: %.2f. This is not implemented', yRange_mm(1),yRange_mm(2),octProbeFOV_mm);
 end
 
@@ -39,11 +43,11 @@ end
 xSize_mm = diff(xRange_mm);
 ySize_mm = diff(yRange_mm);
 if ((xSize_mm > octProbeFOV_mm) && ...
-    (round(xSize_mm/octProbeFOV_mm) ~= (xSize_mm/octProbeFOV_mm)))
+    (abs(round(xSize_mm/octProbeFOV_mm) - (xSize_mm/octProbeFOV_mm)) > tolerance_mm))
     error('The range expresed in xOverall_mm should be a multiplier of octProbeFOV_mm');
 end
 if ((ySize_mm > octProbeFOV_mm) && ...
-    (round(ySize_mm/octProbeFOV_mm) ~= (ySize_mm/octProbeFOV_mm)))
+    (abs(round(ySize_mm/octProbeFOV_mm) - (ySize_mm/octProbeFOV_mm)) > tolerance_mm))
     error('The range expresed in yOverall_mm should be a multiplier of octProbeFOV_mm');
 end
 
