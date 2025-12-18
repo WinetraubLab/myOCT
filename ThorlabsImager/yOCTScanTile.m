@@ -178,9 +178,6 @@ if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
 end
 
-%% Store OCT system name
-in.OCTSystem = [upper(octSystemName(1)) octSystemName(2:end)];
-
 %% Make sure folder is empty
 if exist(octFolder,'dir')
     rmdir(octFolder,'s');
