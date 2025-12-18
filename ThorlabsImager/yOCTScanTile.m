@@ -1,4 +1,3 @@
-function [json] = yOCTScanTile(varargin)
 % This function preforms an OCT Scan of a volume, and them tile around to
 % stitch together multiple scans. Tiling will be done by 3D translation
 % stage.
