@@ -28,43 +28,6 @@ if ~exist('v','var')
     v = false;
 end
 
-%% Configure Python environment for Gan632 (before loading library)
-if ~isempty(octSystemName) && strcmpi(octSystemName, 'Gan632')
-    % Force out-of-process Python to isolate SDK crashes/state issues
-    % This prevents native extension (PySpectralRadar, XA SDK) problems from crashing MATLAB
-    try
-        pe = pyenv;
-        if pe.Status ~= "NotLoaded"
-            % Check if we need to restart or change execution mode
-            needsRestart = false;
-            if isprop(pe, 'ExecutionMode')
-                % MATLAB R2019b+ supports out-of-process execution
-                if ~strcmp(pe.ExecutionMode, 'OutOfProcess')
-                    needsRestart = true;
-                end
-            end
-
-            if needsRestart
-                if v
-                    fprintf('%s Restarting Python in OutOfProcess mode for SDK robustness...\n', datestr(datetime));
-                end
-                terminate(pyenv);
-                pyenv('ExecutionMode', 'OutOfProcess');
-            end
-        else
-            % Python not loaded yet, set mode before first load
-            if isprop(pyenv, 'ExecutionMode')
-                pyenv('ExecutionMode', 'OutOfProcess');
-            end
-        end
-    catch
-        % pyenv not available (older MATLAB), continue with in-process
-        if v
-            warning('Could not configure out-of-process Python. Using in-process mode.');
-        end
-    end
-end
-
 %% Store module in a global varible 
 persistent gOCTSystemModule;
 persistent gOCTSystemName;
@@ -145,6 +108,41 @@ switch(octSystemName)
         
     case 'gan632'
         % Gan632: Python SDK (pyspectralradar)
+        
+        % Configure Python environment (force out-of-process mode for SDK robustness)
+        % This prevents native extension (PySpectralRadar, XA SDK) problems from crashing MATLAB
+        try
+            pe = pyenv;
+            if pe.Status ~= "NotLoaded"
+                % Check if we need to restart or change execution mode
+                needsRestart = false;
+                if isprop(pe, 'ExecutionMode')
+                    % MATLAB R2019b+ supports out-of-process execution
+                    if ~strcmp(pe.ExecutionMode, 'OutOfProcess')
+                        needsRestart = true;
+                    end
+                end
+
+                if needsRestart
+                    if v
+                        fprintf('%s Restarting Python in OutOfProcess mode for SDK robustness...\n', datestr(datetime));
+                    end
+                    terminate(pyenv);
+                    pyenv('ExecutionMode', 'OutOfProcess');
+                end
+            else
+                % Python not loaded yet, set mode before first load
+                if isprop(pyenv, 'ExecutionMode')
+                    pyenv('ExecutionMode', 'OutOfProcess');
+                end
+            end
+        catch
+            % pyenv not available (older MATLAB), continue with in-process
+            if v
+                warning('Could not configure out-of-process Python. Using in-process mode.');
+            end
+        end
+        
         % Import each module separately for clarity
         repoPath = fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython');
         

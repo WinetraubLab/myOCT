@@ -64,4 +64,4 @@ colorbar;
 grid on;
 
 %% Cleanup for next run
-yOCTHardwareLibTearDown(octSystem, true);
+yOCTHardwareLibTearDown(true);

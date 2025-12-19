@@ -181,4 +181,4 @@ yOCTCreateTemporalSliceMovieFrom3DTiffs(...
     );
 
 %% Cleanup for next run
-yOCTHardwareLibTearDown(octSystem, true);
+yOCTHardwareLibTearDown(true);

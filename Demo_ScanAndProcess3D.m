@@ -97,7 +97,7 @@ scanParameters = yOCTScanTile (...
     );
 
 %% Cleanup for next run
-yOCTHardwareLibTearDown(octSystem, true);
+yOCTHardwareLibTearDown(true);
 
 %% Process the scan
 fprintf('%s Processing\n',datestr(datetime));

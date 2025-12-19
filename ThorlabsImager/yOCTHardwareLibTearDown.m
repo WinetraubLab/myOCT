@@ -1,23 +1,21 @@
-function yOCTHardwareLibTearDown(octSystemName, v)
+function yOCTHardwareLibTearDown(v)
 % Tear down hardware library and clean up resources.
 % Closes all hardware connections (stages + scanner) and terminates Python interpreter for Gan632.
+% Must be called after yOCTHardwareLibSetUp().
 %
 %   INPUTS:
-%       octSystemName: Name of the OCT system ('Ganymede' or 'Gan632')
-%                      Can also be called without arguments if library already loaded.
 %       v: Verbose mode (default: false)
 
 %% Input checks
-if ~exist('octSystemName','var') || isempty(octSystemName)
-    % If no octSystemName provided, get it from persistent library
-    [octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
-else
-    % Load library to get module handle
-    [octSystemModule, ~, skipHardware] = yOCTHardwareLibSetUp();
-end
-
 if ~exist('v','var')
     v = false;
+end
+
+% Get system info from persistent library (must have been set up first)
+[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+
+if isempty(octSystemName)
+    error('yOCTHardwareLibSetUp must be called before yOCTHardwareLibTearDown.');
 end
 
 %% Close hardware connections first
