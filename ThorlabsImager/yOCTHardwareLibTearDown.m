@@ -23,7 +23,7 @@ end
 %% Close hardware connections first
 if ~skipHardware
     if v
-        fprintf('Closing hardware connections...\n');
+        fprintf('%s Closing hardware connections...\n', datestr(datetime));
     end
     
     switch(lower(octSystemName))
@@ -48,29 +48,26 @@ if strcmpi(octSystemName, 'Gan632')
     % This ensures SpectralRadar SDK releases all resources
     % Comment out if you want faster reruns (but may require hardware power cycle)
     
-    if v
-        fprintf('Cleaning up Gan632 Python environment...\n');
-    end
-    
     % Clear function handles
     clear functions
     
     % Terminate Python interpreter
     try
         terminate(pyenv);
-        if v
-            fprintf('Python interpreter terminated successfully.\n');
-        end
     catch ME
         if v
             warning('Failed to terminate Python interpreter: %s', ME.message);
         end
     end
     
+    if v
+        fprintf('%s Gan632 cleanup complete.\n', datestr(datetime));
+    end
+    
 elseif strcmpi(octSystemName, 'Ganymede')
     % Ganymede: C# cleanup (if needed in future)
     if v
-        fprintf('Ganymede cleanup complete.\n');
+        fprintf('%s Ganymede cleanup complete.\n', datestr(datetime));
     end
     
 else

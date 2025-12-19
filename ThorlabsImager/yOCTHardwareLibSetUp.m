@@ -46,7 +46,7 @@ if ~isempty(octSystemName) && strcmpi(octSystemName, 'Gan632')
 
             if needsRestart
                 if v
-                    fprintf('Restarting Python in OutOfProcess mode for SDK robustness...\n');
+                    fprintf('%s Restarting Python in OutOfProcess mode for SDK robustness...\n', datestr(datetime));
                 end
                 terminate(pyenv);
                 pyenv('ExecutionMode', 'OutOfProcess');
@@ -125,7 +125,7 @@ switch(octSystemName)
             octSystemName = gOCTSystemName;
             skipHardware = gSkipHardware;
             if v
-                fprintf('ThorlabsImagerNET already loaded. Using existing instance. To fully reset, restart MATLAB.\n');
+                fprintf('%s ThorlabsImagerNET already loaded. Using existing instance. To fully reset, restart MATLAB.\n', datestr(datetime));
             end
             return;
         end
