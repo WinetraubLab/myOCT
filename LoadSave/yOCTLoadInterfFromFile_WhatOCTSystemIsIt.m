@@ -14,7 +14,7 @@ end
 if ~awsExist(inputDataFolder,'dir')
     error('"%s" doesn''t exist, mistake?',inputDataFolder)
 end
-
+    
 %% Select manufacturer by looking at file types
 try
 % Any fileDatastore request to AWS S3 is limited to 1000 files in 
