@@ -221,11 +221,6 @@ for scanI=1:length(in.scanOrder)
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
     
-    if(scanI==1)
-        [OCTSystem] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(s);
-        in.OCTSystem = OCTSystem;
-    end
-    
 end
 
 %% Finalize
