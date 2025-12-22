@@ -16,7 +16,7 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
 
 %% Initialize scanner
 if ~skipHardware

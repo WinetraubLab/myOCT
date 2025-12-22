@@ -74,7 +74,7 @@ if ~exist(in.octProbePath,'file')
 end
 
 % Get OCT system from persistent library
-[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+[octSystemModule, octSystemName, ~] = yOCTHardwareLibSetUp();
 in.octSystem = octSystemName; % Store for compatibility and logging
 
 % Override unzipOCTFile flag for Gan632 system which doesn't generate .oct files
@@ -237,8 +237,7 @@ if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
 
-% Close all hardware 
-yOCTCloseAllHardware();
+yOCTScannerClose();
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);
