@@ -77,12 +77,20 @@ for fi=1:length(fileIndex)
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     
-    % Read file with validation: returns NaN array if corrupted/missing to allow processing to continue
-    ds=imageDatastore(filePath,'ReadFcn',@(a)(DSRead(a,dimensions.aux.headerTotalBytes)),'FileExtensions','.srr');
+    % Conditional datastore creation: only instantiate if file exists.
+    % Missing/corrupted files delegated to ReadFile validator which returns NaN arrays.
+    if isfile(filePath)
+        ds=imageDatastore(filePath,'ReadFcn',@(a)(DSRead(a,dimensions.aux.headerTotalBytes)),'FileExtensions','.srr');
+        fileReader = @()(ds.read);
+    else
+        % Missing file: provide error function for ReadFile validator to handle
+        fileReader = @()(error('File does not exist'));
+    end
+    
     [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
         filePath, ...
         [N, dimensions.aux.scanend], ...
-        @()(ds.read), ...
+        fileReader, ...
         'ThorlabsSRRData');
     
     if ~fileValid

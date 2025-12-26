@@ -76,12 +76,20 @@ for fI=1:length(fileIndex)
     % Note: This change results it a much longer runtime 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     
-    % Read file with validation: returns NaN array if corrupted/missing to allow processing to continue
-    ds=fileDatastore(matlab.io.datastore.DsFileSet(rawFilePath(fileIndex(fI))),'ReadFcn',@(a)(DSRead(a)));
+    % Conditional datastore creation: only instantiate if file exists.
+    % Missing/corrupted files delegated to ReadFile validator which returns NaN arrays.
+    if isfile(rawFilePath(fileIndex(fI)))
+        ds=fileDatastore(matlab.io.datastore.DsFileSet(rawFilePath(fileIndex(fI))),'ReadFcn',@(a)(DSRead(a)));
+        fileReader = @()(double(ds.read));
+    else
+        % Missing file: provide error function for ReadFile validator to handle
+        fileReader = @()(error('File does not exist'));
+    end
+    
     [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
         rawFilePath(fileIndex(fI)), ...
         [sizeLambda, sizeX], ...
-        @()(double(ds.read)), ...
+        fileReader, ...
         'WasatchData');
     
     if ~fileValid

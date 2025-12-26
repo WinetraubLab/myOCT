@@ -40,19 +40,35 @@ if (sizeX == 1)
     %% 1D Mode, Different loading scheme
     
     prof.numberOfFramesLoaded = 1;
-    tic;
+    
     % Any fileDatastore request to AWS S3 is limited to 1000 files in 
     % MATLAB 2021a. Due to this bug, we have replaced all calls to 
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-    ds=imageDatastore([inputDataFolder '/data/SpectralFloat.data'],'ReadFcn',@(a)(DSRead(a,'float32')),'FileExtensions','.data');
-    temp = double(ds.read);
+    spectralFilePath = awsModifyPathForCompetability([inputDataFolder '/data/SpectralFloat.data']);
+    
+    % Conditional datastore creation: only instantiate if file exists.
+    % Missing files are handled by ReadFile validator which returns NaN arrays.
+    if isfile(spectralFilePath)
+        ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'float32')),'FileExtensions','.data');
+        fileReader = @()(double(ds.read));
+    else
+        % Delegate to ReadFile validator for missing file handling
+        fileReader = @()(error('File does not exist'));
+    end
+    
+    tic;
+    [temp, isFileValid] = yOCTLoadInterfFromFile_ReadFile(...
+        spectralFilePath, ...
+        sizeLambda * AScanAvgN, ...
+        fileReader, ...
+        'ThorlabsData');
     prof.totalFrameLoadTimeSec = toc;
+    
     temp = reshape(temp,[sizeLambda,AScanAvgN]);
     interferogram = zeros(sizeLambda,sizeX,sizeY, AScanAvgN, BScanAvgN);
     interferogram(:,1,1,:,1) = temp;
     apodization = NaN; %No Apodization in file
-    isFileValid = true; %1D mode always valid (single file)
     return;
 end
 
@@ -84,7 +100,7 @@ prof.totalFrameLoadTimeSec = 0;
 isFileValid = true;
 for fi=1:length(fileIndex)
     td=tic;
-    spectralFilePath = [inputDataFolder '/data/Spectral' num2str(fileIndex(fi)) '.data'];
+    spectralFilePath = awsModifyPathForCompetability([inputDataFolder '/data/Spectral' num2str(fileIndex(fi)) '.data']);
  
     %Load Data
     % Any fileDatastore request to AWS S3 is limited to 1000 files in 
@@ -92,12 +108,20 @@ for fi=1:length(fileIndex)
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     
-    % Read file with validation: returns NaN array if corrupted/missing to allow processing to continue
-    ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
+    % Conditional datastore creation: only instantiate if file exists.
+    % Missing/corrupted files delegated to ReadFile validator which returns NaN arrays.
+    if isfile(spectralFilePath)
+        ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
+        fileReader = @()(double(ds.read));
+    else
+        % Missing file: provide error function for ReadFile validator to handle
+        fileReader = @()(error('File does not exist'));
+    end
+    
     [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
         spectralFilePath, ...
         N * interfSize, ...
-        @()(double(ds.read)), ...
+        fileReader, ...
         'ThorlabsData');
     
     if ~fileValid
