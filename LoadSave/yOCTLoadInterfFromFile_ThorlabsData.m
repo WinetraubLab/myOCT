@@ -1,4 +1,4 @@
-function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_ThorlabsData(varargin)
+function [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsData(varargin)
 %Interface implementation of yOCTLoadInterfFromFile. See help yOCTLoadInterfFromFile
 % OUTPUTS:
 %   - interferogram - interferogram data, apodization corrected. 
@@ -7,7 +7,8 @@ function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_ThorlabsData
 %   - apodization - OCT baseline intensity, without the tissue scatterers.
 %       Dimensions order (lambda,apodization #,y,BScanAvg). 
 %       If dimension size is 1 it does not appear at the final matrix
-%   - prof - profiling data - for debug purposes 
+%   - prof - profiling data - for debug purposes
+%   - isFileValid - true if file loaded successfully, false if it was corrupted/missing 
 
 %% Input Checks
 if (iscell(varargin{1}))
@@ -39,14 +40,31 @@ if (sizeX == 1)
     %% 1D Mode, Different loading scheme
     
     prof.numberOfFramesLoaded = 1;
-    tic;
+    
     % Any fileDatastore request to AWS S3 is limited to 1000 files in 
     % MATLAB 2021a. Due to this bug, we have replaced all calls to 
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-    ds=imageDatastore([inputDataFolder '/data/SpectralFloat.data'],'ReadFcn',@(a)(DSRead(a,'float32')),'FileExtensions','.data');
-    temp = double(ds.read);
+    spectralFilePath = awsModifyPathForCompetability([inputDataFolder '/data/SpectralFloat.data']);
+    
+    % Conditional datastore creation: only instantiate if file exists.
+    % Missing files are handled by ReadFile validator which returns NaN arrays.
+    if isfile(spectralFilePath)
+        ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'float32')),'FileExtensions','.data');
+        fileReader = @()(double(ds.read));
+    else
+        % Delegate to ReadFile validator for missing file handling
+        fileReader = @()(error('File does not exist'));
+    end
+    
+    tic;
+    [temp, isFileValid] = yOCTLoadInterfFromFile_ReadFile(...
+        spectralFilePath, ...
+        sizeLambda * AScanAvgN, ...
+        fileReader, ...
+        'ThorlabsData');
     prof.totalFrameLoadTimeSec = toc;
+    
     temp = reshape(temp,[sizeLambda,AScanAvgN]);
     interferogram = zeros(sizeLambda,sizeX,sizeY, AScanAvgN, BScanAvgN);
     interferogram(:,1,1,:,1) = temp;
@@ -79,21 +97,37 @@ apodization   = zeros(sizeLambda,apodSize,sizeY,1,BScanAvgN);
 N = sizeLambda;
 prof.numberOfFramesLoaded = length(fileIndex);
 prof.totalFrameLoadTimeSec = 0;
+isFileValid = true;
 for fi=1:length(fileIndex)
     td=tic;
-    spectralFilePath = [inputDataFolder '/data/Spectral' num2str(fileIndex(fi)) '.data'];
+    spectralFilePath = awsModifyPathForCompetability([inputDataFolder '/data/Spectral' num2str(fileIndex(fi)) '.data']);
  
     %Load Data
     % Any fileDatastore request to AWS S3 is limited to 1000 files in 
     % MATLAB 2021a. Due to this bug, we have replaced all calls to 
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-    ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
-    temp=double(ds.read);
-
-    if (isempty(temp))
-        error(['Missing file / file size wrong' spectralFilePath]);
+    
+    % Conditional datastore creation: only instantiate if file exists.
+    % Missing/corrupted files delegated to ReadFile validator which returns NaN arrays.
+    if isfile(spectralFilePath)
+        ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
+        fileReader = @()(double(ds.read));
+    else
+        % Missing file: provide error function for ReadFile validator to handle
+        fileReader = @()(error('File does not exist'));
     end
+    
+    [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
+        spectralFilePath, ...
+        N * interfSize, ...
+        fileReader, ...
+        'ThorlabsData');
+    
+    if ~fileValid
+        isFileValid = false;
+    end
+    
     prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
     temp = reshape(temp,[N,interfSize]);
 
