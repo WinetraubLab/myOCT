@@ -69,34 +69,45 @@ prof.numberOfFramesLoaded = length(fileIndex);
 prof.totalFrameLoadTimeSec = 0;
 isFileValid = true; %Track if all files loaded successfully
 for fI=1:length(fileIndex)    
-    td=tic;
     % Any fileDatastore request to AWS S3 is limited to 1000 files in 
     % MATLAB 2021a. Due to this bug, we have modified certain calls to 
     % fileDatastore by encompassing the file path or folder name using matlab.io.datastore.DsFileSet
     % Note: This change results it a much longer runtime 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     
-    % Conditional datastore creation: only instantiate if file exists.
-    % Missing/corrupted files delegated to ReadFile validator which returns NaN arrays.
-    if isfile(rawFilePath(fileIndex(fI)))
-        ds=fileDatastore(matlab.io.datastore.DsFileSet(rawFilePath(fileIndex(fI))),'ReadFcn',@(a)(DSRead(a)));
-        fileReader = @()(double(ds.read));
+    % Wasatch uses fileDatastore with DsFileSet (different from imageDatastore)
+    % Handle validation directly here without _ReadFile due to special datastore type
+    currentFilePath = rawFilePath(fileIndex(fI));
+    
+    tic;
+    if ~isfile(currentFilePath)
+        % File missing
+        temp = nan(sizeLambda, sizeX);
+        currentFileIsValid = false;
     else
-        % Missing file: provide error function for ReadFile validator to handle
-        fileReader = @()(error('File does not exist'));
+        try
+            ds = fileDatastore(matlab.io.datastore.DsFileSet(currentFilePath), 'ReadFcn', @(a)(DSRead(a)));
+            temp = double(ds.read());
+            
+            % Validate size
+            if isempty(temp) || numel(temp) ~= sizeLambda * sizeX
+                temp = nan(sizeLambda, sizeX);
+                currentFileIsValid = false;
+            else
+                currentFileIsValid = true;
+            end
+        catch
+            % Read error
+            temp = nan(sizeLambda, sizeX);
+            currentFileIsValid = false;
+        end
     end
+    frameLoadTime = toc;
     
-    [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
-        rawFilePath(fileIndex(fI)), ...
-        [sizeLambda, sizeX], ...
-        fileReader, ...
-        'WasatchData');
+    % Track overall validity: false if ANY file is invalid
+    isFileValid = isFileValid & currentFileIsValid;
     
-    if ~fileValid
-        isFileValid = false;
-    end
-    
-    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
+    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime;
     
     interferogram(:,:,yI(fI),1,BScanAvgI(fI)) = temp;
 end

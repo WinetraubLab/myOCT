@@ -47,23 +47,13 @@ if (sizeX == 1)
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     spectralFilePath = awsModifyPathForCompetability([inputDataFolder '/data/SpectralFloat.data']);
     
-    % Conditional datastore creation: only instantiate if file exists.
-    % Missing files are handled by ReadFile validator which returns NaN arrays.
-    if isfile(spectralFilePath)
-        ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'float32')),'FileExtensions','.data');
-        fileReader = @()(double(ds.read));
-    else
-        % Delegate to ReadFile validator for missing file handling
-        fileReader = @()(error('File does not exist'));
-    end
-    
-    tic;
-    [temp, isFileValid] = yOCTLoadInterfFromFile_ReadFile(...
+    % ReadFile creates datastore internally and handles all validation
+    [temp, isFileValid, prof.totalFrameLoadTimeSec] = yOCTLoadInterfFromFile_ReadFile(...
         spectralFilePath, ...
         sizeLambda * AScanAvgN, ...
-        fileReader, ...
+        @(a)(double(DSRead(a,'float32'))), ...
+        '.data', ...
         'ThorlabsData');
-    prof.totalFrameLoadTimeSec = toc;
     
     temp = reshape(temp,[sizeLambda,AScanAvgN]);
     interferogram = zeros(sizeLambda,sizeX,sizeY, AScanAvgN, BScanAvgN);
@@ -99,7 +89,6 @@ prof.numberOfFramesLoaded = length(fileIndex);
 prof.totalFrameLoadTimeSec = 0;
 isFileValid = true;
 for fi=1:length(fileIndex)
-    td=tic;
     spectralFilePath = awsModifyPathForCompetability([inputDataFolder '/data/Spectral' num2str(fileIndex(fi)) '.data']);
  
     %Load Data
@@ -108,27 +97,18 @@ for fi=1:length(fileIndex)
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     
-    % Conditional datastore creation: only instantiate if file exists.
-    % Missing/corrupted files delegated to ReadFile validator which returns NaN arrays.
-    if isfile(spectralFilePath)
-        ds=imageDatastore(spectralFilePath,'ReadFcn',@(a)(DSRead(a,'short')),'FileExtensions','.data');
-        fileReader = @()(double(ds.read));
-    else
-        % Missing file: provide error function for ReadFile validator to handle
-        fileReader = @()(error('File does not exist'));
-    end
-    
-    [temp, fileValid] = yOCTLoadInterfFromFile_ReadFile(...
+    % ReadFile creates datastore internally and handles validations
+    [temp, currentFileIsValid, frameLoadTime] = yOCTLoadInterfFromFile_ReadFile(...
         spectralFilePath, ...
         N * interfSize, ...
-        fileReader, ...
+        @(a)(double(DSRead(a,'short'))), ...
+        '.data', ...
         'ThorlabsData');
     
-    if ~fileValid
-        isFileValid = false;
-    end
+    % Track overall validity: false if ANY file is invalid
+    isFileValid = isFileValid & currentFileIsValid;
     
-    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
+    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime;
     temp = reshape(temp,[N,interfSize]);
 
     %Read apodization
