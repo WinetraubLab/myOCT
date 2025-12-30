@@ -46,7 +46,7 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
 
 % Initialize position values
 if ~skipHardware
@@ -57,7 +57,6 @@ if ~skipHardware
             if (v)
                 fprintf('%s [Ganymede] Initializing C# DLL-based stage control (3 axes)...\n', datestr(datetime));
             end
-            ThorlabsImagerNETLoadLib();
             z0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z');
             x0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x');
             y0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y');

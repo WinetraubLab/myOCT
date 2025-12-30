@@ -11,6 +11,10 @@ switch(OCTSystem)
         chirpFileName = 'ChirpGanymede.dat';
         lambdaMin = 796.23;%[nm] Manufacturer number: 824.16, See 2019-08-31GanymedeFilterCalibration Report for more details
         lambdaMax = 1010.02;%[nm]Manufacturer number: 1038.03, See 2019-08-31GanymedeFilterCalibration Report for more details
+    case 'Gan632'
+        chirpFileName = 'ChirpGanymede.dat';
+        lambdaMin = 796; %[nm] TODO these will need to be measured, see 2019-08-31GanymedeFilterCalibration Report for more details
+        lambdaMax = 1010; %[nm] TODO these will need to be measured, see 2019-08-31GanymedeFilterCalibration Report for more details
     case {'Telesto','Telesto_SRR'}
         chirpFileName = 'ChirpTelesto.dat';
         lambdaMin = 1208.69;%[nm] Manufacturer number: 1200.56, See 2018-12-04 Filter Calibration Report for more details

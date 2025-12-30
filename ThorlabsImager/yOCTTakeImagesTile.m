@@ -55,6 +55,10 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
+% Get OCT system from persistent library
+[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+in.octSystem = octSystemName; % Store system name
+
 %Load probe ini
 ini = yOCTReadProbeIniToStruct(in.octProbePath);
 
@@ -74,9 +78,8 @@ in.imagesFP = arrayfun(@(x)(sprintf('Data%02d.jpg',x)),scanOrder,'UniformOutput'
 if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
- 
-ThorlabsImagerNETLoadLib(); %Init library
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); %Init OCT
+
+yOCTScannerInit(in.octProbePath, v); % Init OCT
 [x0,y0] = yOCTStageInit(in.oct2stageXYAngleDeg);
 
 %Set lightring power
