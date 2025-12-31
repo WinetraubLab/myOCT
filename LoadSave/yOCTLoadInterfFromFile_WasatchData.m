@@ -102,12 +102,12 @@ for fI=1:length(fileIndex)
             currentFileIsValid = false;
         end
     end
-    frameLoadTime = toc;
+    frameLoadTime_sec = toc;
     
     % Track overall validity: false if ANY file is invalid
     isFileValid = isFileValid & currentFileIsValid;
     
-    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime;
+    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime_sec;
     
     interferogram(:,:,yI(fI),1,BScanAvgI(fI)) = temp;
 end

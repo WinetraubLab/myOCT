@@ -1,4 +1,4 @@
-function [data, isValid, loadTime] = yOCTLoadInterfFromFile_ReadFile(filePath, expectedSize, readFunction, fileExtension, callerName)
+function [data, isValid, loadTime_sec] = yOCTLoadInterfFromFile_ReadFile(filePath, expectedSize, readFunction, fileExtension, callerName)
 % Helper function to safely read OCT data files with validation
 % This function provides consistent error handling across all OCT file loaders
 % Creates datastore internally and handles all file validation
@@ -11,9 +11,9 @@ function [data, isValid, loadTime] = yOCTLoadInterfFromFile_ReadFile(filePath, e
 %   callerName    - Name of calling function for warning messages (e.g., 'ThorlabsData')
 %
 % OUTPUTS:
-%   data      - Data read from file, or NaN array of expectedSize if read failed
-%   isValid   - true if file read successfully, false if corrupted/missing
-%   loadTime  - Time taken to perform read operation (seconds)
+%   data         - Data read from file, or NaN array of expectedSize if read failed
+%   isValid      - true if file read successfully, false if corrupted/missing
+%   loadTime_sec - Time taken to perform read operation (seconds)
 %
 % VALIDATION CHECKS:
 %   1. File existence (fast-fail before expensive datastore creation)
@@ -39,7 +39,7 @@ if ~isfile(filePath)
         'File does not exist: %s. Replacing with NaN data.', filePath);
     data = nan(expectedSize, 1);
     isValid = false;
-    loadTime = toc;
+    loadTime_sec = toc;
     return;
 end
 
@@ -54,7 +54,7 @@ catch ME
         filePath, ME.message);
     data = nan(expectedSize, 1);
     isValid = false;
-    loadTime = toc;
+    loadTime_sec = toc;
     return;
 end
 
@@ -64,7 +64,7 @@ if isempty(data)
         'File read returned empty data: %s. Replacing with NaN data.', filePath);
     data = nan(expectedSize, 1);
     isValid = false;
-    loadTime = toc;
+    loadTime_sec = toc;
     return;
 end
 
@@ -76,11 +76,11 @@ if actualSize ~= expectedSize
         filePath, expectedSize, actualSize);
     data = nan(expectedSize, 1);
     isValid = false;
-    loadTime = toc;
+    loadTime_sec = toc;
     return;
 end
 
 % All checks passed
-loadTime = toc;
+loadTime_sec = toc;
 
 end

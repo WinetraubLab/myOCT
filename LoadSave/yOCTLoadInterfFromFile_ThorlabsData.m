@@ -98,7 +98,7 @@ for fi=1:length(fileIndex)
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
     
     % ReadFile creates datastore internally and handles validations
-    [temp, currentFileIsValid, frameLoadTime] = yOCTLoadInterfFromFile_ReadFile(...
+    [temp, currentFileIsValid, frameLoadTime_sec] = yOCTLoadInterfFromFile_ReadFile(...
         spectralFilePath, ...
         N * interfSize, ...
         @(a)(double(DSRead(a,'short'))), ...
@@ -108,7 +108,7 @@ for fi=1:length(fileIndex)
     % Track overall validity: false if ANY file is invalid
     isFileValid = isFileValid & currentFileIsValid;
     
-    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime;
+    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime_sec;
     temp = reshape(temp,[N,interfSize]);
 
     %Read apodization
