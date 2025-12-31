@@ -190,31 +190,39 @@ end
 %% Load Data - System Specific Configuration
 switch(OCTSystemManufacturer)
     case {'Thorlabs'}
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_ThorlabsData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsData([varargin {'dimensions'} {dimensions}]);
     case {'Thorlabs_SRR'}
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_ThorlabsSRRData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsSRRData([varargin {'dimensions'} {dimensions}]);
     case {'Wasatch'}
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_WasatchData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_WasatchData([varargin {'dimensions'} {dimensions}]);
     case('Simulated')
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_SimulatedData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_SimulatedData([varargin {'dimensions'} {dimensions}]);
 end
 
 %% Correct For Apodization
-switch (apodizationCorrection)
-    case 'subtract'
-        if isnan(apodization)
-            error('No Apodization Data, Cannot Correct. Please set ''ApodizationCorrection'' to ''None''');
-        end
-        [~, sizeX, sizeY, AScanAvgN, BScanAvgN] = yOCTLoadInterfFromFile_DataSizing(dimensions);   
-        apod = mean(apodization,2); %Mean across x axis
-        s = size(apod);
-        s = [s 1 1 1 1 1]; %Pad with ones
+% Only process apodization if files are valid
+if isFileValid
+    switch (apodizationCorrection)
+        case 'subtract'
+            if isnan(apodization)
+                error('No Apodization Data, Cannot Correct. Please set ''ApodizationCorrection'' to ''None''');
+            else
+                % Perform apodization correction
+                [~, sizeX, sizeY, AScanAvgN, BScanAvgN] = yOCTLoadInterfFromFile_DataSizing(dimensions);   
+                apod = mean(apodization,2); %Mean across x axis
+                s = size(apod);
+                s = [s 1 1 1 1 1]; %Pad with ones
 
-        interferogram = interferogram - repmat(apod,[1 sizeX sizeY/s(3) AScanAvgN BScanAvgN/s(5)]);
-    case 'none'
-        %No correction required
-    otherwise
-        error(['No such Apodization Correction Method Implemented: ' apodizationCorrection]);
+                interferogram = interferogram - repmat(apod,[1 sizeX sizeY/s(3) AScanAvgN BScanAvgN/s(5)]);
+            end
+        case 'none'
+            %No correction required
+        otherwise
+            error(['No such Apodization Correction Method Implemented: ' apodizationCorrection]);
+    end
+else
+    % Files were corrupted/missing: interferogram contains NaN, skip apodization correction
+    % NaN will propagate through subsequent processing
 end
 
 %% Finish
