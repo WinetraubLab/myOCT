@@ -46,9 +46,6 @@ if strcmpi(octSystemName, 'Gan632')
     % This ensures SpectralRadar SDK releases all resources
     % Comment out if you want faster reruns (but may require hardware power cycle)
     
-    % Clear function handles
-    clear functions
-    
     % Terminate Python interpreter
     try
         terminate(pyenv);
