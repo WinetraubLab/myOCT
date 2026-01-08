@@ -8,37 +8,6 @@
 % by running: addpath(genpath('F:\Jenkins\Scan OCTHist Dev\workspace\'))
 yOCTSetLibraryPath(); % Set path
 
-% Configure Python environment for hardware SDK robustness
-% Force out-of-process Python to isolate SDK crashes/state issues
-% This prevents native extension (PySpectralRadar, XA SDK) problems from crashing MATLAB
-try
-    pe = pyenv;
-    if pe.Status ~= "NotLoaded"
-        % Check if we need to restart or change execution mode
-        needsRestart = false;
-        if isprop(pe, 'ExecutionMode')
-            % MATLAB R2019b+ supports out-of-process execution
-            if ~strcmp(pe.ExecutionMode, 'OutOfProcess')
-                needsRestart = true;
-            end
-        end
-
-        if needsRestart
-            fprintf('Restarting Python in OutOfProcess mode for SDK robustness...\n');
-            terminate(pyenv);
-            pyenv('ExecutionMode', 'OutOfProcess');
-        end
-    else
-        % Python not loaded yet, set mode before first load
-        if isprop(pyenv, 'ExecutionMode')
-            pyenv('ExecutionMode', 'OutOfProcess');
-        end
-    end
-catch
-    % pyenv not available (older MATLAB), continue with in-process
-    warning('Could not configure out-of-process Python. Using in-process mode.');
-end
-
 %% Inputs
 octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
@@ -68,7 +37,7 @@ output_folder = '\';
 skipScanning = false;
 
 %% Load hardware
-yOCTLoadHardwareLib(octSystem, skipScanning, true);
+yOCTHardwareLibSetUp(octSystem, skipScanning, true);
 
 %% Compute scanning parameters
 
@@ -128,17 +97,8 @@ scanParameters = yOCTScanTile (...
     );
 
 %% Cleanup for next run
+yOCTHardwareLibTearDown(true);
 
-% Fully restart Python interpreter between runs for maximum robustness
-% This ensures clean USB device state for SpectralRadar SDK
-% Comment out if you want faster reruns (but may require hardware power cycle)
-
-clear functions
-
-% Terminate Python interpreter
-terminate(pyenv);
-
-	
 %% Process the scan
 fprintf('%s Processing\n',datestr(datetime));
 outputTiffFile = [output_folder '/Image.tiff'];

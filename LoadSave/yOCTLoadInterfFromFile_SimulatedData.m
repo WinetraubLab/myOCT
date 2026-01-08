@@ -1,4 +1,4 @@
-function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_SimulatedData(varargin)
+function [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_SimulatedData(varargin)
 %Interface implementation of yOCTLoadInterfFromFile. See help yOCTLoadInterfFromFile
 % OUTPUTS:
 %   - interferogram - interferogram data, apodization corrected. 
@@ -7,7 +7,8 @@ function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_SimulatedDat
 %   - apodization - OCT baseline intensity, without the tissue scatterers.
 %       Dimensions order (lambda,apodization #,y,BScanAvg). 
 %       If dimension size is 1 it does not appear at the final matrix
-%   - prof - profiling data - for debug purposes 
+%   - prof - profiling data - for debug purposes
+%   - isFileValid - true if all files loaded successfully, false if any file was corrupted/missing 
 
 %% Input Checks
 if (iscell(varargin{1}))
@@ -52,3 +53,6 @@ apodization = zeros(size(interferogram));
 
 % Empty profiling
 prof = [];
+
+% Simulated data is always valid
+isFileValid = true;

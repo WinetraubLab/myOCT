@@ -1,4 +1,4 @@
-function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_ThorlabsSRRData(varargin)
+function [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsSRRData(varargin)
 %Interface implementation of yOCTLoadInterfFromFile. See help yOCTLoadInterfFromFile
 %Reads SRR files
 % OUTPUTS:
@@ -8,7 +8,8 @@ function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_ThorlabsSRRD
 %   - apodization - OCT baseline intensity, without the tissue scatterers.
 %       Dimensions order (lambda,apodization #,y,BScanAvg). 
 %       If dimension size is 1 it does not appear at the final matrix
-%   - prof - profiling data - for debug purposes 
+%   - prof - profiling data - for debug purposes
+%   - isFileValid - true if all files loaded successfully, false if any file was corrupted/missing 
 
 %% Input Checks
 if (iscell(varargin{1}))
@@ -59,8 +60,8 @@ apodization   = zeros(sizeLambda,apodSize,sizeY,1,BScanAvgN);
 N = sizeLambda;
 prof.numberOfFramesLoaded = length(fileIndex);
 prof.totalFrameLoadTimeSec = 0;
+isFileValid = true; %Track if all files loaded successfully
 for fi=1:length(fileIndex)
-    td=tic;
     filePath = sprintf('%s/Data_Y%04d_YTotal%d_B%04d_BTotal%d_%s.srr',...
         inputDataFolder,...
         dimensions.y.index(yI(fi)),dimensions.y.indexMax,...
@@ -74,18 +75,19 @@ for fi=1:length(fileIndex)
     % MATLAB 2021a. Due to this bug, we have replaced all calls to 
     % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-    ds=imageDatastore(filePath,'ReadFcn',@(a)(DSRead(a,dimensions.aux.headerTotalBytes)),'FileExtensions','.srr');
-    try
-        temp=ds.read;
-    catch ME
-        disp(['Error reading ' filePath]);
-        rethrow(ME);
-    end
-
-    if (isempty(temp))
-        error(['Missing file / file size wrong' filePath]);
-    end
-    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
+    
+    % ReadFile creates datastore internally and handles all validation
+    [temp, currentFileIsValid, frameLoadTime_sec] = yOCTLoadInterfFromFile_ReadFile(...
+        filePath, ...
+        [N, dimensions.aux.scanend], ...
+        @(a)(DSRead(a,dimensions.aux.headerTotalBytes)), ...
+        '.srr', ...
+        'ThorlabsSRRData');
+    
+    % Track overall validity: false if ANY file is invalid
+    isFileValid = isFileValid & currentFileIsValid;
+    
+    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime_sec;
     temp = reshape(temp,N,[]);
 
     %Read apodization

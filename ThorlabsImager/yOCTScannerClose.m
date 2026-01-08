@@ -1,6 +1,6 @@
 function yOCTScannerClose(v)
 % Close OCT scanner based on system type (Ganymede or Gan632).
-% Hardware library must be loaded via yOCTLoadHardwareLib before calling this function.
+% Hardware library must be loaded via yOCTHardwareLibSetUp before calling this function.
 %
 % INPUTS:
 %   v: verbose mode, default: false
@@ -16,14 +16,21 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTLoadHardwareLib();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
 
 %% Close scanner based on system type
 if ~skipHardware
     switch(octSystemName)
         case 'ganymede'
             % Ganymede: C# DLL
-            ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+            % Only close if ThorlabsImagerNET is loaded (scanner is initialized) to prevent crashes
+            if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
+                ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+            else
+                if (v)
+                    fprintf('%s Scanner already closed or not initialized\n', datestr(datetime));
+                end
+            end
             
         case 'gan632'
             % Gan632: Python SDK

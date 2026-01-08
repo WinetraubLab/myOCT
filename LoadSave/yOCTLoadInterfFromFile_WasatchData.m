@@ -1,4 +1,4 @@
-function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_WasatchData(varargin)
+function [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_WasatchData(varargin)
 %Interface implementation of yOCTLoadInterfFromFile. See help yOCTLoadInterfFromFile
 % OUTPUTS:
 %   - interferogram - interferogram data, apodization corrected. 
@@ -7,7 +7,8 @@ function [interferogram, apodization,prof] = yOCTLoadInterfFromFile_WasatchData(
 %   - apodization - OCT baseline intensity, without the tissue scatterers.
 %       Dimensions order (lambda,apodization #,y,BScanAvg). 
 %       If dimension size is 1 it does not appear at the final matrix
-%   - prof - profiling data - for debug purposes 
+%   - prof - profiling data - for debug purposes
+%   - isFileValid - true if all files loaded successfully, false if any file was corrupted/missing 
 
 %% Input Checks
 if (iscell(varargin{1}))
@@ -66,19 +67,47 @@ end
 interferogram = zeros(sizeLambda,sizeX,sizeY,1,BScanAvgN);
 prof.numberOfFramesLoaded = length(fileIndex);
 prof.totalFrameLoadTimeSec = 0;
+isFileValid = true; %Track if all files loaded successfully
 for fI=1:length(fileIndex)    
-    td=tic;
     % Any fileDatastore request to AWS S3 is limited to 1000 files in 
     % MATLAB 2021a. Due to this bug, we have modified certain calls to 
     % fileDatastore by encompassing the file path or folder name using matlab.io.datastore.DsFileSet
     % Note: This change results it a much longer runtime 
     % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-    ds=fileDatastore(matlab.io.datastore.DsFileSet(rawFilePath(fileIndex(fI))),'ReadFcn',@(a)(DSRead(a)));
-    temp=double(ds.read);   
-    if (isempty(temp))
-        error(['Missing file / file size wrong' spectralFilePath]);
+    
+    % Wasatch uses fileDatastore with DsFileSet (different from imageDatastore)
+    % Handle validation directly here without _ReadFile due to special datastore type
+    currentFilePath = rawFilePath(fileIndex(fI));
+    
+    tic;
+    if ~isfile(currentFilePath)
+        % File missing
+        temp = nan(sizeLambda, sizeX);
+        currentFileIsValid = false;
+    else
+        try
+            ds = fileDatastore(matlab.io.datastore.DsFileSet(currentFilePath), 'ReadFcn', @(a)(DSRead(a)));
+            temp = double(ds.read());
+            
+            % Validate size
+            if isempty(temp) || numel(temp) ~= sizeLambda * sizeX
+                temp = nan(sizeLambda, sizeX);
+                currentFileIsValid = false;
+            else
+                currentFileIsValid = true;
+            end
+        catch
+            % Read error
+            temp = nan(sizeLambda, sizeX);
+            currentFileIsValid = false;
+        end
     end
-    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + toc(td);
+    frameLoadTime_sec = toc;
+    
+    % Track overall validity: false if ANY file is invalid
+    isFileValid = isFileValid & currentFileIsValid;
+    
+    prof.totalFrameLoadTimeSec = prof.totalFrameLoadTimeSec + frameLoadTime_sec;
     
     interferogram(:,:,yI(fI),1,BScanAvgI(fI)) = temp;
 end
