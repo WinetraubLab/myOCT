@@ -32,6 +32,9 @@ function yOCTProcessTiledScan(varargin)
 %                                       Set to [] to keep input file
 %                                       resolution though it may be non
 %                                       isotropic resolution
+%   unzipBeforeProcessing       false   When true, automatically unzips all compressed .oct files
+%                                       before processing. Use this when scans were saved with
+%                                       unzipOCTFile=false during acquisition. See yOCTUnzipTiledScan.
 %   v                           true    verbose mode  
 %
 %OUTPUT:
@@ -66,6 +69,9 @@ addParameter(p,'applyPathLengthCorrection',true); %TODO(yonatan) shift this para
 
 % Output file resolution
 addParameter(p,'outputFilePixelSize_um',1,@(x)(isempty(x) || (isnumeric(x) && isscalar(x) && x>0)));
+
+% Compressed file handling
+addParameter(p,'unzipBeforeProcessing',false,@islogical);
 
 p.KeepUnmatched = true;
 if (~iscell(varargin{1}))
@@ -109,6 +115,19 @@ end
 
 %% Load configuration file & set parameters
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
+
+%% Unzip compressed .oct files if requested
+% When scans were saved with unzipOCTFile=false, this step decompresses
+% all .oct files before parallel processing to avoid errors during processing
+if in.unzipBeforeProcessing
+    if v
+        fprintf('%s Unzipping compressed .oct files before processing...\n', datestr(datetime));
+    end
+    
+    unzipResults = yOCTUnzipTiledScan(tiledScanInputFolder, ...
+        'deleteCompressedAfterUnzip', true, ...
+        'v', v);
+end
 
 %Figure out dispersion parameters
 if isempty(in.dispersionQuadraticTerm)

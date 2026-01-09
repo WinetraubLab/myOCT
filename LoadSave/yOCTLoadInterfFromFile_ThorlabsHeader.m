@@ -19,17 +19,6 @@ if ~exist('chirp','var')
     chirp = [];
 end
 
-%% Check if .oct file exists and unzip if needed
-headerPath = awsModifyPathForCompetability([inputDataFolder '/Header.xml']);
-if ~awsExist(headerPath, 'file')
-    % Header.xml not found, check for compressed .oct file
-    octFilePath = awsModifyPathForCompetability([inputDataFolder '/VolumeGanymedeOCTFile.oct']);
-    if awsExist(octFilePath, 'file')
-        % Found .oct file, unzip it
-        yOCTUnzipOCTFolder(octFilePath, inputDataFolder, true);
-    end
-end
-
 %% Load XML
 % Any fileDatastore request to AWS S3 is limited to 1000 files in 
 % MATLAB 2021a. Due to this bug, we have replaced all calls to 

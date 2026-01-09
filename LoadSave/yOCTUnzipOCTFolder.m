@@ -57,6 +57,23 @@ end
 
 %% Preform Unzip
 
+% Clean destination directory content if it exists (keeping the .oct file)
+if exist(OCTUnzipToDirectory,'dir')
+    % Only delete data folder and extracted files, not the .oct itself
+    dataFolderToClean = fullfile(OCTUnzipToDirectory, 'data');
+    if exist(dataFolderToClean, 'dir')
+        rmdir(dataFolderToClean, 's');
+    end
+    
+    % Delete any data* files from previous failed extractions
+    oldFiles = dir(fullfile(OCTUnzipToDirectory, 'data*'));
+    for i = 1:length(oldFiles)
+        if ~oldFiles(i).isdir
+            delete(fullfile(OCTUnzipToDirectory, oldFiles(i).name));
+        end
+    end
+end
+
 %Unzip using 7-zip
 if exist('C:\Program Files\7-Zip\','dir')
     z7Path = 'C:\Program Files\7-Zip\';
@@ -65,11 +82,53 @@ elseif exist('C:\Program Files (x86)\7-Zip\','dir')
 else
     error('Please Install 7-Zip');
 end
-system(['"' z7Path '7z.exe" x "' OCTFolderZipFileIn '" -o"' OCTUnzipToDirectory '"']);
+system(['"' z7Path '7z.exe" x "' OCTFolderZipFileIn '" -o"' OCTUnzipToDirectory '" -aos']);
 
 %Check unzip was successfull
 if ~exist(OCTUnzipToDirectory,'dir')
     error('Failed to Unzip');
+end
+
+%% Fix malformed file names (data·Chirp.data -> data/Chirp.data)
+% Some .oct files store paths with middle dot (·) instead of directory separator
+% This fixes the structure by creating proper data/ folder and moving files
+dataFolder = fullfile(OCTUnzipToDirectory, 'data');
+if ~exist(dataFolder, 'dir')
+    % data folder doesn't exist, check for malformed files
+    files = dir(OCTUnzipToDirectory);
+    filesToMove = {};
+    
+    for i = 1:length(files)
+        fname = files(i).name;
+        % Skip . and ..
+        if strcmp(fname, '.') || strcmp(fname, '..')
+            continue;
+        end
+        
+        % Check if file starts with "data" and contains non-standard separator
+        if ~files(i).isdir && length(fname) > 4 && strcmp(fname(1:4), 'data')
+            % Check if character after "data" is NOT a normal separator
+            if fname(5) ~= '.' && fname(5) ~= '_' && fname(5) ~= '-'
+                % This is a malformed file: data[weird char]filename.data
+                filesToMove{end+1} = fname; %#ok<AGROW>
+            end
+        end
+    end
+    
+    if ~isempty(filesToMove)
+        % Create data folder and move files for malformed names (data·Chirp.data to data/Chirp.data)
+        % This is normal behavior for some 7-Zip versions that don't preserve directory structure
+        mkdir(dataFolder);
+        
+        % Move all malformed files to data folder, removing 'data·' prefix
+        for i = 1:length(filesToMove)
+            oldName = fullfile(OCTUnzipToDirectory, filesToMove{i});
+            % Remove first 5 characters: "data" + weird separator
+            newFileName = filesToMove{i}(6:end);
+            newName = fullfile(dataFolder, newFileName);
+            movefile(oldName, newName);
+        end
+    end
 end
 
 if exist('OCTFolderZipFileInOrig','var')
@@ -95,10 +154,22 @@ if ~strcmp(OCTUnzipToDirectory,OCTFolderOut)
 end
 
 %% Remove zipped archive if required (.OCT file)
-if isDeleteOCTZippedFile  
-    if (isAWSIn)
-        system(['aws s3 rm "' OCTFolderZipFileIn '"']);
-    else
-        delete(OCTFolderZipFileIn);
+% Only delete if unzip was successful (Header.xml exists in data folder)
+if isDeleteOCTZippedFile
+    % Verify unzip was successful before deleting source
+    % Check in the final destination (OCTFolderOut, not temp directory)
+    headerCheck = fullfile(OCTFolderOut, 'data', 'Header.xml');
+    if ~exist(headerCheck, 'file')
+        % Also check without data/ subfolder (in case structure is flat)
+        headerCheck = fullfile(OCTFolderOut, 'Header.xml');
+    end
+    
+    if exist(headerCheck, 'file')
+        % Success: safe to delete compressed file
+        if (isAWSIn)
+            system(['aws s3 rm "' OCTFolderZipFileIn '"']);
+        else
+            delete(OCTFolderZipFileIn);
+        end
     end
 end
