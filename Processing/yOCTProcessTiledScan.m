@@ -32,7 +32,7 @@ function yOCTProcessTiledScan(varargin)
 %                                       Set to [] to keep input file
 %                                       resolution though it may be non
 %                                       isotropic resolution
-%   unzipBeforeProcessing       false   When true, automatically unzips all compressed .oct files
+%   unzipBeforeProcessing       true    When true, automatically unzips all compressed .oct files
 %                                       before processing. Use this when scans were saved with
 %                                       unzipOCTFile=false during acquisition. See yOCTUnzipTiledScan.
 %   v                           true    verbose mode  
@@ -71,7 +71,7 @@ addParameter(p,'applyPathLengthCorrection',true); %TODO(yonatan) shift this para
 addParameter(p,'outputFilePixelSize_um',1,@(x)(isempty(x) || (isnumeric(x) && isscalar(x) && x>0)));
 
 % Compressed file handling
-addParameter(p,'unzipBeforeProcessing',false,@islogical);
+addParameter(p,'unzipBeforeProcessing',true,@islogical);
 
 p.KeepUnmatched = true;
 if (~iscell(varargin{1}))
