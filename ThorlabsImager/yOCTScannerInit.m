@@ -21,10 +21,9 @@ end
 %% Initialize scanner
 if ~skipHardware
     % Check if scanner is already initialized before attempting close
-    if getScannerState()
+    if yOCTScannerStateGet()
         if (v)
-            fprintf('%s Scanner already initialized. Closing and reinitializing...
-',datestr(datetime));
+            fprintf('%s Scanner already initialized. Closing and reinitializing...\n',datestr(datetime));
         end
         % Close any existing scanner first (in case of previous error/incomplete run)
         try
@@ -49,27 +48,10 @@ if ~skipHardware
     end
     
     % Mark scanner as initialized
-    setScannerState(true);
+    yOCTScannerStateSet(true);
 end
 
 %% Finish up
 if (v)
     fprintf('%s Initialzing Hardware Completed\n',datestr(datetime));
-end
-end
-
-%% Helper function: Get scanner initialization state
-function isScannerInitialized = getScannerState()
-    persistent gScannerIsInitialized;
-    if isempty(gScannerIsInitialized)
-        isScannerInitialized = false;
-    else
-        isScannerInitialized = gScannerIsInitialized;
-    end
-end
-
-%% Helper function: Set scanner initialization state
-function setScannerState(isInitialized)
-    persistent gScannerIsInitialized;
-    gScannerIsInitialized = isInitialized;
 end

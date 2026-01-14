@@ -58,26 +58,9 @@ else
 end
 
 % Mark scanner as closed
-setScannerState(false);
+yOCTScannerStateSet(false);
 
 %% Finish up
 if (v)
     fprintf('%s Scanner Closed\n', datestr(datetime));
-end
-end
-
-%% Helper function: Get scanner initialization state
-function isScannerInitialized = getScannerState()
-    persistent gScannerIsInitialized;
-    if isempty(gScannerIsInitialized)
-        isScannerInitialized = false;
-    else
-        isScannerInitialized = gScannerIsInitialized;
-    end
-end
-
-%% Helper function: Set scanner initialization state
-function setScannerState(isInitialized)
-    persistent gScannerIsInitialized;
-    gScannerIsInitialized = isInitialized;
 end

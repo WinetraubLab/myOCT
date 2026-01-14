@@ -40,7 +40,7 @@ if ~skipHardware
     end
     
     % Reset scanner state since we're tearing down
-    resetScannerState();
+    yOCTScannerStateSet(false);
 end
 
 %% Tear down library environment
@@ -74,12 +74,5 @@ else
     end
 end
 
-end
-
-%% Helper function: Reset scanner state for next initialization
-function resetScannerState()
-    persistent gScannerIsInitialized;
-    gScannerIsInitialized = false;
-end
 
 end

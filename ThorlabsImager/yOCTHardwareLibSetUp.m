@@ -171,3 +171,22 @@ gOCTSystemName = lower(octSystemName);
 octSystemModule = gOCTSystemModule;
 octSystemName = gOCTSystemName;
 skipHardware = gSkipHardware;
+end
+
+%% Helper function: Get scanner initialization state (centralized state tracking)
+function isScannerInitialized = yOCTScannerStateGet()
+    % This function accesses the persistent scanner state from yOCTHardwareLibSetUp
+    persistent gScannerIsInitialized;
+    if isempty(gScannerIsInitialized)
+        isScannerInitialized = false;
+    else
+        isScannerInitialized = gScannerIsInitialized;
+    end
+end
+
+%% Helper function: Set scanner initialization state (centralized state tracking)
+function yOCTScannerStateSet(isInitialized)
+    % This function modifies the persistent scanner state from yOCTHardwareLibSetUp
+    persistent gScannerIsInitialized;
+    gScannerIsInitialized = isInitialized;
+end
