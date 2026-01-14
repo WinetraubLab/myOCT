@@ -27,7 +27,6 @@ if ~skipHardware
     switch(lower(octSystemName))
         case 'ganymede'
             % Ganymede: C# DLL - close scanner only
-            yOCTScannerClose(v);
             
         case 'gan632'
             % Gan632: Python SDK - close all hardware (stages + scanner)
