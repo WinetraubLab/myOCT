@@ -38,6 +38,9 @@ if ~skipHardware
                 warning('Unknown OCT system: %s', octSystemName);
             end
     end
+    
+    % Reset scanner state since we're tearing down
+    resetScannerState();
 end
 
 %% Tear down library environment
@@ -69,6 +72,14 @@ else
     if v
         warning('Unknown OCT system: %s. No teardown performed.', octSystemName);
     end
+end
+
+end
+
+%% Helper function: Reset scanner state for next initialization
+function resetScannerState()
+    persistent gScannerIsInitialized;
+    gScannerIsInitialized = false;
 end
 
 end

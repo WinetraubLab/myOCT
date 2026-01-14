@@ -25,7 +25,13 @@ if ~skipHardware
             % Ganymede: C# DLL
             % Only close if ThorlabsImagerNET is loaded (scanner is initialized) to prevent crashes
             if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
-                ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+                try
+                    ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+                catch ME
+                    if (v)
+                        warning('Error closing scanner: %s', ME.message);
+                    end
+                end
             else
                 if (v)
                     fprintf('%s Scanner already closed or not initialized\n', datestr(datetime));
@@ -34,7 +40,13 @@ if ~skipHardware
             
         case 'gan632'
             % Gan632: Python SDK
-            octSystemModule.oct.yOCTScannerClose();
+            try
+                octSystemModule.oct.yOCTScannerClose();
+            catch ME
+                if (v)
+                    warning('Error closing scanner: %s', ME.message);
+                end
+            end
             
         otherwise
             error('Unknown OCT system: %s', octSystemName);
@@ -45,7 +57,27 @@ else
     end
 end
 
+% Mark scanner as closed
+setScannerState(false);
+
 %% Finish up
 if (v)
     fprintf('%s Scanner Closed\n', datestr(datetime));
+end
+end
+
+%% Helper function: Get scanner initialization state
+function isScannerInitialized = getScannerState()
+    persistent gScannerIsInitialized;
+    if isempty(gScannerIsInitialized)
+        isScannerInitialized = false;
+    else
+        isScannerInitialized = gScannerIsInitialized;
+    end
+end
+
+%% Helper function: Set scanner initialization state
+function setScannerState(isInitialized)
+    persistent gScannerIsInitialized;
+    gScannerIsInitialized = isInitialized;
 end
