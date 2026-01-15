@@ -12,7 +12,7 @@ octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OC
 sampleSize_mm = 2; % Will scan from -sampleSize_mm to +sampleSize_mm
 
 % Define probe 
-octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x' or '40x', and scanning system dependent 'OCTP900' or ''
+octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x', '20x', or '40x', and scanning system dependent 'OCTP900' or ''
 
 % Define the scan
 pixelSize_um = 25; % x-y Pixel size in microns
