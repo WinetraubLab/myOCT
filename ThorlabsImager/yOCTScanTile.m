@@ -77,7 +77,7 @@ end
 [octSystemModule, octSystemName, ~] = yOCTHardwareLibSetUp();
 
 % Capitalize first letter for JSON compatibility with yOCTProcessTiledScan
-in.octSystem = [upper(octSystemName(1)), octSystemName(2:end)];
+in.OCTSystem = [upper(octSystemName(1)), octSystemName(2:end)];
 
 % Override unzipOCTFile flag for Gan632 system which doesn't generate .oct files
 if strcmpi(octSystemName, 'Gan632')
