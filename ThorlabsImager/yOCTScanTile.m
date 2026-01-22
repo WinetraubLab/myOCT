@@ -76,8 +76,8 @@ end
 % Get OCT system from persistent library
 [octSystemModule, octSystemName, ~] = yOCTHardwareLibSetUp();
 
-% Capitalize first letter for JSON compatibility with yOCTProcessTiledScan
-in.OCTSystem = [upper(octSystemName(1)), octSystemName(2:end)];
+% Store OCT system name for JSON
+in.octSystem = octSystemName;
 
 % Override unzipOCTFile flag for Gan632 system which doesn't generate .oct files
 if strcmpi(octSystemName, 'Gan632')
@@ -147,7 +147,7 @@ in.nYPixelsInEachTile = ceil(in.tileRangeY_mm/(in.pixelSize_um/1e3));
 %% Initialize hardware
 if in.skipHardware
     % We are done, from now on it's just hardware execution
-    in.OCTSystem = 'Unknown'; % This parameter can only be figured out when using hardware
+    in.octSystem = 'Unknown'; % This parameter can only be figured out when using hardware
     json = in;
     return;
 end
