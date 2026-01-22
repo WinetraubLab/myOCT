@@ -57,7 +57,9 @@ end
 
 % Get OCT system from persistent library
 [octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
-in.octSystem = octSystemName; % Store system name
+
+% Capitalize first letter for JSON compatibility with yOCTProcessTiledScan
+in.octSystem = [upper(octSystemName(1)), octSystemName(2:end)];
 
 %Load probe ini
 ini = yOCTReadProbeIniToStruct(in.octProbePath);
