@@ -135,7 +135,15 @@ if length(in.focusPositionInImageZpix) == 1 %#ok<ISCL>
     focusPositionInImageZpix = in.focusPositionInImageZpix * ones(1, length(json.zDepths));
 end
 focusSigma = in.focusSigma;
-OCTSystem = json.OCTSystem; %Provide OCT system to prevent unesscecary polling of file system
+
+% Read OCT system name
+if isfield(json, 'octSystem')
+    octSystem = json.octSystem; % New format (lowercase)
+elseif isfield(json, 'OCTSystem')
+    octSystem = json.OCTSystem; % Old format (uppercase S) for backward compatibility
+else
+    error('ScanInfo.json is missing required field "octSystem" (or legacy "OCTSystem"). Cannot determine OCT system type.');
+end
 
 %% z depth check
 % A working assumption of yOCTProcessTiledScan is that when yOCTScanTile
@@ -288,7 +296,7 @@ parfor yI=1:length(dimOutput_mm.y.values)
                 % Note that a frame is smaller than one tile as frame contains only one YFrameToPRocess, thus dim structure needs an update. 
                 [intFrame, dimFrame] = ...
                     yOCTLoadInterfFromFile([{fpTxt}, reconstructConfig, ...
-                    {'dimensions', dimOneTile_mm 'YFramesToProcess', yIInFile, 'OCTSystem', OCTSystem}]);
+                    {'dimensions', dimOneTile_mm 'YFramesToProcess', yIInFile, 'OCTSystem', octSystem}]);
                 [scan1,~] = yOCTInterfToScanCpx([{intFrame} {dimFrame} reconstructConfig]);
                 intFrame = []; %#ok<NASGU> %Freeup some memory
                 scan1 = abs(scan1);
