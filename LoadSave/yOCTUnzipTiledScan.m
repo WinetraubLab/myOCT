@@ -1,13 +1,5 @@
 function results = yOCTUnzipTiledScan(tiledScanInputFolder, varargin)
 % Unzips all compressed .oct files in a tiled scan folder before processing.
-% Useful when processing scans that were saved with unzipOCTFile=false during acquisition.
-%
-% This function:
-%   1. Reads ScanInfo.json to find all OCT folders in the scan
-%   2. Checks each folder for compressed .oct files
-%   3. Unzips them in parallel using yOCTUnzipOCTFolder
-%   4. Reports success/failure status for each folder
-%   5. Only deletes compressed files that were successfully unzipped
 %
 % INPUTS:
 %   tiledScanInputFolder         - Path to tiled scan folder containing ScanInfo.json
@@ -16,7 +8,7 @@ function results = yOCTUnzipTiledScan(tiledScanInputFolder, varargin)
 %
 % OUTPUTS:
 %   results - Structure with fields:
-%       .alreadyUnzipped      - Folder names already unzipped from previous runs
+%       .alreadyUnzipped      - Folder names already unzipped
 %       .successfullyUnzipped - Folders successfully unzipped in this run
 %       .failed               - Folder names that failed to unzip
 %       .errorMessages        - Error messages corresponding to failed folders
@@ -33,11 +25,7 @@ in = p.Results;
 v = in.v;
 
 % Fix input path
-if ~strcmp(in.tiledScanInputFolder(end), '/') && ~strcmp(in.tiledScanInputFolder(end), '\')
-    tiledScanInputFolder = awsModifyPathForCompetability([in.tiledScanInputFolder '/']);
-else
-    tiledScanInputFolder = awsModifyPathForCompetability(in.tiledScanInputFolder);
-end
+tiledScanInputFolder = awsModifyPathForCompetability([in.tiledScanInputFolder '/']);
 
 %% Load ScanInfo.json to get list of OCT folders
 scanInfoPath = awsModifyPathForCompetability([tiledScanInputFolder 'ScanInfo.json']);
@@ -53,9 +41,7 @@ if ~isfield(json, 'octFolders') || isempty(json.octFolders)
 end
 
 totalFolders = length(json.octFolders);
-if v
-    fprintf('  Found %d OCT folders to check for unzipping\n', totalFolders);
-end
+
 
 %% Check and unzip all folders
 % Pre allocate result arrays for parfor
@@ -146,19 +132,16 @@ results.totalFolders = totalFolders;
 
 %% Print summary report
 if v
-    fprintf('\n========================================\n');
-    fprintf('         UNZIP SUMMARY REPORT\n');
-    fprintf('========================================\n');
-    fprintf('Total OCT folders:       %d\n', totalFolders);
-    fprintf('Already unzipped:        %d\n', length(alreadyUnzipped));
-    fprintf('Successfully unzipped:   %d\n', length(successfullyUnzipped));
-    fprintf('Failed to unzip:         %d\n', length(failedToUnzip));
-    fprintf('========================================\n\n');
+    fprintf('\n%s Unzip Summary\n', datestr(datetime));
+    fprintf('%s   Total folders:      %d\n', datestr(datetime), totalFolders);
+    fprintf('%s   Already unzipped:   %d\n', datestr(datetime), length(alreadyUnzipped));
+    fprintf('%s   Newly unzipped:     %d\n', datestr(datetime), length(successfullyUnzipped));
+    fprintf('%s   Failed:             %d\n', datestr(datetime), length(failedToUnzip));
 end
 
 %% Show warning with failures (always shown, regardless of verbose)
 if ~isempty(failedToUnzip)
-    % Build detailed warning message using string concatenation to avoid sprintf escape issues
+    % Build detailed warning message
     warningMsg = [newline 'FAILED to unzip (' num2str(length(failedToUnzip)) ' folders):'];
     for i = 1:length(failedToUnzip)
         warningMsg = [warningMsg newline '  ' num2str(i) '. ' failedToUnzip{i}]; %#ok<AGROW>

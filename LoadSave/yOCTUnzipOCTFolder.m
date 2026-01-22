@@ -58,6 +58,7 @@ end
 %% Preform Unzip
 
 % Clean destination directory content if it exists (keeping the .oct file)
+% This allows re-decompression when needed (example: after failed extraction or corrupted files)
 if exist(OCTUnzipToDirectory,'dir')
     % Only delete data folder and extracted files, not the .oct itself
     dataFolderToClean = fullfile(OCTUnzipToDirectory, 'data');
@@ -159,12 +160,12 @@ if isDeleteOCTZippedFile
     % Verify unzip was successful before deleting source
     % Check in the final destination (OCTFolderOut, not temp directory)
     headerCheck = fullfile(OCTFolderOut, 'data', 'Header.xml');
-    if ~exist(headerCheck, 'file')
+    if ~awsExist(headerCheck, 'file')
         % Also check without data/ subfolder (in case structure is flat)
         headerCheck = fullfile(OCTFolderOut, 'Header.xml');
     end
     
-    if exist(headerCheck, 'file')
+    if awsExist(headerCheck, 'file')
         % Success: safe to delete compressed file
         if (isAWSIn)
             system(['aws s3 rm "' OCTFolderZipFileIn '"']);
