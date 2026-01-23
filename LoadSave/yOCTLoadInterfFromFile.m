@@ -64,14 +64,14 @@ if (iscell(varargin{1}))
 end 
 
 %Optional Parameters
-OCTSystem = '';
+octSystem = '';
 apodizationCorrection = 'subtract';
 peakOnly = false;
 chirp = [];
 for i=2:2:length(varargin)
     switch(lower(varargin{i}))
         case 'octsystem'
-            OCTSystem = varargin{i+1};
+            octSystem = varargin{i+1};
         case 'dimensions'
             dimensions = varargin{i+1};
         case 'yframestoprocess'
@@ -96,23 +96,24 @@ inputDataFolder = awsModifyPathForCompetability([inputDataFolder '/']);
 tt = tic;
 %% Figure out OCT system manufacturer
 if exist('dimensions','var') && isfield(dimensions,'aux') && isfield(dimensions.aux,'OCTSystem')
-    OCTSystem = dimensions.aux.OCTSystem;
+    octSystem = dimensions.aux.OCTSystem;
 end
 
-if isempty(OCTSystem)
-    [OCTSystem,OCTSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder);
+if isempty(octSystem)
+    [octSystem,OCTSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder);
 else
-    switch(OCTSystem)
-        case {'Ganymede','Telesto','Gan632'}
+    % Normalize to lowercase for case insensitive comparison
+    switch(lower(octSystem))
+        case {'ganymede','telesto','gan632'}
             OCTSystemManufacturer = 'Thorlabs';
-        case {'Ganymede_SRR','Telesto_SRR'}
+        case {'ganymede_srr','telesto_srr'}
             OCTSystemManufacturer = 'Thorlabs_SRR';
-        case {'Wasatch'}
+        case {'wasatch'}
             OCTSystemManufacturer = 'Wasatch';
-        case {'Simulated Ganymede'}
+        case {'simulated ganymede'}
             OCTSystemManufacturer = 'Simulated';
         otherwise
-            error('ERROR: Wrong OCTSystem name! (yOCTLoadInterfFromFile)')
+            error('ERROR: Wrong OCTSystem name! (yOCTLoadInterfFromFile). Received: "%s". Expected: Ganymede, Telesto, Gan632, etc.', octSystem)
     end
 end
 
@@ -121,19 +122,17 @@ if ~exist('dimensions','var')
     %Load header information
     switch(OCTSystemManufacturer)
         case {'Thorlabs'}
-            dimensions = yOCTLoadInterfFromFile_ThorlabsHeader(inputDataFolder, OCTSystem, chirp);
-        
+            dimensions = yOCTLoadInterfFromFile_ThorlabsHeader(inputDataFolder, octSystem, chirp);
+
         case {'Thorlabs_SRR'}
-            dimensions = yOCTLoadInterfFromFile_ThorlabsSRRHeader(inputDataFolder, OCTSystem, chirp);
-                
-        case {'Wasatch'}
+            dimensions = yOCTLoadInterfFromFile_ThorlabsSRRHeader(inputDataFolder, octSystem, chirp);
             dimensions = yOCTLoadInterfFromFile_WasatchHeader(inputDataFolder);
         
         case('Simulated')
             dimensions = load(fullfile(inputDataFolder,'data.mat'), 'dim').dim;
     end
     
-    dimensions.aux.OCTSystem = OCTSystem; %Add the OCT system we just discovered
+    dimensions.aux.OCTSystem = octSystem; %Add the OCT system we just discovered
 else
     %Header information given by user
 end
