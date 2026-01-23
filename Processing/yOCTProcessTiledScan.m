@@ -111,8 +111,6 @@ end
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
 
 %% Unzip compressed .oct files if they exist in the data folder
-% When scans were saved with unzipOCTFile=false, this step decompresses
-% all .oct files before parallel processing to avoid errors during processing
 unzipResults = yOCTUnzipTiledScan(tiledScanInputFolder, ...
     'deleteCompressedAfterUnzip', true, ...
     'v', v);
