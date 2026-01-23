@@ -110,6 +110,11 @@ end
 %% Load configuration file & set parameters
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
 
+%% Unzip compressed .oct files if they exist in the data folder
+unzipResults = yOCTUnzipTiledScan(tiledScanInputFolder, ...
+    'deleteCompressedAfterUnzip', true, ...
+    'v', v);
+
 %Figure out dispersion parameters
 if isempty(in.dispersionQuadraticTerm)
     if isfield(json.octProbe,'DefaultDispersionParameterA')
