@@ -1,7 +1,9 @@
 classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
 
-    properties
-
+    methods(TestClassSetup)
+        function setupHardwareLib(~)
+            yOCTHardwareLibSetUp('Ganymede');
+        end
     end
     
     methods(Test)
@@ -79,6 +81,116 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             % Clean Up
             rmdir(outputFolder, 's');
             delete temp.tif temp2.tif;
+        end
+        
+        function testSystemNameCompatibility(testCase)
+            % Verify compatibility for different combinations of octSystem / OCTSystem
+            % in ScanInfo.json when processing tiled scans
+            
+            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            dummyData = zeros(1000,500,2)+1;
+            dummyData([100, 200, 300],:,:) = 100;
+            pixelSize_um = 1;
+            focusPositionInImageZpix = 1;
+            focusSigma = 1;
+            outputFolder = 'tmp_compatibility/';
+            
+            % Clean folder
+            if exist(outputFolder, 'dir')
+                rmdir(outputFolder, 's');
+            end
+            
+            % Create scan
+            yOCTSimulateTileScan(dummyData, outputFolder,...
+                'pixelSize_um', pixelSize_um, ...
+                'zDepths', 0, ...
+                'focusPositionInImageZpix', focusPositionInImageZpix,...
+                'focusSigma', focusSigma, ...
+                'octProbePath', octProbePath);
+            
+            scanInfoPath = fullfile(outputFolder, 'ScanInfo.json');
+            
+            % Test octSystem = 'Simulated Ganymede'
+            json = awsReadJSON(scanInfoPath);
+            json.octSystem = 'Simulated Ganymede';
+            if isfield(json, 'OCTSystem'), json = rmfield(json, 'OCTSystem'); end
+            awsWriteJSON(json, scanInfoPath);
+            try
+                yOCTProcessTiledScan(outputFolder, {'test1.tif'}, ...
+                    'focusPositionInImageZpix', focusPositionInImageZpix,...
+                    'focusSigma', focusSigma, ...
+                    'dispersionQuadraticTerm', 0, ...
+                    'cropZAroundFocusArea', false, ...
+                    'v', false);
+                test1Pass = true;
+            catch ME
+                test1Pass = false;
+                fprintf('Test (octSystem=Simulated Ganymede) FAILED: %s\n', ME.message);
+            end
+            testCase.verifyTrue(test1Pass, 'This should work: octSystem=Simulated Ganymede');
+            
+            % Test OCTSystem = 'Simulated Ganymede'
+            json = awsReadJSON(scanInfoPath);
+            json.OCTSystem = 'Simulated Ganymede';
+            if isfield(json, 'octSystem'), json = rmfield(json, 'octSystem'); end
+            awsWriteJSON(json, scanInfoPath);
+            try
+                yOCTProcessTiledScan(outputFolder, {'test2.tif'}, ...
+                    'focusPositionInImageZpix', focusPositionInImageZpix,...
+                    'focusSigma', focusSigma, ...
+                    'dispersionQuadraticTerm', 0, ...
+                    'cropZAroundFocusArea', false, ...
+                    'v', false);
+                test2Pass = true;
+            catch ME
+                test2Pass = false;
+                fprintf('Test (OCTSystem=Simulated Ganymede) FAILED: %s\n', ME.message);
+            end
+            testCase.verifyTrue(test2Pass, 'This should work: OCTSystem=Simulated Ganymede');
+            
+            % Test octSystem = 'simulated ganymede'
+            json = awsReadJSON(scanInfoPath);
+            json.octSystem = 'simulated ganymede';
+            if isfield(json, 'OCTSystem'), json = rmfield(json, 'OCTSystem'); end
+            awsWriteJSON(json, scanInfoPath);
+            try
+                yOCTProcessTiledScan(outputFolder, {'test3.tif'}, ...
+                    'focusPositionInImageZpix', focusPositionInImageZpix,...
+                    'focusSigma', focusSigma, ...
+                    'dispersionQuadraticTerm', 0, ...
+                    'cropZAroundFocusArea', false, ...
+                    'v', false);
+                test3Pass = true;
+            catch ME
+                test3Pass = false;
+                fprintf('Test (octSystem=simulated ganymede) FAILED: %s\n', ME.message);
+            end
+            testCase.verifyTrue(test3Pass, 'This should work: octSystem=simulated ganymede');
+            
+            % Test OCTSystem = 'simulated ganymede'
+            json = awsReadJSON(scanInfoPath);
+            json.OCTSystem = 'simulated ganymede';
+            if isfield(json, 'octSystem'), json = rmfield(json, 'octSystem'); end
+            awsWriteJSON(json, scanInfoPath);
+            try
+                yOCTProcessTiledScan(outputFolder, {'test4.tif'}, ...
+                    'focusPositionInImageZpix', focusPositionInImageZpix,...
+                    'focusSigma', focusSigma, ...
+                    'dispersionQuadraticTerm', 0, ...
+                    'cropZAroundFocusArea', false, ...
+                    'v', false);
+                test4Pass = true;
+            catch ME
+                test4Pass = false;
+                fprintf('Test (OCTSystem=simulated ganymede) FAILED: %s\n', ME.message);
+            end
+            testCase.verifyTrue(test4Pass, 'This should work: OCTSystem=simulated ganymede');
+            
+            % Cleanup
+            rmdir(outputFolder, 's');
+            for i = 1:4
+                if exist(sprintf('test%d.tif', i), 'file'), delete(sprintf('test%d.tif', i)); end
+            end
         end
     end
 end
