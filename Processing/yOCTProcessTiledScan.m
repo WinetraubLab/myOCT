@@ -140,7 +140,7 @@ focusSigma = in.focusSigma;
 if isfield(json, 'octSystem')
     octSystem = json.octSystem; % New format (lowercase)
 elseif isfield(json, 'OCTSystem')
-    octSystem = json.OCTSystem; % Old format (uppercase S) for backward compatibility
+    octSystem = json.OCTSystem; % Old format (uppercase) for backward compatibility
 else
     error('ScanInfo.json is missing required field "octSystem" (or legacy "OCTSystem"). Cannot determine OCT system type.');
 end
