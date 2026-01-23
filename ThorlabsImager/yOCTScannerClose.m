@@ -25,7 +25,13 @@ if ~skipHardware
             % Ganymede: C# DLL
             % Only close if ThorlabsImagerNET is loaded (scanner is initialized) to prevent crashes
             if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
-                ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+                try
+                    ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose();
+                catch ME
+                    if (v)
+                        warning('Error closing scanner: %s', ME.message);
+                    end
+                end
             else
                 if (v)
                     fprintf('%s Scanner already closed or not initialized\n', datestr(datetime));
@@ -34,7 +40,13 @@ if ~skipHardware
             
         case 'gan632'
             % Gan632: Python SDK
-            octSystemModule.oct.yOCTScannerClose();
+            try
+                octSystemModule.oct.yOCTScannerClose();
+            catch ME
+                if (v)
+                    warning('Error closing scanner: %s', ME.message);
+                end
+            end
             
         otherwise
             error('Unknown OCT system: %s', octSystemName);
@@ -44,6 +56,9 @@ else
         fprintf('%s Scanner close skipped (skipHardware = true)\n', datestr(datetime));
     end
 end
+
+% Mark scanner as closed
+yOCTScannerStateSet(false);
 
 %% Finish up
 if (v)

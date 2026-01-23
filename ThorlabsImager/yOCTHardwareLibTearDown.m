@@ -27,7 +27,6 @@ if ~skipHardware
     switch(lower(octSystemName))
         case 'ganymede'
             % Ganymede: C# DLL - close scanner only
-            yOCTScannerClose(v);
             
         case 'gan632'
             % Gan632: Python SDK - close all hardware (stages + scanner)
@@ -38,6 +37,9 @@ if ~skipHardware
                 warning('Unknown OCT system: %s', octSystemName);
             end
     end
+    
+    % Reset scanner state since we're tearing down
+    yOCTScannerStateSet(false);
 end
 
 %% Tear down library environment
@@ -45,9 +47,6 @@ if strcmpi(octSystemName, 'Gan632')
     % Gan632: Terminate Python interpreter for clean USB device state
     % This ensures SpectralRadar SDK releases all resources
     % Comment out if you want faster reruns (but may require hardware power cycle)
-    
-    % Clear function handles
-    clear functions
     
     % Terminate Python interpreter
     try
@@ -73,5 +72,6 @@ else
         warning('Unknown OCT system: %s. No teardown performed.', octSystemName);
     end
 end
+
 
 end
