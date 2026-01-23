@@ -103,7 +103,7 @@ alreadyUnzipped = {};
 successfullyUnzipped = {};
 failedToUnzip = {};
 failedErrorMessages = {};
-preservedFiles = {};  % Track preserved .oct file paths
+failedPreservedFiles = {};  % Track preserved .oct file paths for failed folders
 
 for i = 1:totalFolders
     switch unzipStatus{i}
@@ -116,8 +116,11 @@ for i = 1:totalFolders
         case {'failed', 'not_found'}
             failedToUnzip{end+1} = json.octFolders{i}; %#ok<AGROW>
             failedErrorMessages{end+1} = errorMessages{i}; %#ok<AGROW>
+            % Preserve the path even if empty, to maintain parallel indexing
             if ~isempty(preservedOctFiles{i})
-                preservedFiles{end+1} = preservedOctFiles{i}; %#ok<AGROW>
+                failedPreservedFiles{end+1} = preservedOctFiles{i}; %#ok<AGROW>
+            else
+                failedPreservedFiles{end+1} = ''; %#ok<AGROW>
             end
     end
 end
@@ -149,8 +152,8 @@ if ~isempty(failedToUnzip)
             warningMsg = [warningMsg newline '     Error: ' failedErrorMessages{i}]; %#ok<AGROW>
         end
         % Add failed file path if available
-        if ~isempty(preservedFiles) && i <= length(preservedFiles) && ~isempty(preservedFiles{i})
-            warningMsg = [warningMsg newline '     ' preservedFiles{i}]; %#ok<AGROW>
+        if ~isempty(failedPreservedFiles{i})
+            warningMsg = [warningMsg newline '     ' failedPreservedFiles{i}]; %#ok<AGROW>
         end
     end
     warningMsg = [warningMsg newline newline];  % Add spacing at the end
