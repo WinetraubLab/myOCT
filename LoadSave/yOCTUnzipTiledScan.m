@@ -1,5 +1,6 @@
 function results = yOCTUnzipTiledScan(tiledScanInputFolder, varargin)
-% Unzips all compressed .oct files in a tiled scan folder before processing.
+% Unzip compressed .oct files if they exist in the data folder. 
+% This could happen if data acquisition was done with unzipOCTFile=false.
 %
 % INPUTS:
 %   tiledScanInputFolder         - Path to tiled scan folder containing ScanInfo.json
