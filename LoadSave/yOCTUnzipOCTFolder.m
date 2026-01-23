@@ -57,8 +57,7 @@ end
 
 %% Preform Unzip
 
-% Clean destination directory content if it exists (keeping the .oct file)
-% This allows re-decompression when needed (example: after failed extraction or corrupted files)
+% In case of partial .oct unzipping, delete the unzip folders and try again
 if exist(OCTUnzipToDirectory,'dir')
     % Only delete data folder and extracted files, not the .oct itself
     dataFolderToClean = fullfile(OCTUnzipToDirectory, 'data');
@@ -155,7 +154,8 @@ if ~strcmp(OCTUnzipToDirectory,OCTFolderOut)
 end
 
 %% Remove zipped archive if required (.OCT file)
-% Only delete if unzip was successful (Header.xml exists in data folder)
+% Check whether the unzip operation was successful (i.e., Header.xml exists
+% in the data folder). If successful, delete the .oct files.
 if isDeleteOCTZippedFile
     % Verify unzip was successful before deleting source
     % Check in the final destination (OCTFolderOut, not temp directory)
