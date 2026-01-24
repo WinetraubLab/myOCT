@@ -1,4 +1,4 @@
-function [OCTSystem, OCTSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder)
+function [octSystem, octSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder)
 %This function goes to inputDataFolder and figures out which OCT system is
 %it (from the OCT systems that are supported by this code package)
 
@@ -59,21 +59,21 @@ if(max(isThorlabs) + max(isThorlabs_SRR) + max(isWasatch) > 1)
     error('Could''nt determine OCT system, there are multiple manufactuerrs in this folder: %s',inputDataFolder);
 end
 
-OCTSystemManufacturer = [];
+octSystemManufacturer = [];
 if (max(isThorlabs)>0)
-    OCTSystemManufacturer = 'Thorlabs';
+    octSystemManufacturer = 'Thorlabs';
 end
 if (max(isThorlabs_SRR)>0)
-    OCTSystemManufacturer = 'Thorlabs_SRR';
+    octSystemManufacturer = 'Thorlabs_SRR';
 end
 if (max(isWasatch)>0)
-    OCTSystemManufacturer = 'Wasatch';
+    octSystemManufacturer = 'Wasatch';
 end
 
-%% Refine to get OCTSystem
-switch(OCTSystemManufacturer)
+%% Refine to get octSystem
+switch(octSystemManufacturer)
     case 'Wasatch'
-        OCTSystem = 'Wasatch'; %We have only one
+        octSystem = 'Wasatch'; %We have only one
     case 'Thorlabs'
         
         %Read the content of the html file as a text
@@ -93,9 +93,9 @@ switch(OCTSystemManufacturer)
         end
         
         if (isGanymede == 1)
-            OCTSystem = 'Ganymede';
+            octSystem = 'Ganymede';
         else
-            OCTSystem = 'Telesto';
+            octSystem = 'Telesto';
         end
             
     case 'Thorlabs_SRR'
@@ -117,9 +117,9 @@ switch(OCTSystemManufacturer)
         isTelesto = contains(fName,'Telesto');
     
         if     (  isGanymede && ~isTelesto )
-            OCTSystem = 'Ganymede_SRR';
+            octSystem = 'Ganymede_SRR';
         elseif ( ~isGanymede &&  isTelesto )
-            OCTSystem = 'Telesto_SRR';
+            octSystem = 'Telesto_SRR';
         else
             error('Cannot determine OCT system SRR');
         end

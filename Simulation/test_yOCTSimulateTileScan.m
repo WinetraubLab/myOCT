@@ -179,7 +179,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
                 );
 
             % Load Data01 (corresponding to zDepth = -0.05 mm)
-            [interf, dim] = yOCTLoadInterfFromFile('tmp/Data01/', 'OCTSystem', 'Simulated Ganymede');
+            [interf, dim] = yOCTLoadInterfFromFile('tmp/Data01/', 'octSystem', 'Simulated Ganymede');
             [cpx, ~] = yOCTInterfToScanCpx(interf,dim,'dispersionQuadraticTerm', 0);
             dat = abs(cpx);
             assert(mean(dat(focusPositionInImageZpix,:,:),[2 3]) < 5, 'Intensity should be low');
@@ -187,14 +187,14 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
 
             % Load Data02 (corresponding to zDepth = 0 mm), we should see
             % something at the focus point
-            [interf, dim] = yOCTLoadInterfFromFile('tmp/Data02/', 'OCTSystem', 'Simulated Ganymede');
+            [interf, dim] = yOCTLoadInterfFromFile('tmp/Data02/', 'octSystem', 'Simulated Ganymede');
             [cpx, ~] = yOCTInterfToScanCpx(interf,dim,'dispersionQuadraticTerm', 0);
             dat = abs(cpx);
             assert(mean(dat(focusPositionInImageZpix,:,:),[2 3]) > 5, 'Intensity should be high');
             %figure(1); plot(dim.z.values,(mean(dat,[2 3])))
 
             % Load Data03 (corresponding to zDepth = 0.1 mm)
-            [interf, dim] = yOCTLoadInterfFromFile('tmp/Data03/', 'OCTSystem', 'Simulated Ganymede');
+            [interf, dim] = yOCTLoadInterfFromFile('tmp/Data03/', 'octSystem', 'Simulated Ganymede');
             [cpx, ~] = yOCTInterfToScanCpx(interf,dim,'dispersionQuadraticTerm', 0);
             dat = abs(cpx);
             assert(mean(dat(focusPositionInImageZpix,:,:),[2 3]) < 5, 'Intensity should be low');

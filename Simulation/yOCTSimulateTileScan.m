@@ -67,7 +67,7 @@ yRange_mm = pixelSize_um*size(data,3)/1e3/2*[-1 1];
 
 pr = [pr(1) {xRange_mm}, {yRange_mm} pr(2:end)];
 json = yOCTScanTile(pr{:});
-json.OCTSystem = 'Simulated Ganymede';
+json.octSystem = 'Simulated Ganymede';
 
 % Make folder, place Json
 if exist(in.octFolder, 'dir')

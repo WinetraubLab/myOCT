@@ -1,4 +1,4 @@
-function dimensions = yOCTLoadInterfFromFile_ThorlabsHeader (inputDataFolder, OCTSystem, chirp)
+function dimensions = yOCTLoadInterfFromFile_ThorlabsHeader (inputDataFolder, octSystem, chirp)
 %This function loads dimensions structure header
 % INPUTS:
 %   - inputDataFolder - OCT folder with header.xml file or srr files
@@ -29,11 +29,11 @@ xDoc = ds.read;
 xDoc = xDoc.Ocity;
 
 %% Figure out which of the Thorlabs systems are we using
-if ~exist('OCTSystem','var') || isempty(OCTSystem)
+if ~exist('octSystem','var') || isempty(octSystem)
     if ~isempty(regexp(xDoc.Instrument.Model.Text,'Ganymed','once'))
-        OCTSystem = 'Ganymede';
+        octSystem = 'Ganymede';
     elseif ~isempty(regexp(xDoc.Instrument.Model.Text,'Telesto','once'))
-        OCTSystem = 'Telesto';
+        octSystem = 'Telesto';
     else
         error('Unknown OCT system');
     end
@@ -43,7 +43,7 @@ end
 order = 1;
 
 %Lambda Size
-dimensions = yOCTLoadInterfFromFile_ThorlabsHeaderLambda(inputDataFolder,OCTSystem,chirp);
+dimensions = yOCTLoadInterfFromFile_ThorlabsHeaderLambda(inputDataFolder,octSystem,chirp);
 order = order + 1;
 
 try

@@ -24,7 +24,17 @@ if (not(awsExist(firstDataFolder,'dir')))
     error('%s does not exist.', firstDataFolder);
 end
 
-dimOneTile = yOCTLoadInterfFromFile(firstDataFolder,'OCTSystem',json.OCTSystem,'peakOnly',true);
+% Read OCT system name
+if isfield(json, 'octSystem')
+    octSystem = json.octSystem; % New format
+elseif isfield(json, 'OCTSystem')
+    warning("json contains 'OCTSystem' field instead of 'octSystem' field. Please make sure to replace field name by January 2027 as this name will be deprecated")
+    octSystem = json.OCTSystem; % Old format for backward compatibility
+else
+    octSystem = ''; % Unknown
+end
+
+dimOneTile = yOCTLoadInterfFromFile(firstDataFolder,'octSystem',octSystem,'peakOnly',true);
 tmp = zeros(size(dimOneTile.lambda.values(:)));
 dimOneTile = yOCTInterfToScanCpx(tmp, dimOneTile, 'n', json.tissueRefractiveIndex, 'peakOnly',true);
 

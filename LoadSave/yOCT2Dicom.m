@@ -53,11 +53,11 @@ else
 end
 
 if exist('dimensions','var')
-    if ~isfield(dimensions.aux,'OCTSystem')
-        dimensions.aux.OCTSystem = 'Unknown';
+    if ~isfield(dimensions.aux,'octSystem')
+        dimensions.aux.octSystem = 'Unknown';
     end
 else
-    dimensions.aux.OCTSystem = 'Unknown';
+    dimensions.aux.octSystem = 'Unknown';
 end
     
 %% Do we need AWS?
@@ -82,7 +82,7 @@ if (size(data,3) ~= 1) % Volume case
         color4D(:,:,:,yi)=color;
     end
 
-    dicomwrite(color4D,filepath,'Modality',['OCT: ' dimensions.aux.OCTSystem], ...
+    dicomwrite(color4D,filepath,'Modality',['OCT: ' dimensions.aux.octSystem], ...
         'ObjectType','Secondary Capture Image Storage')
 
     % add resolution parameters
@@ -94,7 +94,7 @@ if (size(data,3) ~= 1) % Volume case
 
 else
     color(:,:) = uint16((squeeze(data(:,:,:))-c(1))/(c(2)-c(1))*65535);
-    dicomwrite(color,filepath,'Modality',['OCT: ' dimensions.aux.OCTSystem], ...
+    dicomwrite(color,filepath,'Modality',['OCT: ' dimensions.aux.octSystem], ...
         'ObjectType','Secondary Capture Image Storage')
     
     % add resolution parameters
