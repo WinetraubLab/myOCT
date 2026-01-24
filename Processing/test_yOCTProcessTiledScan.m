@@ -110,7 +110,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             
             scanInfoPath = fullfile(outputFolder, 'ScanInfo.json');
             
-            % Test octSystem = 'Simulated Ganymede'
+            % Test octSystem = 'Simulated Ganymede' (exact case)
             json = awsReadJSON(scanInfoPath);
             json.octSystem = 'Simulated Ganymede';
             if isfield(json, 'OCTSystem'), json = rmfield(json, 'OCTSystem'); end
@@ -127,31 +127,31 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
                 test1Pass = false;
                 fprintf('Test (octSystem=Simulated Ganymede) FAILED: %s\n', ME.message);
             end
-            testCase.verifyTrue(test1Pass, 'This should work: octSystem=Simulated Ganymede');
+            testCase.verifyTrue(test1Pass, 'Test octSystem with exact case should work');
             
-            % Test octSystem = 'simulated ganymede'
+            % Test octSystem = 'simulated ganymede' (lowercase - case insensitive)
             json = awsReadJSON(scanInfoPath);
             json.octSystem = 'simulated ganymede';
             if isfield(json, 'OCTSystem'), json = rmfield(json, 'OCTSystem'); end
             awsWriteJSON(json, scanInfoPath);
             try
-                yOCTProcessTiledScan(outputFolder, {'test3.tif'}, ...
+                yOCTProcessTiledScan(outputFolder, {'test2.tif'}, ...
                     'focusPositionInImageZpix', focusPositionInImageZpix,...
                     'focusSigma', focusSigma, ...
                     'dispersionQuadraticTerm', 0, ...
                     'cropZAroundFocusArea', false, ...
                     'v', false);
-                test3Pass = true;
+                test2Pass = true;
             catch ME
-                test3Pass = false;
+                test2Pass = false;
                 fprintf('Test (octSystem=simulated ganymede) FAILED: %s\n', ME.message);
             end
-            testCase.verifyTrue(test3Pass, 'This should work: octSystem=simulated ganymede');
+            testCase.verifyTrue(test2Pass, 'Test octSystem case insensitive should work');
             
             % Cleanup
             rmdir(outputFolder, 's');
             if exist('test1.tif', 'file'), delete('test1.tif'); end
-            if exist('test3.tif', 'file'), delete('test3.tif'); end
+            if exist('test2.tif', 'file'), delete('test2.tif'); end
         end
     end
 end
