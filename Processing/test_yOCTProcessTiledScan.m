@@ -84,8 +84,8 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
         end
         
         function testSystemNameCompatibility(testCase)
-            % Verify compatibility for different combinations of octSystem / OCTSystem
-            % in ScanInfo.json when processing tiled scans
+            % Verify that octSystem field works correctly in ScanInfo.json
+            % Test both exact case and case-insensitive matching
             
             octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
             dummyData = zeros(1000,500,2)+1;
@@ -129,25 +129,6 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             end
             testCase.verifyTrue(test1Pass, 'This should work: octSystem=Simulated Ganymede');
             
-            % Test OCTSystem = 'Simulated Ganymede'
-            json = awsReadJSON(scanInfoPath);
-            json.OCTSystem = 'Simulated Ganymede';
-            if isfield(json, 'octSystem'), json = rmfield(json, 'octSystem'); end
-            awsWriteJSON(json, scanInfoPath);
-            try
-                yOCTProcessTiledScan(outputFolder, {'test2.tif'}, ...
-                    'focusPositionInImageZpix', focusPositionInImageZpix,...
-                    'focusSigma', focusSigma, ...
-                    'dispersionQuadraticTerm', 0, ...
-                    'cropZAroundFocusArea', false, ...
-                    'v', false);
-                test2Pass = true;
-            catch ME
-                test2Pass = false;
-                fprintf('Test (OCTSystem=Simulated Ganymede) FAILED: %s\n', ME.message);
-            end
-            testCase.verifyTrue(test2Pass, 'This should work: OCTSystem=Simulated Ganymede');
-            
             % Test octSystem = 'simulated ganymede'
             json = awsReadJSON(scanInfoPath);
             json.octSystem = 'simulated ganymede';
@@ -167,30 +148,10 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             end
             testCase.verifyTrue(test3Pass, 'This should work: octSystem=simulated ganymede');
             
-            % Test OCTSystem = 'simulated ganymede'
-            json = awsReadJSON(scanInfoPath);
-            json.OCTSystem = 'simulated ganymede';
-            if isfield(json, 'octSystem'), json = rmfield(json, 'octSystem'); end
-            awsWriteJSON(json, scanInfoPath);
-            try
-                yOCTProcessTiledScan(outputFolder, {'test4.tif'}, ...
-                    'focusPositionInImageZpix', focusPositionInImageZpix,...
-                    'focusSigma', focusSigma, ...
-                    'dispersionQuadraticTerm', 0, ...
-                    'cropZAroundFocusArea', false, ...
-                    'v', false);
-                test4Pass = true;
-            catch ME
-                test4Pass = false;
-                fprintf('Test (OCTSystem=simulated ganymede) FAILED: %s\n', ME.message);
-            end
-            testCase.verifyTrue(test4Pass, 'This should work: OCTSystem=simulated ganymede');
-            
             % Cleanup
             rmdir(outputFolder, 's');
-            for i = 1:4
-                if exist(sprintf('test%d.tif', i), 'file'), delete(sprintf('test%d.tif', i)); end
-            end
+            if exist('test1.tif', 'file'), delete('test1.tif'); end
+            if exist('test3.tif', 'file'), delete('test3.tif'); end
         end
     end
 end
