@@ -145,6 +145,7 @@ focusSigma = in.focusSigma;
 if isfield(json, 'octSystem')
     octSystem = json.octSystem; % New format (lowercase)
 elseif isfield(json, 'OCTSystem')
+    warning("json contains 'OCTSystem' field instead of 'octSystem' field. Please make sure to replace field name by January 2027 as this name will be deprecated")
     octSystem = json.OCTSystem; % Old format (uppercase) for backward compatibility
 else
     error('ScanInfo.json is missing required field "octSystem" (or legacy "OCTSystem"). Cannot determine OCT system type.');
@@ -301,7 +302,7 @@ parfor yI=1:length(dimOutput_mm.y.values)
                 % Note that a frame is smaller than one tile as frame contains only one YFrameToPRocess, thus dim structure needs an update. 
                 [intFrame, dimFrame] = ...
                     yOCTLoadInterfFromFile([{fpTxt}, reconstructConfig, ...
-                    {'dimensions', dimOneTile_mm 'YFramesToProcess', yIInFile, 'OCTSystem', octSystem}]);
+                    {'dimensions', dimOneTile_mm 'YFramesToProcess', yIInFile, 'octSystem', octSystem}]);
                 [scan1,~] = yOCTInterfToScanCpx([{intFrame} {dimFrame} reconstructConfig]);
                 intFrame = []; %#ok<NASGU> %Freeup some memory
                 scan1 = abs(scan1);

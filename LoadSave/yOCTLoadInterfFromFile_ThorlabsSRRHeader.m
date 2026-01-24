@@ -45,10 +45,10 @@ end
 
 sizeY = t{2};
 BScanAvgN = t{4};
-OCTSystem1 = t{end}{:};
+octSystem1 = t{end}{:};
 
 if ~exist('octSystem','var') || isempty(octSystem)
-    octSystem = OCTSystem1; %We had no idea what was the OCT system, now we do
+    octSystem = octSystem1; %We had no idea what was the OCT system, now we do
 end
 
 %% Lambda
@@ -101,7 +101,7 @@ dimensions.aux.scanstart = headerFile.scanstart+1;
 dimensions.aux.scanend = headerFile.scanend;
 dimensions.aux.apodstart = headerFile.apodstart+1;
 dimensions.aux.apodend = headerFile.apodend;
-dimensions.aux.OCTSystem = OCTSystem;
+dimensions.aux.octSystem = octSystem;
 
 end
 
