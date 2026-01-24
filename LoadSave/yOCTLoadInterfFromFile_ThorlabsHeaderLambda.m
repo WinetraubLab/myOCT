@@ -6,20 +6,21 @@ function dimensions = yOCTLoadInterfFromFile_ThorlabsHeaderLambda(inputDataFolde
 %% Figure out basic Parameters
 
 %To get lambda min & max we contacted thorlabs
-if strcmpi(octSystem, 'Ganymede') || strcmpi(octSystem, 'Ganymede_SRR')
-    chirpFileName = 'ChirpGanymede.dat';
-    lambdaMin = 796.23;%[nm] Manufacturer number: 824.16, See 2019-08-31GanymedeFilterCalibration Report for more details
-    lambdaMax = 1010.02;%[nm]Manufacturer number: 1038.03, See 2019-08-31GanymedeFilterCalibration Report for more details
-elseif strcmpi(octSystem, 'Gan632')
-    chirpFileName = 'ChirpGanymede.dat';
-    lambdaMin = 796; %[nm] TODO these will need to be measured, see 2019-08-31GanymedeFilterCalibration Report for more details
-    lambdaMax = 1010; %[nm] TODO these will need to be measured, see 2019-08-31GanymedeFilterCalibration Report for more details
-elseif strcmpi(octSystem, 'Telesto') || strcmpi(octSystem, 'Telesto_SRR')
-    chirpFileName = 'ChirpTelesto.dat';
-    lambdaMin = 1208.69;%[nm] Manufacturer number: 1200.56, See 2018-12-04 Filter Calibration Report for more details
-    lambdaMax = 1372.50;%[nm] Manufacturer number: 1367.75, See 2018-12-04 Filter Calibration Report for more details
-else
-    error('Unknown OCT System, please specify as input ''octSystem''')
+switch(lower(octSystem))
+    case {'ganymede', 'ganymede_srr'}
+        chirpFileName = 'ChirpGanymede.dat';
+        lambdaMin = 796.23;%[nm] Manufacturer number: 824.16, See 2019-08-31GanymedeFilterCalibration Report for more details
+        lambdaMax = 1010.02;%[nm]Manufacturer number: 1038.03, See 2019-08-31GanymedeFilterCalibration Report for more details
+    case 'gan632'
+        chirpFileName = 'ChirpGanymede.dat';
+        lambdaMin = 796; %[nm] TODO these will need to be measured, see 2019-08-31GanymedeFilterCalibration Report for more details
+        lambdaMax = 1010; %[nm] TODO these will need to be measured, see 2019-08-31GanymedeFilterCalibration Report for more details
+    case {'telesto', 'telesto_srr'}
+        chirpFileName = 'ChirpTelesto.dat';
+        lambdaMin = 1208.69;%[nm] Manufacturer number: 1200.56, See 2018-12-04 Filter Calibration Report for more details
+        lambdaMax = 1372.50;%[nm] Manufacturer number: 1367.75, See 2018-12-04 Filter Calibration Report for more details
+    otherwise
+        error('Unknown OCT System, please specify as input ''octSystem''')
 end
 
 %% Load Chirp File

@@ -95,23 +95,23 @@ inputDataFolder = awsModifyPathForCompetability([inputDataFolder '/']);
 
 tt = tic;
 %% Figure out OCT system manufacturer
-if exist('dimensions','var') && isfield(dimensions,'aux') && isfield(dimensions.aux,'OCTSystem')
-    octSystem = dimensions.aux.OCTSystem;
+if exist('dimensions','var') && isfield(dimensions,'aux') && isfield(dimensions.aux,'octSystem')
+    octSystem = dimensions.aux.octSystem;
 end
 
 if isempty(octSystem)
-    [octSystem,OCTSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder);
+    [octSystem,octSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder);
 else
     % Normalize to lowercase for case insensitive comparison
     switch(lower(octSystem))
         case {'ganymede','telesto','gan632'}
-            OCTSystemManufacturer = 'Thorlabs';
+            octSystemManufacturer = 'Thorlabs';
         case {'ganymede_srr','telesto_srr'}
-            OCTSystemManufacturer = 'Thorlabs_SRR';
+            octSystemManufacturer = 'Thorlabs_SRR';
         case {'wasatch'}
-            OCTSystemManufacturer = 'Wasatch';
+            octSystemManufacturer = 'Wasatch';
         case {'simulated ganymede'}
-            OCTSystemManufacturer = 'Simulated';
+            octSystemManufacturer = 'Simulated';
         otherwise
             error('ERROR: Wrong OCTSystem name! (yOCTLoadInterfFromFile). Received: "%s". Expected: Ganymede, Telesto, Gan632, etc.', octSystem)
     end
@@ -120,7 +120,7 @@ end
 %% Load Header file, get dimensions
 if ~exist('dimensions','var')
     %Load header information
-    switch(OCTSystemManufacturer)
+    switch(octSystemManufacturer)
         case {'Thorlabs'}
             dimensions = yOCTLoadInterfFromFile_ThorlabsHeader(inputDataFolder, octSystem, chirp);
 
@@ -132,7 +132,7 @@ if ~exist('dimensions','var')
             dimensions = load(fullfile(inputDataFolder,'data.mat'), 'dim').dim;
     end
     
-    dimensions.aux.OCTSystem = octSystem; %Add the OCT system we just discovered
+    dimensions.aux.octSystem = octSystem; %Add the OCT system we just discovered
 else
     %Header information given by user
 end
@@ -187,7 +187,7 @@ if (peakOnly == true)
 end
 
 %% Load Data - System Specific Configuration
-switch(OCTSystemManufacturer)
+switch(octSystemManufacturer)
     case {'Thorlabs'}
         [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsData([varargin {'dimensions'} {dimensions}]);
     case {'Thorlabs_SRR'}
