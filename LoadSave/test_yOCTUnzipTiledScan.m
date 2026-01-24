@@ -53,7 +53,7 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             % Create ScanInfo.json
             scanInfo = struct();
             scanInfo.octFolders = {'Data01', 'Data02', 'Data03', 'Data04', 'Data05'};
-            scanInfo.OCTSystem = 'Ganymede';
+            scanInfo.octSystem = 'Ganymede';
             scanInfo.nXPixelsInEachTile = 10;
             scanInfo.nYPixelsInEachTile = 10;
             
@@ -154,7 +154,7 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             
             scanInfo = struct();
             scanInfo.octFolders = {};
-            scanInfo.OCTSystem = 'Ganymede';
+            scanInfo.octSystem = 'Ganymede';
             
             jsonPath = fullfile(testCase.testDir, 'ScanInfo.json');
             jsonText = jsonencode(scanInfo);
@@ -191,7 +191,7 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             
             scanInfo = struct();
             scanInfo.octFolders = {'DataA'};
-            scanInfo.OCTSystem = 'Ganymede';
+            scanInfo.octSystem = 'Ganymede';
             
             jsonPath = fullfile(testCase.testDir, 'ScanInfo.json');
             jsonText = jsonencode(scanInfo);
@@ -329,7 +329,7 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             
             scanInfo = struct();
             scanInfo.octFolders = {'DataMalformed'};
-            scanInfo.OCTSystem = 'Ganymede';
+            scanInfo.octSystem = 'Ganymede';
             
             jsonPath = fullfile(testCase.testDir, 'ScanInfo.json');
             jsonText = jsonencode(scanInfo);
@@ -387,7 +387,7 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             
             scanInfo = struct();
             scanInfo.octFolders = {'DataP1', 'DataP2', 'DataP3', 'DataP4', 'DataP5'};
-            scanInfo.OCTSystem = 'Ganymede';
+            scanInfo.octSystem = 'Ganymede';
             
             jsonPath = fullfile(testCase.testDir, 'ScanInfo.json');
             jsonText = jsonencode(scanInfo);
@@ -456,7 +456,7 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             
             scanInfo = struct();
             scanInfo.octFolders = {'DataMissing'};
-            scanInfo.OCTSystem = 'Ganymede';
+            scanInfo.octSystem = 'Ganymede';
             
             jsonPath = fullfile(testCase.testDir, 'ScanInfo.json');
             jsonText = jsonencode(scanInfo);
