@@ -1,5 +1,5 @@
 function [mu_s, noiseFloor] = yOCTEstimateScatteringCoefMuS_uniform(im,depth_um,isPlot)
-% This function estimates mu_s given aligned OCT data. Asuming uniform
+% This function estimates mu_s given aligned OCT data. Assuming uniform
 % distribution
 % INPUTS:
 %   im: Aligned OCT data (must be after surface detection), average over x,y
@@ -8,7 +8,7 @@ function [mu_s, noiseFloor] = yOCTEstimateScatteringCoefMuS_uniform(im,depth_um,
 %   isPlot: set to true to plot
 % OUTPUTS:
 %   mu_s: scattering coef, mm^-1 (small = better)
-%   noiseFloor - the minimum singal
+%   noiseFloor - the minimum signal
 
 %% Input checks
 if ~exist('isPlot','var')
