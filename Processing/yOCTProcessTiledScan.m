@@ -22,10 +22,9 @@ function yOCTProcessTiledScan(varargin)
 %   focusSigma                  20      If stitching along Z axis (multiple focus points), what is the size of each focus in z [pixel]
 %   focusPositionInImageZpix    NaN     For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at. 
 %                                       See yOCTFindFocusTilledScan for more details.
-%   cropZAroundFocusArea        true    When set to true, will crop output processed scan around the area of z focus. 
-%   cropZRange_mm               []      When set to a 2-element vector [zMin_mm, zMax_mm], will crop the output
-%                                       Z range to the specified interval (in mm, relative to tissue surface z=0).
-%                                       When provided, this overrides cropZAroundFocusArea.
+%   cropZAroundFocusArea        true    When set to true, will crop output processed scan around the area of z focus (or cropZRange_mm if provided).
+%   cropZRange_mm               []      Custom Z crop range [zMin_mm, zMax_mm] in mm relative to tissue surface (z=0).
+%                                       When empty ([]), uses automatic crop based on zDepths and focus positions.
 % Save some Y planes in a debug folder:
 %   yPlanesOutputFolder         ''      If set will save some y planes for debug purpose in that folder
 %   howManyYPlanes              3       How many y planes to save (if yPlanesOutput folder is set)
@@ -222,14 +221,14 @@ if ~isempty(in.outputFilePixelSize_um)
 end
 
 if ~cropZAroundFocusArea
-    % Master kill switch: no cropping at all when cropZAroundFocusArea is explicitly false
+    % No cropping at all when cropZAroundFocusArea is false
     if ~isempty(in.cropZRange_mm)
         warning('cropZAroundFocusArea is set to false, ignoring cropZRange_mm. Set cropZAroundFocusArea to true to use custom Z range.');
     end
-    % Don't modify dimOutput_mm.z - keep full range
+    % Don't modify dimOutput_mm.z: keep full range
     
 elseif ~isempty(in.cropZRange_mm)
-    % User specified an explicit Z range to crop to (requires cropZAroundFocusArea=true)
+    % User specified an explicit Z range to crop to
     cropZMin_mm = in.cropZRange_mm(1);
     cropZMax_mm = in.cropZRange_mm(2);
     
