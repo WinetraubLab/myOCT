@@ -154,27 +154,14 @@ else
     error('ScanInfo.json is missing required field "octSystem" (or legacy "OCTSystem"). Cannot determine OCT system type.');
 end
 
-%% z depth check
-% A working assumption of yOCTProcessTiledScan is that when yOCTScanTile
-% was called, zDepths list included "0". 
-% The meaning of this constraint is that exists a scan in the stack in
-% which the focus is at the tissue interface (according to the user's best
-% guess). This constraint helps us align coordinate such that z=0 is at the
-% surface of the tissue.
-%
-% In this section  we check that zDepths structure exists and that zdepth 0
-% is included in the stack.
+%% z Depth check
+% Validate that zDepths data exists. The z coordinate system is automatically
+% aligned such that z=0 represents the tissue surface, regardless of the actual
+% zDepths values used during scanning. This allows single-depth scans where 
+% cropZRange_mm can then be used to define the visible area around the scanned depth.
 
 if isempty(json.zDepths) || ~isnumeric(json.zDepths) % Validate presence of z-depths data
     error("ScanInfo.json doesn't include valid zDepths.");
-end
-
-if min(abs(json.zDepths)) > 0.001 % 1um tolerance
-    error( ...
-        ['It seems that yOCTScanTile was executed without including ' ...
-        'zDepth=0 in the list of depths which breaks our ability to ' ...
-        'estimate dimension z coordinate, please scan again.' ...
-        'See Demo_ScanAndProcess_3D.m for an example.'])
 end
 
 %% Extract some data (refactor candidate)
