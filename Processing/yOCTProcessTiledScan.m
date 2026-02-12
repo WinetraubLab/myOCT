@@ -23,6 +23,9 @@ function yOCTProcessTiledScan(varargin)
 %   focusPositionInImageZpix    NaN     For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at. 
 %                                       See yOCTFindFocusTilledScan for more details.
 %   cropZAroundFocusArea        true    When set to true, will crop output processed scan around the area of z focus. 
+%   cropZRange_mm               []      When set to a 2-element vector [zMin_mm, zMax_mm], will crop the output
+%                                       Z range to the specified interval (in mm, relative to tissue surface z=0).
+%                                       When provided, this overrides cropZAroundFocusArea.
 % Save some Y planes in a debug folder:
 %   yPlanesOutputFolder         ''      If set will save some y planes for debug purpose in that folder
 %   howManyYPlanes              3       How many y planes to save (if yPlanesOutput folder is set)
@@ -55,6 +58,7 @@ addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusSigma',20,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
 addParameter(p,'cropZAroundFocusArea',true);
+addParameter(p,'cropZRange_mm',[],@(x)(isempty(x) || (isnumeric(x) && numel(x)==2 && x(1)<x(2))));
 
 % Save some Y planes in a debug folder
 addParameter(p,'yPlanesOutputFolder','',@isstr);
@@ -217,7 +221,35 @@ if ~isempty(in.outputFilePixelSize_um)
     dimOutput_mm.z.index = 1:length(dimOutput_mm.z.values);
 end
 
-if cropZAroundFocusArea
+if ~cropZAroundFocusArea
+    % Master kill switch: no cropping at all when cropZAroundFocusArea is explicitly false
+    if ~isempty(in.cropZRange_mm)
+        warning('cropZAroundFocusArea is set to false, ignoring cropZRange_mm. Set cropZAroundFocusArea to true to use custom Z range.');
+    end
+    % Don't modify dimOutput_mm.z - keep full range
+    
+elseif ~isempty(in.cropZRange_mm)
+    % User specified an explicit Z range to crop to (requires cropZAroundFocusArea=true)
+    cropZMin_mm = in.cropZRange_mm(1);
+    cropZMax_mm = in.cropZRange_mm(2);
+    
+    zAll = dimOutput_mm.z.values;
+    zAll(zAll < cropZMin_mm | zAll > cropZMax_mm) = [];
+    
+    if isempty(zAll)
+        error('cropZRange_mm [%.4f, %.4f] does not overlap with the available Z range [%.4f, %.4f]. Adjust cropZRange_mm or check scan parameters.', ...
+            cropZMin_mm, cropZMax_mm, dimOutput_mm.z.values(1), dimOutput_mm.z.values(end));
+    end
+    
+    dimOutput_mm.z.values = zAll(:)';
+    dimOutput_mm.z.index = 1:length(zAll);
+    
+    if v
+        fprintf('cropZRange_mm active: Z cropped to [%.3f, %.3f] mm (%d pixels)\n', ...
+            zAll(1), zAll(end), length(zAll));
+    end
+
+elseif cropZAroundFocusArea
     % Remove Z positions that are way out of focus (if we are doing focus processing)
 
     zAll = dimOutput_mm.z.values;
