@@ -212,6 +212,45 @@ classdef test_yOCTLoadSaveTif < matlab.unittest.TestCase
             fprintf('testPartialSaveLocal completed successfully.\n');
         end
 
+        function testMetadataWithScanZDepths(testCase)
+            % Verify that metadata fields survive a yOCT2Tif to yOCTFromTif round-trip.
+            fprintf('\nRunning testMetadataWithScanZDepths...\n');
+
+            data = testCase.Data(:,:,1); % 2D slice
+            fp = testCase.LocalFile;
+
+            % Case 1: z-stack (multiple depths)
+            meta1.mymeta = (1:10)';
+            meta1.scanZDepths_mm = [-0.1 -0.025 -0.02 -0.015 0 0.005 0.4];
+            yOCT2Tif(data, fp, 'metadata', meta1);
+            [~, meta1_out] = yOCTFromTif(fp);
+            
+            % Compare fields flexibly (JSON may change array orientation)
+            testCase.assertEqual(meta1_out.mymeta, meta1.mymeta, ...
+                'All mymeta field did not round trip correctly');
+            testCase.assertEqual(meta1_out.scanZDepths_mm(:), meta1.scanZDepths_mm(:), ...
+                'scanZDepths_mm values did not round trip correctly (z-stack case)');
+            testCase.assertEqual(length(meta1_out.scanZDepths_mm), 7, ...
+                'scanZDepths_mm should have 7 elements for this z-stack');
+            delete(fp);
+
+            % Case 2: single depth (not a z-stack)
+            meta2.mymeta = (1:10)';
+            meta2.scanZDepths_mm = 0;
+            yOCT2Tif(data, fp, 'metadata', meta2);
+            [~, meta2_out] = yOCTFromTif(fp);
+            
+            testCase.assertEqual(meta2_out.mymeta, meta2.mymeta, ...
+                'All mymeta field did not round-trip correctly');
+            testCase.assertEqual(meta2_out.scanZDepths_mm, meta2.scanZDepths_mm, ...
+                'scanZDepths_mm value did not round-trip correctly (single depth case)');
+            testCase.assertEqual(length(meta2_out.scanZDepths_mm), 1, ...
+                'scanZDepths_mm should be scalar for single depth');
+            delete(fp);
+
+            fprintf('testMetadataWithScanZDepths completed successfully.\n');
+        end
+
     end  % methods(Test)
 
     %======================================================================
