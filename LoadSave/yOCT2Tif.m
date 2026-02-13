@@ -214,15 +214,21 @@ if mode == 0
             % If any axis has ≤1 value we skip physical scaling and fall back to 1‑pixel units
             if ~isempty(metadata) && ...
                 isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
-                isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
                 isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
-                numel(metadata.x.values) > 1 && numel(metadata.y.values) > 1 && numel(metadata.z.values) > 1
+                numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
 
                 % Convert dimension structure to microns for accurate pixel spacing in ImageJ
                 meta_um = yOCTChangeDimensionsStructureUnits(metadata,'microns');
                 pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
-                pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
                 pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
+
+                % Compute Y spacing only when Y has more than 2 values: else default 1 micron
+                if isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
+                        numel(metadata.y.values) > 1
+                    pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
+                else
+                    pixelSizeY_um = 1.00;
+                end
 
                 % ImageJ uses 'XResolution', 'YResolution', 'ResolutionUnit', and reads 
                 % 'ImageDescription' (e.g., "unit=um") to handle units and scaling display
