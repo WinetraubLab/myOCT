@@ -249,6 +249,10 @@ end
 assert(length(dimOutput_mm.z.values) == length(dimOutput_mm.z.index));
 assert(length(dimOutput_mm.x.values) == length(dimOutput_mm.x.index));
 
+% Store z-depths used during scanning in the dimensions structure.
+% Use length(metadata.scanZDepths_mm) > 1 to determine if the scan was a z-stack or a single depth scan.
+dimOutput_mm.scanZDepths_mm = json.zDepths(:)'; % Row vector [mm]
+
 %% Save some Y planes in a debug folder if needed
 if ~isempty(in.yPlanesOutputFolder) && in.howManyYPlanes > 0
     isSaveSomeYPlanes = true;
