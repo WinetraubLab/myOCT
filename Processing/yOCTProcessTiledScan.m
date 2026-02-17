@@ -22,9 +22,8 @@ function yOCTProcessTiledScan(varargin)
 %   focusSigma                  20      If stitching along Z axis (multiple focus points), what is the size of each focus in z [pixel]
 %   focusPositionInImageZpix    NaN     For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at. 
 %                                       See yOCTFindFocusTilledScan for more details.
-%   cropZAroundFocusArea        true    When set to true, will crop output processed scan around the area of z focus (or cropZRange_mm if provided).
 %   cropZRange_mm               []      Custom Z crop range [zMin_mm, zMax_mm] in mm relative to tissue surface (z=0).
-%                                       When empty ([]), uses automatic crop based on zDepths and focus positions.
+%                                       When empty ([]), no Z cropping is applied and the full scan range is kept.
 % Save some Y planes in a debug folder:
 %   yPlanesOutputFolder         ''      If set will save some y planes for debug purpose in that folder
 %   howManyYPlanes              3       How many y planes to save (if yPlanesOutput folder is set)
@@ -56,7 +55,6 @@ addRequired(p,'outputPath');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusSigma',20,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
-addParameter(p,'cropZAroundFocusArea',true);
 addParameter(p,'cropZRange_mm',[],@(x)(isempty(x) || (isnumeric(x) && numel(x)==2 && x(1)<x(2))));
 
 % Save some Y planes in a debug folder
@@ -104,11 +102,6 @@ elseif awsIsAWSPath(in.tiledScanInputFolder)
     awsSetCredentials();
 end
 
-cropZAroundFocusArea = in.cropZAroundFocusArea;
-if (cropZAroundFocusArea && isnan(in.focusPositionInImageZpix))
-    warning('Because no focus position was set, cropZAroundFocusArea cannot be "true", changed to "false". See help of yOCTProcessTiledScan function.');
-    cropZAroundFocusArea = false;
-end
 
 %% Load configuration file & set parameters
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
@@ -207,15 +200,8 @@ if ~isempty(in.outputFilePixelSize_um)
     dimOutput_mm.z.index = 1:length(dimOutput_mm.z.values);
 end
 
-if ~cropZAroundFocusArea
-    % No cropping at all when cropZAroundFocusArea is false
-    if ~isempty(in.cropZRange_mm)
-        warning('cropZAroundFocusArea is set to false, ignoring cropZRange_mm. Set cropZAroundFocusArea to true to use custom Z range.');
-    end
-    % Don't modify dimOutput_mm.z: keep full range
-    
-elseif ~isempty(in.cropZRange_mm)
-    % User specified an explicit Z range to crop to
+if ~isempty(in.cropZRange_mm)
+    % Crop Z to the requested range
     cropZMin_mm = in.cropZRange_mm(1);
     cropZMax_mm = in.cropZRange_mm(2);
     
@@ -234,30 +220,8 @@ elseif ~isempty(in.cropZRange_mm)
         fprintf('cropZRange_mm active: Z cropped to [%.3f, %.3f] mm (%d pixels)\n', ...
             zAll(1), zAll(end), length(zAll));
     end
-
-elseif cropZAroundFocusArea
-    % Remove Z positions that are way out of focus (if we are doing focus processing)
-
-    zAll = dimOutput_mm.z.values;
-
-    % Remove depths that are out of focus
-    % Final crop is from first focus position to last focus position.
-    zAll( ...
-        ( zAll < min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1)  )) ) ...
-        | ...
-        ( zAll > max(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(end))) ) ...
-        ) = []; 
-
-    if isempty(zAll)
-        % No zAll matches our criteria, find the closest one.
-        [dist, i] = min(abs(dimOutput_mm.z.values - ...
-            ( ...
-            min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1))) ...
-            ) ...
-            ));
-        assert(dist<1e-3,'Closest Z is >1um away from target, too far');
-        zAll = dimOutput_mm.z.values(i);
-    end
+else
+    zAll = dimOutput_mm.z.values; % Keep full Z range, no crop
 
     dimOutput_mm.z.values = zAll(:)';
     dimOutput_mm.z.index = 1:length(zAll);
