@@ -83,7 +83,6 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
                 'focusSigma',focusSigma, ...
                 'dispersionQuadraticTerm',0, ...
                 'interpMethod','sinc5', ...
-                'cropZAroundFocusArea',false, ...
                 'outputFilePixelSize_um', []);
             [data, dim] = yOCTFromTif('temp.tif');
 
@@ -94,8 +93,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
                 'focusPositionInImageZpix', focusPositionInImageZpix,...
                 'focusSigma',focusSigma, ...
                 'dispersionQuadraticTerm',0, ...
-                'interpMethod','sinc5', ...
-                'cropZAroundFocusArea',false ... % outputFilePixelSize_um omitted: default 1 micron
+                'interpMethod','sinc5' ... % outputFilePixelSize_um omitted: default 1 micron
                 );
             [data2, dim2] = yOCTFromTif('temp2.tif');
 
@@ -164,7 +162,6 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
                     'focusPositionInImageZpix', focusPositionInImageZpix,...
                     'focusSigma', focusSigma, ...
                     'dispersionQuadraticTerm', 0, ...
-                    'cropZAroundFocusArea', false, ...
                     'v', false);
                 test1Pass = true;
             catch ME
@@ -183,7 +180,6 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
                     'focusPositionInImageZpix', focusPositionInImageZpix,...
                     'focusSigma', focusSigma, ...
                     'dispersionQuadraticTerm', 0, ...
-                    'cropZAroundFocusArea', false, ...
                     'v', false);
                 test2Pass = true;
             catch ME
@@ -200,57 +196,36 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
         
         function testCropZRange(testCase)
             % Test that cropZRange_mm correctly crops the Z dimension.
-            % We simulate one scan, then process with 4 crop configurations:
-            %   1. crop = false                 -> full Z range (baseline)
-            %   2. crop = true                  -> focus-based crop (~1 pixel with 1 zDepth)
-            %   3. crop = true + cropZRange_mm  -> custom range
-            %   4. crop = false + cropZRange_mm -> crop=false prevails (no crop, warning issued for passing both)
+            %   1. no cropZRange_mm  -> full Z range (baseline)
+            %   2. cropZRange_mm set -> output is trimmed to that range
             
             testCase.setupCropSimulation();
             
-            %% 1. crop = false (full Z range, baseline)
-            yOCTProcessTiledScan(testCase.CropTestFolder, {'crop_false.tif'}, ...
-                testCase.CropTestCommonParams{:}, 'cropZAroundFocusArea', false, ...
-                'outputFilePixelSize_um', []);
-            [~, dimFull] = yOCTFromTif('crop_false.tif');
-            testCase.addTeardown(@() delete('crop_false.tif'));
+            %% 1. No cropZRange_mm (full Z range, baseline)
+            yOCTProcessTiledScan(testCase.CropTestFolder, {'crop_full.tif'}, ...
+                testCase.CropTestCommonParams{:}, 'outputFilePixelSize_um', []);
+            [~, dimFull] = yOCTFromTif('crop_full.tif');
+            testCase.addTeardown(@() delete('crop_full.tif'));
             
             nZFull = length(dimFull.z.values);
             testCase.verifyGreaterThan(nZFull, 1000, ...
                 'Full Z range should have many pixels');
             
-            %% 2. crop = true (with 1 zDepth -> 1 Z pixels)
-            yOCTProcessTiledScan(testCase.CropTestFolder, {'crop_true.tif'}, ...
-                testCase.CropTestCommonParams{:}, 'cropZAroundFocusArea', true, ...
-                'outputFilePixelSize_um', []);
-            [~, dimCropTrue] = yOCTFromTif('crop_true.tif');
-            testCase.addTeardown(@() delete('crop_true.tif'));
-            
-            nZCropTrue = length(dimCropTrue.z.values);
-            testCase.verifyLessThanOrEqual(nZCropTrue, 2, ...
-                'crop=true with 1 zDepth should produce very few Z pixels');
-            testCase.verifyLessThan(nZCropTrue, nZFull, ...
-                'crop=true should have fewer Z pixels than crop=false');
-            
-            %% 3. crop = true + cropZRange_mm (custom range)
+            %% 2. cropZRange_mm set (custom range, 10 pixels inside each edge)
             dz_mm = mean(diff(dimFull.z.values));
-            
-            % Define crop range close to (but inside) full Z extent so
-            % that crop boundaries are verifiably close to the data edges.
             nMarginPix = 10;
             cropRange = [dimFull.z.values(1 + nMarginPix), ...
                          dimFull.z.values(end - nMarginPix)];
             
             yOCTProcessTiledScan(testCase.CropTestFolder, {'crop_range.tif'}, ...
-                testCase.CropTestCommonParams{:}, 'cropZAroundFocusArea', true, ...
+                testCase.CropTestCommonParams{:}, ...
                 'cropZRange_mm', cropRange, 'outputFilePixelSize_um', []);
             [~, dimRange] = yOCTFromTif('crop_range.tif');
             testCase.addTeardown(@() delete('crop_range.tif'));
             
             nZRange = length(dimRange.z.values);
             
-            % Z boundary values must be approximately equal to the
-            % requested crop range (within one pixel spacing).
+            % Output boundaries must match the requested range (within one pixel)
             testCase.verifyEqual(dimRange.z.values(1), cropRange(1), ...
                 'AbsTol', abs(dz_mm), ...
                 'First Z value should be approximately cropZRange_mm(1)');
@@ -269,29 +244,14 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
                     'Z spacing should be uniform after cropZRange_mm');
             end
             
-            % Pixel count must match expected from range and pixel size
+            % Pixel count must match grid positions within the range
             expectedNZ = sum(dimFull.z.values >= cropRange(1) & dimFull.z.values <= cropRange(2));
             testCase.verifyEqual(nZRange, expectedNZ, ...
                 'Number of Z pixels should match grid positions within cropZRange_mm');
             
-            % Must be between crop=true (small) and crop=false (full)
-            testCase.verifyGreaterThan(nZRange, nZCropTrue, ...
-                'cropZRange should have more Z pixels than crop=true');
+            % Cropped output must be strictly smaller than full range
             testCase.verifyLessThan(nZRange, nZFull, ...
-                'cropZRange should have fewer Z pixels than crop=false');
-            
-            %% 4. crop = false + cropZRange_mm (crop = false wins, no crop happens)
-            yOCTProcessTiledScan(testCase.CropTestFolder, {'crop_false_with_range.tif'}, ...
-                testCase.CropTestCommonParams{:}, 'cropZAroundFocusArea', false, ...
-                'cropZRange_mm', cropRange, 'outputFilePixelSize_um', []);
-            [~, dimFalseRange] = yOCTFromTif('crop_false_with_range.tif');
-            testCase.addTeardown(@() delete('crop_false_with_range.tif'));
-            
-            nZFalseRange = length(dimFalseRange.z.values);
-            testCase.verifyEqual(nZFalseRange, nZFull, ...
-                'crop=false should disable cropping even when cropZRange_mm is provided');
-            testCase.verifyEqual(dimFalseRange.z.values, dimFull.z.values, ...
-                'Z values should be identical to crop=false case (range ignored)');
+                'cropZRange_mm output should have fewer Z pixels than no-crop baseline');
         end
         
         function testCropZRange_InvertedBoundaries(testCase)
@@ -338,8 +298,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             
             % First get the full Z extent for reference
             yOCTProcessTiledScan(testCase.CropTestFolder, {'partial_ref.tif'}, ...
-                testCase.CropTestCommonParams{:}, 'cropZAroundFocusArea', false, ...
-                'outputFilePixelSize_um', []);
+                testCase.CropTestCommonParams{:}, 'outputFilePixelSize_um', []);
             [~, dimFull] = yOCTFromTif('partial_ref.tif');
             testCase.addTeardown(@() delete('partial_ref.tif'));
             dz_mm = mean(diff(dimFull.z.values));
@@ -350,7 +309,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             wideRange = [dimFull.z.values(1) - wideMargin_mm, ...
                          dimFull.z.values(end) + wideMargin_mm];
             yOCTProcessTiledScan(testCase.CropTestFolder, {'partial_wide.tif'}, ...
-                testCase.CropTestCommonParams{:}, 'cropZAroundFocusArea', true, ...
+                testCase.CropTestCommonParams{:}, ...
                 'cropZRange_mm', wideRange, 'outputFilePixelSize_um', []);
             [~, dimWide] = yOCTFromTif('partial_wide.tif');
             testCase.addTeardown(@() delete('partial_wide.tif'));
@@ -363,7 +322,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             zMid = (dimFull.z.values(1) + dimFull.z.values(end)) / 2;
             halfRange = [zMid, dimFull.z.values(end) + wideMargin_mm];
             yOCTProcessTiledScan(testCase.CropTestFolder, {'partial_half.tif'}, ...
-                testCase.CropTestCommonParams{:}, 'cropZAroundFocusArea', true, ...
+                testCase.CropTestCommonParams{:}, ...
                 'cropZRange_mm', halfRange, 'outputFilePixelSize_um', []);
             [~, dimHalf] = yOCTFromTif('partial_half.tif');
             testCase.addTeardown(@() delete('partial_half.tif'));
