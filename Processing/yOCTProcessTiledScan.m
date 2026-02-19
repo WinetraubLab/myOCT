@@ -147,12 +147,6 @@ else
     error('ScanInfo.json is missing required field "octSystem" (or legacy "OCTSystem"). Cannot determine OCT system type.');
 end
 
-%% z Depth check
-% Validate that zDepths data exists. The z coordinate system is automatically
-% aligned such that z=0 represents the tissue surface, regardless of the actual
-% zDepths values used during scanning. This allows single-depth scans where 
-% cropZRange_mm can then be used to define the visible area around the scanned depth.
-
 if isempty(json.zDepths) || ~isnumeric(json.zDepths) % Validate presence of z-depths data
     error("ScanInfo.json doesn't include valid zDepths.");
 end

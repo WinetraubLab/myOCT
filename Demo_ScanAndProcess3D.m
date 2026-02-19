@@ -25,7 +25,7 @@ octProbeFOV_mm = 0.5; % How much of the field of view to use from the probe. OBJ
 % Define z stack and z-stitching
 scanZJump_um = 5; % microns. OBJECTIVE_DEPENDENT: For 10x use 15, for 20x use 10, for 40x use 5
 zToScan_mm = unique([-100 (-30:scanZJump_um:400), 0])*1e-3; %[mm]
-cropZRange_mm = [-100 400]*1e-3; % [mm] Crop output Z range: from above to below tissue surface. Set to [] to keep the full scan range without cropping.
+cropZRange_mm = [min(zToScan_mm) max(zToScan_mm)]; % [mm] Crop output Z range: from above to below tissue surface. Set to [] to keep the full scan range without cropping.
 focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 20x use 10, for 40x use 10 or 1
 
 % Other scanning parameters
