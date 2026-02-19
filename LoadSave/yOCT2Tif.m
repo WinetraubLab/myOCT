@@ -209,9 +209,9 @@ if mode == 0
             tagstruct.Software            = jsonencode(metaJson);  % Saves our metadata in the TIFF 'Software' Tag
             
             % Check for valid metadata to set resolution accordingly in ImageJ.
-            % Requires at least 2 samples in x to compute pixel spacing: pixelSizeX = |v(2)-v(1)|.
+            % Requires at least 2 samples in x to compute pixel spacing: pixelSize = |v(2)-v(1)|.
             % Y axis is handled separately: if only 1 B-scan is present, inter-slice spacing
-            % defaults to 1.00 um (a neutral placeholder, unused for single B-scan measurements).
+            % falls back to pixelSizeX_um since X and Y are isotropic in OCT scanning.
             if ~isempty(metadata) && ...
                 isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
                 isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
@@ -227,8 +227,7 @@ if mode == 0
                         numel(metadata.y.values) > 1
                     pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
                 else
-                    % X and Y are isotropic in OCT scanning (both use the same pixelSize_um),
-                    % so pixelSizeX_um is the correct physical fallback when Y is unavailable.
+                    % PixelSizeX_um is the correct physical fallback when Y is unavailable.
                     pixelSizeY_um = pixelSizeX_um;
                 end
 
