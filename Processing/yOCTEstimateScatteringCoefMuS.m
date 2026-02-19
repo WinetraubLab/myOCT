@@ -29,22 +29,22 @@ tempFolder = p.Results.tempFolder;
 [octCorrected, dimensionsCorrected] = ...
     alignOctToSurface(octData, dimensions);
 
-%% Average all a-scans into a single depth profile
-meanIntensity_dB = mean(octCorrected, [2 3], 'omitnan');  % Average over (x,y)
-meanIntensity_dB = meanIntensity_dB(:);  % Convert to column vector
+%% Compute median depth profile across all a-scans
+medianIntensity_dB = median(octCorrected, [2 3], 'omitnan');  % Median over (x,y)
+medianIntensity_dB = medianIntensity_dB(:);  % Convert to column vector
 tissueZDepth_um = dimensionsCorrected.z.values(:);  % Depth values
 
 % Remove NaN values at end where aligned data ran out
-hasValidData = ~isnan(meanIntensity_dB);
-meanIntensity_dB = meanIntensity_dB(hasValidData);
+hasValidData = ~isnan(medianIntensity_dB);
+medianIntensity_dB = medianIntensity_dB(hasValidData);
 tissueZDepth_um = tissueZDepth_um(hasValidData);
 
-if isempty(meanIntensity_dB)
+if isempty(medianIntensity_dB)
     error('No valid data points after alignment and averaging');
 end
 
 %% Fit exponential model: I(z) = A * exp(-2*mu_s*z) + c
-[mu_s, noiseFloor_dB, modelFunc] = fitExponentialModel(meanIntensity_dB, tissueZDepth_um);
+[mu_s, noiseFloor_dB, modelFunc] = fitExponentialModel(medianIntensity_dB, tissueZDepth_um);
 
 %% Display results and save plot if verbose
 if v
@@ -55,11 +55,11 @@ if v
     
     % Plot exponential fit
     figure('Color', [1 1 1]);
-    plot(tissueZDepth_um, meanIntensity_dB, 'LineWidth', 2);
+    plot(tissueZDepth_um, medianIntensity_dB, 'LineWidth', 2);
     hold on;
     plot(tissueZDepth_um, modelFunc(tissueZDepth_um), 'r--', 'LineWidth', 2);
     grid on;
-    legend('Mean OCT Intensity, t=0', ...
+    legend('Median OCT Intensity, t=0', ...
         sprintf('Model: exp(-2\\mu_sz)+c, \\mu_s=%.2f[mm^{-1}]', mu_s), ...
         'Location', 'best');
     xlabel('Depth [\mum]');
