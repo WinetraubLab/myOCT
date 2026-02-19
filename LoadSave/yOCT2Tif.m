@@ -208,21 +208,28 @@ if mode == 0
             % it later without interfering with standard image-reading Software
             tagstruct.Software            = jsonencode(metaJson);  % Saves our metadata in the TIFF 'Software' Tag
             
-            % Check for valid metadata to set resolution accordingly in ImageJ
-            % Proceed only if metadata contains at least TWO samples in each axis (z, x, y).
-            % We need ≥2 points to compute pixel spacing => pixelSize = |v(2) – v(1)|.
-            % If any axis has ≤1 value we skip physical scaling and fall back to 1‑pixel units
+            % Check for valid metadata to set resolution accordingly in ImageJ.
+            % Requires at least 2 samples in x to compute pixel spacing: pixelSize = |v(2)-v(1)|.
+            % Y axis is handled separately: if only 1 B-scan is present, inter-slice spacing
+            % falls back to pixelSizeX_um since X and Y are isotropic in OCT scanning.
             if ~isempty(metadata) && ...
                 isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
-                isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
                 isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
-                numel(metadata.x.values) > 1 && numel(metadata.y.values) > 1 && numel(metadata.z.values) > 1
+                numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
 
                 % Convert dimension structure to microns for accurate pixel spacing in ImageJ
                 meta_um = yOCTChangeDimensionsStructureUnits(metadata,'microns');
                 pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
-                pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
                 pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
+
+                % Compute Y spacing only when Y has more than 2 values: else default 1 micron
+                if isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
+                        numel(metadata.y.values) > 1
+                    pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
+                else
+                    % PixelSizeX_um is the correct physical fallback when Y is unavailable.
+                    pixelSizeY_um = pixelSizeX_um;
+                end
 
                 % ImageJ uses 'XResolution', 'YResolution', 'ResolutionUnit', and reads 
                 % 'ImageDescription' (e.g., "unit=um") to handle units and scaling display
