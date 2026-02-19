@@ -295,8 +295,11 @@ end
 
 %% Initialize Hardware
 
+% Get OCT system from persistent library
+[octSystemModule, octSystemName, ~] = yOCTHardwareLibSetUp();
+
 % OCT Scanner
-yOCTScannerInit(in.octProbePath,v);
+yOCTScannerInit(json.octProbePath,v);
 
 % Translational stage
 [x0,y0,z0] = yOCTStageInit(json.oct2stageXYAngleDeg, NaN, NaN, v);
