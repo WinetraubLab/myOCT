@@ -1,0 +1,20 @@
+name: MATLAB tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+
+      - name: Run yOCTTestAll
+        uses: matlab-actions/run-command@v2
+        with:
+          command: yOCTTestAll
