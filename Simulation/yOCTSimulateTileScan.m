@@ -58,14 +58,15 @@ in.octFolder = awsModifyPathForCompetability([fileparts(in.octFolder) '/']);
 paramToKeep = ones(size(varargin),'logical');
 paramToKeep(1) = 0; % Remove data
 paramToKeep = myRMAll(varargin,listOfParametersToRemove_yOCTScanTile,paramToKeep);
-paramToKeep = myRM(varargin,'skipHardware', paramToKeep); % Also remove Skip Hardware as we set it to true
-pr = [varargin(paramToKeep) {'skipHardware',true}];
+paramToKeep = myRM(varargin,'skipHardware', paramToKeep); % Remove skipHardware - handled via yOCTHardwareLibSetUp
+pr = varargin(paramToKeep);
 
 % Add xRange_mm, yRange_mm
 xRange_mm = pixelSize_um*size(data,2)/1e3/2*[-1 1];
 yRange_mm = pixelSize_um*size(data,3)/1e3/2*[-1 1]; 
 
 pr = [pr(1) {xRange_mm}, {yRange_mm} pr(2:end)];
+yOCTHardwareLibSetUp('Ganymede', true);
 json = yOCTScanTile(pr{:});
 json.octSystem = 'Simulated Ganymede';
 
