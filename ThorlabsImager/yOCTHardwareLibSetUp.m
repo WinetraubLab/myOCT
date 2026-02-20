@@ -6,6 +6,7 @@ function [octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp(o
 %       octSystemName: Name of the OCT system to load. 
 %           Supported values: 'Ganymede', 'Gan632'. 
 %           Default: '' (empty, only valid if library is already loaded)
+%           Special value: 'reset' — clears the cache (called by TearDown).
 %       skipHardware: When set to true, will skip hardware initialization.
 %           Default: false
 %       v: Verbose mode. 
@@ -34,17 +35,43 @@ persistent gOCTSystemName;
 persistent gSkipHardware;
 persistent gScannerIsInitialized;  % Track whether scanner is currently initialized
 
+%% Reset mode: clear cache so next call re-initializes
+% Called by yOCTHardwareLibTearDown after all cleanup is complete.
+if ischar(octSystemName) && strcmpi(octSystemName, 'reset')
+    gOCTSystemModule = [];
+    gOCTSystemName   = [];
+    gSkipHardware    = [];
+    octSystemModule  = [];
+    octSystemName    = '';
+    skipHardware     = false;
+    return;
+end
+
 %% Check if library is already loaded (early return)
 if ~isempty(gOCTSystemName)
-    octSystemModule = gOCTSystemModule;
-    octSystemName = gOCTSystemName;
-    skipHardware = gSkipHardware;
-    return;
+    % Detect whether the caller explicitly requests a different system name
+    % or a different skipHardware mode. If either changed, clear the cache
+    % and fall through to re-initialization with the new values.
+    systemNameChanged = nargin >= 1 && ~isempty(octSystemName) && ...
+                        ~strcmpi(octSystemName, gOCTSystemName);
+    skipChanged = nargin >= 2 && islogical(skipHardware) && skipHardware ~= gSkipHardware;
+    if systemNameChanged || skipChanged
+        gOCTSystemModule = [];
+        gOCTSystemName   = [];
+        gSkipHardware    = [];
+        % Fall through to full initialization with the new values
+    else
+        octSystemModule = gOCTSystemModule;
+        octSystemName   = gOCTSystemName;
+        skipHardware    = gSkipHardware;
+        return;
+    end
 end
 
 %% Validate inputs that are only needed for first-time load
 if isempty(octSystemName)
-    error("yOCTHardwareLibSetUp must be called with a valid 'octSystemName' the first time it is executed.");
+    error('myOCT:yOCTHardwareLibSetUp:noSystemName', ...
+        "yOCTHardwareLibSetUp must be called with a valid 'octSystemName' the first time it is executed.");
 end
 
 validSystems = {'Ganymede', 'Gan632'};
