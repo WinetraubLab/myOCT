@@ -58,7 +58,7 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
             
             % Range checks
             testCase.verifyGreaterThan(mu_s, 0, 'mu_s should be positive');
-            testCase.verifyLessThan(mu_s, 15, 'mu_s should be reasonable (<15 mm^-1)');
+            testCase.verifyLessThan(mu_s, 15, 'mu_s should be reasonable (<15 mm^-1)');  % CI value observed ~12.001, using 15 as upper bound
             testCase.verifyLessThan(noiseFloor_dB, 0, 'noiseFloor_dB should be negative (in dB)');
         end
         
