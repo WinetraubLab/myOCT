@@ -11,7 +11,7 @@ if ~exist('v','var')
     v = false;
 end
 
-% Get system info from persistent library.
+% Get system info from persistent library (must have been set up first)
 % If SetUp was never called the cache is empty: nothing to tear down.
 try
     [octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
