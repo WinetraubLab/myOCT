@@ -11,11 +11,12 @@ if ~exist('v','var')
     v = false;
 end
 
-% Get system info from persistent library (must have been set up first)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
-
-if isempty(octSystemName)
-    error('yOCTHardwareLibSetUp must be called before yOCTHardwareLibTearDown.');
+% Get system info from persistent library.
+% If SetUp was never called the cache is empty: nothing to tear down.
+try
+    [octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+catch
+    return;
 end
 
 %% Close hardware connections first
@@ -73,5 +74,8 @@ else
     end
 end
 
+%% Clear SetUp cache so the next run re-initializes from scratch
+% Without this, SetUp would return a stale (potentially dead) module reference.
+yOCTHardwareLibSetUp('reset');
 
 end
