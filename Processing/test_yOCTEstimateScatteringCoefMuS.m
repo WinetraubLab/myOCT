@@ -56,9 +56,9 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
             testCase.verifyTrue(isfinite(mu_s), 'mu_s should be finite');
             testCase.verifyTrue(isfinite(noiseFloor_dB), 'noiseFloor_dB should be finite');
             
-            % Range checks (sanity check only; accuracy is tested in testMuSAccuracy)
+            % Range checks
             testCase.verifyGreaterThan(mu_s, 0, 'mu_s should be positive');
-            testCase.verifyLessThan(mu_s, 20, 'mu_s should be reasonable (<20 mm^-1)');
+            testCase.verifyLessThan(mu_s, 15, 'mu_s should be reasonable (<15 mm^-1)');
             testCase.verifyLessThan(noiseFloor_dB, 0, 'noiseFloor_dB should be negative (in dB)');
         end
         
