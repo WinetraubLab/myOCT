@@ -253,7 +253,7 @@ imOutSize = [...
     length(dimOutput_mm.x.values) ...
     length(dimOutput_mm.y.values)];
 printStatsEveryyI = max(floor(length(dimOutput_mm.y.values)/20),1);
-ticBytes(gcp);
+try, ticBytes(gcp); catch, end % ticBytes requires Parallel Computing Toolbox
 if(v)
     fprintf('%s Stitching ...\n',datestr(datetime)); tt=tic();
 end
@@ -384,7 +384,7 @@ end %parfor
 
 if (v)
     fprintf('Done stitching, toatl time: %.0f[min]\n',toc(tt)/60);
-    tocBytes(gcp)
+    try, tocBytes(gcp); catch, end % tocBytes requires Parallel Computing Toolbox
 end
 
 %% Verify that all files are there
