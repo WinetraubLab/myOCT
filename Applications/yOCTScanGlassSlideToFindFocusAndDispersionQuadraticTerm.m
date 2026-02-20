@@ -14,7 +14,6 @@ function [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
 %       focus, what range should we expect it to be within? Units: microns.
 %   tempFolder: path to temporary folder to save OCT volumes.
 %   tissueRefractiveIndex: Refractive index of tissue.
-%   skipHardware: set to true to skip hardware.
 %   v: verbose (and visualize) option.
 
 %% Parse inputs
@@ -24,7 +23,6 @@ addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'dispersionQuadraticTermInitialGuess',-1.482e8,@isnumeric);
 addParameter(p,'focusPositionInImageZpixInitialGuess',400,@isnumeric);
 addParameter(p,'focusSearchSize_um',25,@(x)(isnumeric(x) & x>0));
-addParameter(p,'skipHardware',false,@islogical);
 addParameter(p,'tissueRefractiveIndex',1.4);
 addParameter(p,'tempFolder','./TmpOCTVolume/',@ischar);
 addParameter(p,'v',true,@islogical);
@@ -79,7 +77,6 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
             1e-3 * [-1, 1] * pixelSize_um, ...
             'octProbePath', in.octProbePath, ...
             'pixelSize_um', pixelSize_um, ...
-            'skipHardware', in.skipHardware, ...
             'zDepths', scanDepths_um*1e-3, ... zDepths are in mm
             'v',in.v  ...
             );
