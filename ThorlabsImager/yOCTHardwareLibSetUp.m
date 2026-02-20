@@ -33,7 +33,6 @@ end
 persistent gOCTSystemModule;
 persistent gOCTSystemName;
 persistent gSkipHardware;
-persistent gScannerIsInitialized;  % Track whether scanner is currently initialized
 
 %% Reset mode: clear cache so next call re-initializes
 % Called by yOCTHardwareLibTearDown after all cleanup is complete.

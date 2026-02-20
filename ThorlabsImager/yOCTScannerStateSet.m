@@ -1,12 +1,10 @@
 function yOCTScannerStateSet(isInitialized)
-% Set the scanner initialization state (centralized state tracking)
-% This function modifies the persistent scanner state managed by yOCTHardwareLibSetUp
+% Set the scanner initialization state.
+% Delegates to yOCTScannerState which holds the single persistent variable.
 %
 % INPUT:
 %   isInitialized: boolean indicating if scanner is initialized (true) or closed (false)
 
-persistent gScannerIsInitialized;
-
-gScannerIsInitialized = isInitialized;
+yOCTScannerState(isInitialized);
 
 end
