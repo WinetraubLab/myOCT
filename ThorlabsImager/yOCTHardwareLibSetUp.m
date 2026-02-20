@@ -32,7 +32,6 @@ end
 persistent gOCTSystemModule;
 persistent gOCTSystemName;
 persistent gSkipHardware;
-persistent gScannerIsInitialized;  % Track whether scanner is currently initialized
 
 %% Check if library is already loaded (early return)
 if ~isempty(gOCTSystemName)
