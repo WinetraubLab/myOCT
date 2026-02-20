@@ -17,7 +17,7 @@ jobs:
       - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v2
         with:
-          products: Signal_Processing_Toolbox Image_Processing_Toolbox Statistics_and_Machine_Learning_Toolbox
+          products: Signal_Processing_Toolbox Image_Processing_Toolbox Statistics_and_Machine_Learning_Toolbox Parallel_Computing_Toolbox
 
       - name: Run yOCTTestAll
         uses: matlab-actions/run-command@v2
