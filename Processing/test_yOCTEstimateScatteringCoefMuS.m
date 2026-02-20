@@ -31,6 +31,9 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
             % Simulate known mu_s
             testCase.trueMuS = 12.0;  % mm^-1 (ground truth)
             
+            % Fix random seed so results are deterministic across runs
+            rng(42);
+            
             % Create synthetic OCT data
             testCase.octData = createSyntheticOCTVolume(...
                 zSize, xSize, ySize, ...
@@ -56,9 +59,9 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
             testCase.verifyTrue(isfinite(mu_s), 'mu_s should be finite');
             testCase.verifyTrue(isfinite(noiseFloor_dB), 'noiseFloor_dB should be finite');
             
-            % Range checks
-            testCase.verifyGreaterThan(mu_s, 0, 'mu_s should be positive');
-            testCase.verifyLessThan(mu_s, 15, 'mu_s should be reasonable (<15 mm^-1)');
+            % Range check: mu_s should be within ±1 mm^-1 of the known ground truth (12)
+            testCase.verifyEqual(mu_s, testCase.trueMuS, 'AbsTol', 1.0, ...
+                sprintf('%s mu_s (%.4f mm^-1) should be within 1 mm^-1 of ground truth %.1f mm^-1', datestr(datetime), mu_s, testCase.trueMuS));
             testCase.verifyLessThan(noiseFloor_dB, 0, 'noiseFloor_dB should be negative (in dB)');
         end
         
