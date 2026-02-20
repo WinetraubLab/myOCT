@@ -1,0 +1,25 @@
+name: MATLAB tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y p7zip-full
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          products: Signal Processing Toolbox Image Processing Toolbox Statistics and Machine Learning Toolbox
+
+      - name: Run yOCTTestAll
+        uses: matlab-actions/run-command@v2
+        with:
+          command: yOCTTestAll
