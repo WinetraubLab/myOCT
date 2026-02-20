@@ -285,16 +285,16 @@ if json.plotPattern
         photobleachPlan, json.FOV, estimatedPhotobleachTime_sec);
 end
 
-%% Initialize Hardware
 % Read skipHardware and module from SetUp cache.
 % Caller must have called yOCTHardwareLibSetUp before invoking this function.
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+[~, ~, json.skipHardware] = yOCTHardwareLibSetUp();
 
 %% If skip hardware mode, we are done!
-if skipHardware
+if json.skipHardware
     return;
 end
 
+%% Initialize Hardware
 % OCT Scanner
 yOCTScannerInit(json.octProbePath,v);
 
