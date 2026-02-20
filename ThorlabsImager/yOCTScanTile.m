@@ -218,8 +218,8 @@ for scanI=1:length(in.scanOrder)
         s, ...
         'v', v);
     
-% Unzip if needed (skip when skipHardware=true — no .oct file was created)
-		if in.unzipOCTFile && ~in.skipHardware
+% Unzip if needed
+		if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
     
