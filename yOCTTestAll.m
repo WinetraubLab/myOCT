@@ -3,6 +3,9 @@
 % Get the path of the current script
 currentScriptPath = fileparts(mfilename('fullpath'));
 
+% Ensure all library subfolders are on the path (required on CI runners)
+yOCTSetLibraryPath();
+
 % Create a test suite including all tests except "test_all" in the current folder and its subfolders
 testSuite = matlab.unittest.TestSuite.fromFolder(currentScriptPath, 'IncludingSubfolders', true);
 
