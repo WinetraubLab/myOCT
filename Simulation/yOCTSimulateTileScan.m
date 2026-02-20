@@ -74,7 +74,7 @@ if exist(in.octFolder, 'dir')
     rmdir(in.octFolder, 's'); % Remove the folder and all its contents
 end
 mkdir(in.octFolder); % Recreate the folder
-awsWriteJSON(json, [in.octFolder 'ScanInfo.json']); % Use / (octFolder already ends with /)
+awsWriteJSON(json, [in.octFolder '\ScanInfo.json']);
 
 
 %% Check Json to see what is implemented
