@@ -285,7 +285,7 @@ if json.plotPattern
         photobleachPlan, json.FOV, estimatedPhotobleachTime_sec);
 end
 
-% Read skipHardware from SetUp cache.
+% Read skipHardware and module from SetUp cache.
 % Caller must have called yOCTHardwareLibSetUp before invoking this function.
 [octSystemModule, octSystemName, json.skipHardware] = yOCTHardwareLibSetUp();
 json.octSystem = octSystemName;
