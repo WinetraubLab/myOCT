@@ -287,7 +287,8 @@ end
 
 % Read skipHardware and module from SetUp cache.
 % Caller must have called yOCTHardwareLibSetUp before invoking this function.
-[~, ~, json.skipHardware] = yOCTHardwareLibSetUp();
+[octSystemModule, octSystemName, json.skipHardware] = yOCTHardwareLibSetUp();
+json.octSystem = octSystemName;
 
 %% If skip hardware mode, we are done!
 if json.skipHardware
