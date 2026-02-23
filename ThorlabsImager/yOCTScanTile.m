@@ -24,7 +24,6 @@ function [json] = yOCTScanTile(varargin)
 %	unzipOCTFile			true			Scan will scan .OCT file, if you would like to automatically unzip it set this to true.
 % Debug parameters:
 %   v                       true            verbose mode      
-%   skipHardware            false           Set to true to skip hardware operation.
 % OUTPUT:
 %   json - config file
 %
@@ -57,7 +56,6 @@ addParameter(p,'unzipOCTFile',true);
 
 % Debugging
 addParameter(p,'v',true,@islogical);
-addParameter(p,'skipHardware',false,@islogical);
 
 parse(p,varargin{:});
 
@@ -73,8 +71,9 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
-% Get OCT system from persistent library
-[octSystemModule, octSystemName, ~] = yOCTHardwareLibSetUp();
+% Get OCT system and skipHardware mode from SetUp cache.
+% Caller must have called yOCTHardwareLibSetUp before invoking this function.
+[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
 
 % Store OCT system name for JSON
 in.octSystem = octSystemName;
@@ -145,7 +144,7 @@ in.nXPixelsInEachTile = ceil(in.tileRangeX_mm/(in.pixelSize_um/1e3));
 in.nYPixelsInEachTile = ceil(in.tileRangeY_mm/(in.pixelSize_um/1e3));
 
 %% Initialize hardware
-if in.skipHardware
+if skipHardware
     % We are done, from now on it's just hardware execution
     in.octSystem = 'Unknown'; % This parameter can only be figured out when using hardware
     json = in;
