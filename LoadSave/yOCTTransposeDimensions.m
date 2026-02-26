@@ -20,9 +20,12 @@ function [dataOut, metadataOut, climOut] = yOCTTransposeDimensions(varargin)
 %       newOrder - string specifying desired dimension order, e.g. 'YZX', 'XYZ'
 %
 % PARAMETERS:
-%   'outputPath' - if specified, saves directly to file/folder and returns empty data.
+%   'outputPath' - if specified, saves directly to file and returns empty data.
 %       Can be a .tif file or folder path (same as yOCT2Tif).
 %       If not specified, returns transposed data in memory.
+%
+% NOTE: For 'XYZ' ordering, applies Fiji-compatible transformations (horizontal
+%       flip, 90° rotation, Z-axis flip) to match ImageJ/Fiji "Reslice from Bottom".
 %
 % OUTPUTS:
 %   dataOut - transposed 3D array (empty if outputPath specified)
@@ -45,32 +48,41 @@ function [dataOut, metadataOut, climOut] = yOCTTransposeDimensions(varargin)
 %   yOCTTransposeDimensions('data.tif', 'XYZ', 'outputPath', 'resliced.tif');
 
 %% Input parsing
-p = inputParser;
-addRequired(p, 'arg1'); % data or inputPath
-addOptional(p, 'arg2', []); % metadata or newOrder
-addOptional(p, 'arg3', []); % clim (only if arg1 is data)
-addOptional(p, 'arg4', []); % newOrder (only if arg1 is data)
-addParameter(p, 'outputPath', '');
+% Parse manually to avoid inputParser's ambiguity when mixing
+% optional positional arguments with name-value parameter pairs.
+outputPath = '';
 
-parse(p, varargin{:});
-in = p.Results;
+% Extract trailing name-value pairs
+args = varargin;
+i = 1;
+while i <= length(args)
+    if (ischar(args{i}) || isstring(args{i})) && i < length(args)
+        key = char(args{i});
+        if strcmpi(key, 'outputPath')
+            outputPath = char(args{i+1});
+            args(i:i+1) = [];
+            continue;
+        end
+    end
+    i = i + 1;
+end
 
 %% Determine input mode
-if isnumeric(in.arg1)
-    % Mode 1: Pre-loaded data
-    data = in.arg1;
-    metadata = in.arg2;
-    clim = in.arg3;
-    newOrder = in.arg4;
+if isnumeric(args{1})
+    % Mode 1: Pre-loaded data: (data, metadata, clim, newOrder)
+    data = args{1};
+    metadata = args{2};
+    clim = args{3};
+    newOrder = args{4};
     
     if isempty(metadata) || isempty(newOrder)
         error('When providing data directly, must provide: data, metadata, clim, newOrder');
     end
     
-elseif ischar(in.arg1) || isstring(in.arg1)
-    % Mode 2: File path
-    inputPath = char(in.arg1);
-    newOrder = in.arg2;
+elseif ischar(args{1}) || isstring(args{1})
+    % Mode 2: File path: (inputPath, newOrder)
+    inputPath = char(args{1});
+    newOrder = args{2};
     
     if isempty(newOrder)
         error('Must specify newOrder when providing file path');
@@ -113,8 +125,8 @@ if strcmp(newOrder, inputOrder)
     metadataOut = metadata;
     climOut = clim;
     
-    if ~isempty(in.outputPath)
-        yOCT2Tif(dataOut, in.outputPath, 'clim', climOut, 'metadata', metadataOut);
+    if ~isempty(outputPath)
+        yOCT2Tif(dataOut, outputPath, 'clim', climOut, 'metadata', metadataOut);
         dataOut = []; % Clear to save memory
     end
     return;
@@ -122,6 +134,21 @@ end
 
 %% Transpose the data
 dataOut = permute(data, permuteOrder);
+
+% Apply Fiji "Reslice from Bottom" orientation for XYZ ordering
+% This matches ImageJ/Fiji's reslice output convention
+if strcmp(newOrder, 'XYZ')
+    % 1. Flip horizontally (left-right)
+    dataOut = flip(dataOut, 2);
+    
+    % 2. Rotate 90° counterclockwise (aligns axes to Fiji convention)
+    for i = 1:size(dataOut, 3)
+        dataOut(:,:,i) = rot90(dataOut(:,:,i), 1);
+    end
+    
+    % 3. Flip Z-axis (Fiji's "from Bottom" = max Z to min Z)
+    dataOut = flip(dataOut, 3);
+end
 
 %% Update metadata
 % Original metadata has fields for x, y, z
@@ -153,7 +180,16 @@ for outPos = 1:3
     % Copy metadata from source dimension to target dimension
     if isfield(metadata, sourceDimName)
         metadataOut.(standardName) = metadata.(sourceDimName);
-        metadataOut.(standardName).order = outPos; % Update order field
+        metadataOut.(standardName).order = outPos;
+        
+        % Flip coordinate values for XYZ ordering (Fiji transformations)
+        if strcmp(newOrder, 'XYZ')
+            % After rotation and flips, x and y coordinates are reversed
+            if (strcmp(standardName, 'x') || strcmp(standardName, 'y')) && ...
+               isfield(metadataOut.(standardName), 'values')
+                metadataOut.(standardName).values = flip(metadataOut.(standardName).values);
+            end
+        end
     end
 end
 
@@ -170,16 +206,19 @@ end
 metadataOut.transposeInfo.originalOrder = inputOrder;
 metadataOut.transposeInfo.newOrder = newOrder;
 metadataOut.transposeInfo.permuteVector = permuteOrder;
+if strcmp(newOrder, 'XYZ')
+    metadataOut.transposeInfo.fijiTransforms = 'flip(dim2) -> rot90 -> flip(dim3)';
+end
 metadataOut.transposeInfo.timestamp = datestr(now);
 
 %% Color limits unchanged
 climOut = clim;
 
 %% Save or return
-if ~isempty(in.outputPath)
-    yOCT2Tif(dataOut, in.outputPath, 'clim', climOut, 'metadata', metadataOut);
+if ~isempty(outputPath)
+    yOCT2Tif(dataOut, outputPath, 'clim', climOut, 'metadata', metadataOut);
     dataOut = []; % Clear to save memory
-    fprintf('Transposed volume saved to: %s\n', in.outputPath);
+    fprintf('Transposed volume saved to: %s\n', outputPath);
 end
 
 end
