@@ -28,23 +28,35 @@ if ~exist('v','var')
     v = false;
 end
 
-%% Store module in a global varible 
-persistent gOCTSystemModule;
-persistent gOCTSystemName;
-persistent gSkipHardware;
-persistent gScannerIsInitialized;  % Track whether scanner is currently initialized
-
 %% Check if library is already loaded (early return)
-if ~isempty(gOCTSystemName)
-    octSystemModule = gOCTSystemModule;
-    octSystemName = gOCTSystemName;
-    skipHardware = gSkipHardware;
-    return;
+if yOCTHardwareState('isLoaded')
+    % Detect whether the caller explicitly requests a different system
+    % name or a different skipHardware mode. If changed (any), clear
+    % the cache and fall through to re initialization with new values.
+    cachedName = yOCTHardwareState('get', 'systemName');
+    cachedSkip = yOCTHardwareState('get', 'skipHardware');
+
+    systemNameChanged = nargin >= 1 && ~isempty(octSystemName) && ...
+                        ~strcmpi(octSystemName, cachedName);
+    skipChanged       = nargin >= 2 && islogical(skipHardware) && ...
+                        skipHardware ~= cachedSkip;
+
+    if systemNameChanged || skipChanged
+        % Stale cache: wipe and fall through to full init
+        yOCTHardwareState('reset');
+    else
+        % Cache is valid: return cached values
+        octSystemModule = yOCTHardwareState('get', 'systemModule');
+        octSystemName   = yOCTHardwareState('get', 'systemName');
+        skipHardware    = yOCTHardwareState('get', 'skipHardware');
+        return;
+    end
 end
 
 %% Validate inputs that are only needed for first-time load
 if isempty(octSystemName)
-    error("yOCTHardwareLibSetUp must be called with a valid 'octSystemName' the first time it is executed.");
+    error('myOCT:yOCTHardwareLibSetUp:noSystemName', ...
+          "yOCTHardwareLibSetUp must be called with a valid 'octSystemName' the first time it is executed.");
 end
 
 validSystems = {'Ganymede', 'Gan632'};
@@ -55,17 +67,17 @@ end
 
 %% Skip hardware path
 if skipHardware
-    gOCTSystemName = lower(octSystemName);
-    gOCTSystemModule = [];
-    gSkipHardware = true;
+    yOCTHardwareState('set', 'systemName',   lower(octSystemName));
+    yOCTHardwareState('set', 'systemModule', []);
+    yOCTHardwareState('set', 'skipHardware', true);
 
-    % Return 
-    octSystemModule = gOCTSystemModule;
-    octSystemName = gOCTSystemName;
-    skipHardware = gSkipHardware;
+    % Return cached values
+    octSystemModule = yOCTHardwareState('get', 'systemModule');
+    octSystemName   = yOCTHardwareState('get', 'systemName');
+    skipHardware    = yOCTHardwareState('get', 'skipHardware');
     return;
 else
-    gSkipHardware = false;
+    yOCTHardwareState('set', 'skipHardware', false);
 end
 
 %% Initialize library based on system type
@@ -83,11 +95,11 @@ switch(octSystemName)
         if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
             % DLL already in memory: get existing reference
             asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
-            gOCTSystemModule = asm;
-            gOCTSystemName = lower(octSystemName);
-            octSystemModule = gOCTSystemModule;
-            octSystemName = gOCTSystemName;
-            skipHardware = gSkipHardware;
+            yOCTHardwareState('set', 'systemModule', asm);
+            yOCTHardwareState('set', 'systemName',   lower(octSystemName));
+            octSystemModule = yOCTHardwareState('get', 'systemModule');
+            octSystemName   = yOCTHardwareState('get', 'systemName');
+            skipHardware    = yOCTHardwareState('get', 'skipHardware');
             if v
                 fprintf('%s ThorlabsImagerNET already loaded. Using existing instance. To fully reset, restart MATLAB.\n', datestr(datetime));
             end
@@ -105,7 +117,7 @@ switch(octSystemName)
         asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
     
         % Mark assembly as loaded
-        gOCTSystemModule = asm; 
+        yOCTHardwareState('set', 'systemModule', asm); 
         
     case 'gan632'
         % Gan632: Python SDK (pyspectralradar)
@@ -147,28 +159,29 @@ switch(octSystemName)
         % Import each module separately for clarity
         repoPath = fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython');
         
-        gOCTSystemModule = struct();
-        gOCTSystemModule.oct = yOCTImportPythonModule(...
+        moduleStruct = struct();
+        moduleStruct.oct = yOCTImportPythonModule(...
             'packageName', 'thorlabs_imager_oct', ...
             'repoName', repoPath, ...
             'v', v);
-        gOCTSystemModule.stage = yOCTImportPythonModule(...
+        moduleStruct.stage = yOCTImportPythonModule(...
             'packageName', 'thorlabs_imager_stage', ...
             'repoName', repoPath, ...
             'v', v);
-        gOCTSystemModule.cleanup = yOCTImportPythonModule(...
+        moduleStruct.cleanup = yOCTImportPythonModule(...
             'packageName', 'thorlabs_imager_cleanup', ...
             'repoName', repoPath, ...
             'v', v);
+        yOCTHardwareState('set', 'systemModule', moduleStruct);
         
     otherwise
         error('This should never happen')
 end
 
-gOCTSystemName = lower(octSystemName);
+yOCTHardwareState('set', 'systemName', lower(octSystemName));
 
 %% Return 
-octSystemModule = gOCTSystemModule;
-octSystemName = gOCTSystemName;
-skipHardware = gSkipHardware;
+octSystemModule = yOCTHardwareState('get', 'systemModule');
+octSystemName   = yOCTHardwareState('get', 'systemName');
+skipHardware    = yOCTHardwareState('get', 'skipHardware');
 end

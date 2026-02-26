@@ -16,7 +16,7 @@ classdef test_yOCTScanTile_SkipHardware < matlab.unittest.TestCase
 
     methods(TestMethodTeardown)
         function clearCache(~)
-            yOCTHardwareLibSetUp('reset');
+            yOCTHardwareState('reset');
         end
     end
     

@@ -1,7 +1,7 @@
 function yOCTHardwareLibTearDown(v)
 % Tear down hardware library and clean up resources.
 % Closes all hardware connections (stages + scanner) and terminates Python interpreter for Gan632.
-% Must be called after yOCTHardwareLibSetUp().
+% Safe to call even if yOCTHardwareLibSetUp was never called (returns silently).
 %
 %   INPUTS:
 %       v: Verbose mode (default: false)
@@ -11,12 +11,13 @@ if ~exist('v','var')
     v = false;
 end
 
-% Get system info from persistent library (must have been set up first)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
-
-if isempty(octSystemName)
-    error('yOCTHardwareLibSetUp must be called before yOCTHardwareLibTearDown.');
+% If SetUp was never called the state store is empty: nothing to tear down.
+if ~yOCTHardwareState('isLoaded')
+    return;
 end
+
+% Read current session values from the central store
+[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
 
 %% Close hardware connections first
 if ~skipHardware
@@ -73,5 +74,7 @@ else
     end
 end
 
+%% Clear state store so the next SetUp call re-initializes from scratch.
+yOCTHardwareState('reset');
 
 end
