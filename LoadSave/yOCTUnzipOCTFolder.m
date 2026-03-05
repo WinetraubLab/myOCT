@@ -76,13 +76,19 @@ end
 
 %Unzip using 7-zip
 if exist('C:\Program Files\7-Zip\','dir')
-    z7Path = 'C:\Program Files\7-Zip\';
+    z7Cmd = '"C:\Program Files\7-Zip\7z.exe"';
 elseif exist('C:\Program Files (x86)\7-Zip\','dir')
-    z7Path ='C:\Program Files (x86)\7-Zip\';
+    z7Cmd = '"C:\Program Files (x86)\7-Zip\7z.exe"';
+elseif isunix
+    [z7Status, ~] = system('which 7z');
+    if z7Status ~= 0
+        error('Please Install 7-Zip');
+    end
+    z7Cmd = '7z';
 else
     error('Please Install 7-Zip');
 end
-system(['"' z7Path '7z.exe" x "' OCTFolderZipFileIn '" -o"' OCTUnzipToDirectory '" -aos']);
+system([z7Cmd ' x "' OCTFolderZipFileIn '" -o"' OCTUnzipToDirectory '" -aos']);
 
 %Check unzip was successfull
 if ~exist(OCTUnzipToDirectory,'dir')
