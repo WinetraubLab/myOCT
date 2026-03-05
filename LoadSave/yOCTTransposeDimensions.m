@@ -142,9 +142,13 @@ if strcmp(newOrder, 'XYZ')
     dataOut = flip(dataOut, 2);
     
     % 2. Rotate 90° counterclockwise (aligns axes to Fiji convention)
-    for i = 1:size(dataOut, 3)
-        dataOut(:,:,i) = rot90(dataOut(:,:,i), 1);
+    % Note: rot90 changes dimensions, so we need to preallocate
+    [sz1, sz2, sz3] = size(dataOut);
+    dataRotated = zeros(sz2, sz1, sz3, class(dataOut)); % After rotation: rows↔cols swap
+    for i = 1:sz3
+        dataRotated(:,:,i) = rot90(dataOut(:,:,i), 1);
     end
+    dataOut = dataRotated;
     
     % 3. Flip Z-axis (Fiji's "from Bottom" = max Z to min Z)
     dataOut = flip(dataOut, 3);
@@ -160,6 +164,14 @@ outputPosToDimName = struct();
 outputPosToDimName.pos1 = lower(newOrder(1)); % Position 1 (rows in output)
 outputPosToDimName.pos2 = lower(newOrder(2)); % Position 2 (cols in output) 
 outputPosToDimName.pos3 = lower(newOrder(3)); % Position 3 (pages in output)
+
+% IMPORTANT: For XYZ mode with Fiji transforms, rot90 swaps dimensions 1 and 2!
+% So we need to swap the metadata assignments for positions 1 and 2
+if strcmp(newOrder, 'XYZ')
+    temp = outputPosToDimName.pos1;
+    outputPosToDimName.pos1 = outputPosToDimName.pos2;
+    outputPosToDimName.pos2 = temp;
+end
 
 % Create new metadata by reassigning dimension fields
 metadataOut = struct();
@@ -178,16 +190,29 @@ for outPos = 1:3
     sourceDimName = outputPosToDimName.(['pos' num2str(outPos)]);
     
     % Copy metadata from source dimension to target dimension
+    % This copies all fields: .values, .index, .units, .origin, .indexMax, etc.
     if isfield(metadata, sourceDimName)
         metadataOut.(standardName) = metadata.(sourceDimName);
         metadataOut.(standardName).order = outPos;
         
-        % Flip coordinate values for XYZ ordering (Fiji transformations)
+        % Update origin string to reflect transformation
+        if isfield(metadataOut.(standardName), 'origin')
+            originalOrigin = metadataOut.(standardName).origin;
+            metadataOut.(standardName).origin = sprintf(...
+                'Transformed from original %s dimension (%s -> array position %d). Original: %s', ...
+                upper(sourceDimName), newOrder, outPos, originalOrigin);
+        end
+        
+        % Flip coordinate values and index for XYZ ordering (Fiji transformations)
         if strcmp(newOrder, 'XYZ')
             % After rotation and flips, x and y coordinates are reversed
-            if (strcmp(standardName, 'x') || strcmp(standardName, 'y')) && ...
-               isfield(metadataOut.(standardName), 'values')
-                metadataOut.(standardName).values = flip(metadataOut.(standardName).values);
+            if (strcmp(standardName, 'x') || strcmp(standardName, 'y'))
+                if isfield(metadataOut.(standardName), 'values')
+                    metadataOut.(standardName).values = flip(metadataOut.(standardName).values);
+                end
+                if isfield(metadataOut.(standardName), 'index')
+                    metadataOut.(standardName).index = flip(metadataOut.(standardName).index);
+                end
             end
         end
     end
@@ -210,6 +235,22 @@ if strcmp(newOrder, 'XYZ')
     metadataOut.transposeInfo.fijiTransforms = 'flip(dim2) -> rot90 -> flip(dim3)';
 end
 metadataOut.transposeInfo.timestamp = datestr(now);
+
+% Add transformation notes and warnings
+if ~isfield(metadataOut, 'notes')
+    metadataOut.notes = {};
+end
+metadataOut.notes{end+1} = sprintf('Volume transposed from %s to %s order on %s', ...
+    inputOrder, newOrder, datestr(now));
+    
+if strcmp(newOrder, 'XYZ')
+    metadataOut.notes{end+1} = 'Applied Fiji-compatible geometric transformations (horizontal flip + 90° rotation + Z flip).';
+    metadataOut.notes{end+1} = 'WARNING: Coordinate values may not be geometrically accurate due to 90-degree rotation.';
+    metadataOut.notes{end+1} = 'For geometric accuracy, refer to transposeInfo and original dimension metadata.';
+end
+
+metadataOut.notes{end+1} = 'Dimension ordering in yOCT: position 1=z field, position 2=x field, position 3=y field (always).';
+metadataOut.notes{end+1} = 'Physical dimension meaning: check .origin field of each dimension for semantic information.';
 
 %% Color limits unchanged
 climOut = clim;
