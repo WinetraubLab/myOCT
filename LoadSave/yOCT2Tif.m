@@ -404,25 +404,82 @@ else
                 [outputFilePaths{2} '/TifMetadata.json']);
     
     % Generate a single file if required
+    % Instead of loading the entire volume into memory at once, we build
+    % the output TIFF slide by slide: read one frame, write it, discard it.
+    % This keeps memory usage at 1 slide instead of N slides.
     if isOutputFile
-        outputFileTmpPath = awsModifyPathForCompetability([outputFilePaths{3} '\all.tif']);
-        %for parforI=1:1
-        parfor(parforI=1:1,1) %Run once but on a worker
-            % Load data
-            dat = yOCTFromTif(outputFilePaths{2},'yI',1:numberOfYPlanes,'isCheckMetadata',false);
-            
-            % Save it as a single file
-            tn = [tempname '.tif'];
-            yOCT2Tif(dat,tn,'clim',c,'metadata',metadata);
-            awsCopyFile_MW1(tn,outputFileTmpPath); %Matlab worker version of copy files
-            delete(tn);
+        metaJson = GenerateMetaData(metadata, c);
+        tn = [tempname '.tif'];
+        t = Tiff(tn, 'w8');  % BigTIFF to support files > 4 GB
 
+        for frameI = 1:numberOfYPlanes
+            % Read one slide from the folder
+            fpSlide = yScanPath(outputFilePaths{2}, frameI);
+            if isAWS
+                ds = imageDatastore(fpSlide, 'readFcn', @imread);
+                bits = ds.read();
+            else
+                bits = imread(fpSlide);
+            end
+
+            if frameI > 1
+                t.writeDirectory();
+            end
+
+            % Build TIFF tags (same structure as mode=0)
+            tagstruct = struct();
+            tagstruct.ImageLength         = size(bits, 1);
+            tagstruct.ImageWidth          = size(bits, 2);
+            tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
+            tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
+            tagstruct.SampleFormat        = Tiff.SampleFormat.UInt;
+            tagstruct.BitsPerSample       = 16;
+            tagstruct.Compression         = Tiff.Compression.PackBits;
+            tagstruct.SamplesPerPixel     = 1;
+            tagstruct.RowsPerStrip        = size(bits, 1);
+            tagstruct.Orientation         = Tiff.Orientation.TopLeft;
+            tagstruct.Software            = jsonencode(metaJson);
+
+            if ~isempty(metadata) && ...
+                isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
+                isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
+                numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
+
+                meta_um = yOCTChangeDimensionsStructureUnits(metadata, 'microns');
+                pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
+                pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
+
+                if isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
+                        numel(metadata.y.values) > 1
+                    pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
+                else
+                    pixelSizeY_um = pixelSizeX_um;
+                end
+
+                tagstruct.XResolution         = 1 / (pixelSizeX_um * 1e-4);
+                tagstruct.YResolution         = 1 / (pixelSizeZ_um * 1e-4);
+                tagstruct.ResolutionUnit      = Tiff.ResolutionUnit.Centimeter;
+                tagstruct.ImageDescription    = sprintf( ...
+                    ['ImageJ=1.53\n' ...
+                     'unit=um\n' ...
+                     'spacing=%g\n' ...
+                     'images=%d\n'], ...
+                     pixelSizeY_um, numberOfYPlanes);
+            else
+                tagstruct.XResolution      = 1;
+                tagstruct.YResolution      = 1;
+                tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None;
+                tagstruct.ImageDescription = sprintf('ImageJ=1.53\nspacing=1.00\nimages=%d\n', numberOfYPlanes);
+            end
+
+            t.setTag(tagstruct);
+            t.write(uint16(bits));
         end
-        awsCopyFile_MW2(outputFilePaths{3});
-        awsCopyFileFolder(outputFileTmpPath,outputFilePaths{1});
-        
-        % Remove leftovers
-        awsRmDir(outputFilePaths{3});
+        t.close();
+
+        % Copy the assembled file to the final output destination
+        awsCopyFileFolder(tn, outputFilePaths{1});
+        delete(tn);
     end
     
     % If output folder is not required, delete it
