@@ -191,67 +191,7 @@ if mode == 0
                 t.writeDirectory();
             end
 
-            % Build and set TIFF tags
-            tagstruct.ImageLength         = size(bits, 1);
-            tagstruct.ImageWidth          = size(bits, 2);
-            tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
-            tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
-            tagstruct.SampleFormat        = Tiff.SampleFormat.UInt;
-            tagstruct.BitsPerSample       = 16;                            
-            tagstruct.Compression         = Tiff.Compression.PackBits;
-            tagstruct.SamplesPerPixel     = 1;
-            tagstruct.RowsPerStrip        = size(bits, 1);
-            tagstruct.Orientation         = Tiff.Orientation.TopLeft;
-
-            % Store our yOCT metadata in the 'Software' tag as JSON. This field 
-            % is not parsed by ImageJ, and allows yOCTFromTif to safely retrieve 
-            % it later without interfering with standard image-reading Software
-            tagstruct.Software            = jsonencode(metaJson);  % Saves our metadata in the TIFF 'Software' Tag
-            
-            % Check for valid metadata to set resolution accordingly in ImageJ.
-            % Requires at least 2 samples in x to compute pixel spacing: pixelSize = |v(2)-v(1)|.
-            % Y axis is handled separately: if only 1 B-scan is present, inter-slice spacing
-            % falls back to pixelSizeX_um since X and Y are isotropic in OCT scanning.
-            if ~isempty(metadata) && ...
-                isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
-                isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
-                numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
-
-                % Convert dimension structure to microns for accurate pixel spacing in ImageJ
-                meta_um = yOCTChangeDimensionsStructureUnits(metadata,'microns');
-                pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
-                pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
-
-                % Compute Y spacing only when Y has more than 2 values: else default 1 micron
-                if isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
-                        numel(metadata.y.values) > 1
-                    pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
-                else
-                    % PixelSizeX_um is the correct physical fallback when Y is unavailable.
-                    pixelSizeY_um = pixelSizeX_um;
-                end
-
-                % ImageJ uses 'XResolution', 'YResolution', 'ResolutionUnit', and reads 
-                % 'ImageDescription' (e.g., "unit=um") to handle units and scaling display
-                tagstruct.XResolution         = 1/(pixelSizeX_um*1e-4); % Resolution in microns
-                tagstruct.YResolution         = 1/(pixelSizeZ_um*1e-4); % Z is Y in ImageJ/Fiji
-                tagstruct.ResolutionUnit      = Tiff.ResolutionUnit.Centimeter; % Inch also possible
-                tagstruct.ImageDescription = sprintf( ...
-                    ['ImageJ=1.53\n' ...
-                     'unit=um\n' ...
-                     'spacing=%g\n' ...    % Set Z spacing in Fiji (which is the same as Y axis in metadata)
-                     'images=%d\n'], ...
-                     pixelSizeY_um, size(data,3));
-            else
-
-                % Default to 1 px if metadata is invalid or absent
-                % No valid metadata provided. Using default resolution = 1 pixel (no real-world scaling).
-                tagstruct.XResolution      = 1;   % 1 pixel
-                tagstruct.YResolution      = 1;   % 1 pixel
-                tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None; 
-                tagstruct.ImageDescription = sprintf('ImageJ=1.53\nspacing=1.00\nimages=%d\n', size(data,3));
-            end
-
+            tagstruct = buildTiffTagStruct(bits, metaJson, metadata, size(data,3));
             t.setTag(tagstruct);
             t.write(bits);
         end
@@ -426,52 +366,7 @@ else
                 t.writeDirectory();
             end
 
-            % Build TIFF tags (same structure as mode=0)
-            tagstruct = struct();
-            tagstruct.ImageLength         = size(bits, 1);
-            tagstruct.ImageWidth          = size(bits, 2);
-            tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
-            tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
-            tagstruct.SampleFormat        = Tiff.SampleFormat.UInt;
-            tagstruct.BitsPerSample       = 16;
-            tagstruct.Compression         = Tiff.Compression.PackBits;
-            tagstruct.SamplesPerPixel     = 1;
-            tagstruct.RowsPerStrip        = size(bits, 1);
-            tagstruct.Orientation         = Tiff.Orientation.TopLeft;
-            tagstruct.Software            = jsonencode(metaJson);
-
-            if ~isempty(metadata) && ...
-                isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
-                isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
-                numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
-
-                meta_um = yOCTChangeDimensionsStructureUnits(metadata, 'microns');
-                pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
-                pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
-
-                if isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
-                        numel(metadata.y.values) > 1
-                    pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
-                else
-                    pixelSizeY_um = pixelSizeX_um;
-                end
-
-                tagstruct.XResolution         = 1 / (pixelSizeX_um * 1e-4);
-                tagstruct.YResolution         = 1 / (pixelSizeZ_um * 1e-4);
-                tagstruct.ResolutionUnit      = Tiff.ResolutionUnit.Centimeter;
-                tagstruct.ImageDescription    = sprintf( ...
-                    ['ImageJ=1.53\n' ...
-                     'unit=um\n' ...
-                     'spacing=%g\n' ...
-                     'images=%d\n'], ...
-                     pixelSizeY_um, numberOfYPlanes);
-            else
-                tagstruct.XResolution      = 1;
-                tagstruct.YResolution      = 1;
-                tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None;
-                tagstruct.ImageDescription = sprintf('ImageJ=1.53\nspacing=1.00\nimages=%d\n', numberOfYPlanes);
-            end
-
+            tagstruct = buildTiffTagStruct(bits, metaJson, metadata, numberOfYPlanes);
             t.setTag(tagstruct);
             t.write(uint16(bits));
         end
@@ -497,3 +392,51 @@ meta.metadata = metadata;
 meta.clim = c;
 meta.version = 3;
 metaJson = meta;
+
+%% Build the TIFF tag struct used when writing frames
+%  This centralises base tags + ImageJ resolution / metadata so the logic is
+%  written once and shared by mode 0 (regular) and mode 3 (finalization).
+function tagstruct = buildTiffTagStruct(bits, metaJson, metadata, totalFrames)
+tagstruct.ImageLength         = size(bits, 1);
+tagstruct.ImageWidth          = size(bits, 2);
+tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
+tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
+tagstruct.SampleFormat        = Tiff.SampleFormat.UInt;
+tagstruct.BitsPerSample       = 16;
+tagstruct.Compression         = Tiff.Compression.PackBits;
+tagstruct.SamplesPerPixel     = 1;
+tagstruct.RowsPerStrip        = size(bits, 1);
+tagstruct.Orientation         = Tiff.Orientation.TopLeft;
+tagstruct.Software            = jsonencode(metaJson);
+
+if ~isempty(metadata) && ...
+    isfield(metadata, 'x') && isfield(metadata.x, 'values') && ...
+    isfield(metadata, 'z') && isfield(metadata.z, 'values') && ...
+    numel(metadata.x.values) > 1 && numel(metadata.z.values) > 1
+
+    meta_um = yOCTChangeDimensionsStructureUnits(metadata, 'microns');
+    pixelSizeX_um = abs(meta_um.x.values(2) - meta_um.x.values(1));
+    pixelSizeZ_um = abs(meta_um.z.values(2) - meta_um.z.values(1));
+
+    if isfield(metadata, 'y') && isfield(metadata.y, 'values') && ...
+            numel(metadata.y.values) > 1
+        pixelSizeY_um = abs(meta_um.y.values(2) - meta_um.y.values(1));
+    else
+        pixelSizeY_um = pixelSizeX_um;
+    end
+
+    tagstruct.XResolution      = 1 / (pixelSizeX_um * 1e-4);
+    tagstruct.YResolution      = 1 / (pixelSizeZ_um * 1e-4);
+    tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.Centimeter;
+    tagstruct.ImageDescription = sprintf( ...
+        ['ImageJ=1.53\n' ...
+         'unit=um\n' ...
+         'spacing=%g\n' ...
+         'images=%d\n'], ...
+         pixelSizeY_um, totalFrames);
+else
+    tagstruct.XResolution      = 1;
+    tagstruct.YResolution      = 1;
+    tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None;
+    tagstruct.ImageDescription = sprintf('ImageJ=1.53\nspacing=1.00\nimages=%d\n', totalFrames);
+end
