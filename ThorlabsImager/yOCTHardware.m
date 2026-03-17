@@ -2,6 +2,12 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 % Unified OCT hardware manager.
 % Handles module loading, scanner initialization, teardown, and state.
 %
+% OUTPUTS ('status' mode):
+%   octSystemModule    - Handle struct for the loaded hardware interface
+%   octSystemName      - Lowercase system name (e.g. 'ganymede' or 'gan632')
+%   skipHardware       - True when hardware calls are skipped
+%   scannerInitialized - True when scanner is currently initialized
+%
 % COMMANDS:
 %   'init'     - Load module and initialize scanner.
 %                yOCTHardware('init', octSystemName, skipHardware, octProbePath, verbose)
@@ -17,11 +23,6 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %   'reset'    - Clear all persistent variables without closing hardware.
 %                yOCTHardware('reset')
 %
-% OUTPUTS:
-%   octSystemModule    - Handle struct for the loaded hardware interface
-%   octSystemName      - Lowercase system name (e.g. 'ganymede' or 'gan632')
-%   skipHardware       - True when hardware calls are skipped
-%   scannerInitialized - True when scanner is currently initialized
 
 %% Persistent state (single source of truth)
 persistent gOCTSystemModule;
