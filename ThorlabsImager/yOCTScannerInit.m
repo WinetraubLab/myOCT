@@ -16,12 +16,11 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
+[octSystemModule, octSystemName, skipHardware, scannerAlreadyInit] = yOCTHardware('status');
 
 %% Initialize scanner
 if ~skipHardware
     % Check if scanner is already initialized before attempting close
-    [~,~,~,scannerAlreadyInit] = yOCTHardware('status');
     if scannerAlreadyInit
         if (v)
             fprintf('%s Scanner already initialized. Closing and reinitializing...\n',datestr(datetime));

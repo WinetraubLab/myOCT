@@ -56,7 +56,7 @@ if ~exist(in.octProbePath,'file')
 end
 
 % Get OCT system from hardware cache
-[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
+[octSystemModule, octSystemName, skipHardware, scannerInit] = yOCTHardware('status');
 
 % Store OCT system name for JSON
 in.octSystem = octSystemName;
@@ -82,7 +82,6 @@ if (v)
 end
 
 % Verify scanner is initialized (should have been done by yOCTHardware('init'))
-[~,~,~,scannerInit] = yOCTHardware('status');
 if ~scannerInit
     error('myOCT:yOCTTakeImagesTile:scannerNotInitialized', ...
         'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTTakeImagesTile.');

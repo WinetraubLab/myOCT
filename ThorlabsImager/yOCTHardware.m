@@ -4,9 +4,7 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %
 % COMMANDS:
 %   'init'     - Load module and initialize scanner.
-%                yOCTHardware('init', octSystemName, skipHardware, octProbePath, v)
-%                If already initialized with same args, early-returns (idempotent).
-%                If a parameter changed, auto-teardown + re-init.
+%                yOCTHardware('init', octSystemName, skipHardware, octProbePath, verbose)
 %                octProbePath can be '' when skipHardware=true.
 %
 %   'status'   - Return cached state without modification.
@@ -15,18 +13,15 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %
 %   'teardown' - Close scanner, close hardware, terminate Python (Gan632), reset cache.
 %                yOCTHardware('teardown')
-%                Verbose mode is inherited from the last init call.
-%                Safe to call if init was never called (returns silently).
 %
 %   'reset'    - Clear all persistent variables without closing hardware.
 %                yOCTHardware('reset')
-%                Safe to call anytime. Used by tests and internally by teardown.
 %
 % OUTPUTS:
-%   octSystemModule    - Handle/struct for the loaded hardware interface.
-%   octSystemName      - Lowercase system name ('ganymede' or 'gan632').
-%   skipHardware       - Boolean, true when hardware calls are skipped.
-%   scannerInitialized - Boolean, true when scanner is currently initialized.
+%   octSystemModule    - Handle struct for the loaded hardware interface
+%   octSystemName      - Lowercase system name (e.g. 'ganymede' or 'gan632')
+%   skipHardware       - True when hardware calls are skipped
+%   scannerInitialized - True when scanner is currently initialized
 
 %% Persistent state (single source of truth)
 persistent gOCTSystemModule;
@@ -49,9 +44,7 @@ if ~exist('v','var'),             v = false; end
 %% Command dispatch
 switch lower(command)
 
-%% ================================================================
-%  RESET — clear cache without closing hardware
-%  ================================================================
+%  RESET: clear cache without closing hardware
 case 'reset'
     gOCTSystemModule = [];
     gOCTSystemName   = [];
@@ -65,9 +58,7 @@ case 'reset'
     scannerInitialized = false;
     return;
 
-%% ================================================================
-%  STATUS — return cached state (read-only)
-%  ================================================================
+%  STATUS: return cached state (read only)
 case 'status'
     if isempty(gOCTSystemName)
         error('myOCT:yOCTHardware:notInitialized', ...
@@ -79,9 +70,7 @@ case 'status'
     scannerInitialized = ~isempty(gScannerInitialized) && gScannerInitialized;
     return;
 
-%% ================================================================
-%  TEARDOWN — close scanner, close hardware, terminate Python, reset
-%  ================================================================
+%  TEARDOWN: close scanner, close hardware, terminate Python, reset
 case 'teardown'
     % Use cached verbose if caller didn't pass one
     if ~v && ~isempty(gVerbose)
@@ -154,9 +143,7 @@ case 'teardown'
     scannerInitialized = false;
     return;
 
-%% ================================================================
-%  INIT — load module + initialize scanner
-%  ================================================================
+%  INIT: load module + initialize scanner
 case 'init'
     % Store verbose for reuse in teardown
     if v
@@ -199,7 +186,7 @@ case 'init'
             ['Invalid OCT System: %s' newline 'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemName);
     end
 
-    %% skipHardware path — cache state and return (no module, no scanner)
+    %% skipHardware path: cache state and return (no module, no scanner)
     if skipHardware
         gOCTSystemName   = lower(octSystemName);
         gOCTSystemModule = [];

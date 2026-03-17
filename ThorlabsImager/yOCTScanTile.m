@@ -73,7 +73,7 @@ end
 
 % Get OCT system and skipHardware mode from hardware cache.
 % Caller must have called yOCTHardware('init', ...) before invoking this function.
-[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
+[octSystemModule, octSystemName, skipHardware, scannerInit] = yOCTHardware('status');
 
 % Store OCT system name for JSON
 in.octSystem = octSystemName;
@@ -152,7 +152,6 @@ if skipHardware
 end
 
 %% Verify scanner is initialized (should have been done by yOCTHardware('init'))
-[~,~,~,scannerInit] = yOCTHardware('status');
 if ~scannerInit
     error('myOCT:yOCTScanTile:scannerNotInitialized', ...
         'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTScanTile.');

@@ -287,7 +287,7 @@ end
 
 % Read skipHardware and module from hardware cache.
 % Caller must have called yOCTHardware('init', ...) before invoking this function.
-[octSystemModule, octSystemName, json.skipHardware] = yOCTHardware('status');
+[octSystemModule, octSystemName, json.skipHardware, scannerInit] = yOCTHardware('status');
 json.octSystem = octSystemName;
 
 %% If skip hardware mode, we are done!
@@ -297,7 +297,6 @@ end
 
 %% Initialize Hardware
 % Verify scanner is initialized (should have been done by yOCTHardware('init'))
-[~,~,~,scannerInit] = yOCTHardware('status');
 if ~scannerInit
     error('myOCT:yOCTPhotobleachTile:scannerNotInitialized', ...
         'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTPhotobleachTile.');

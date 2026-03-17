@@ -1,5 +1,4 @@
 classdef test_yOCTHardware < matlab.unittest.TestCase
-    % Tests for yOCTHardware unified hardware manager.
     % All tests use skipHardware=true so no real DLL or Python module is
     % needed. What we verify is pure cache and state logic.
 
@@ -37,7 +36,7 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
             testCase.verifyFalse(scanInit);
         end
 
-        %% Status: returns cache including scannerInitialized
+        %% Status: returns cache with all outputs
         function testStatusReturnsCache(testCase)
             yOCTHardware('init', 'Gan632', true, '');
             [module, name, skip, scanInit] = yOCTHardware('status');
