@@ -26,7 +26,7 @@ if ~exist('v','var')
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 %% Compute current and new coordinates in both OCT and stage coordinate systems
 global gStageCurrentStagePosition_StageCoordinates;

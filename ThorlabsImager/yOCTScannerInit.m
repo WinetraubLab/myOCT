@@ -16,12 +16,13 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 %% Initialize scanner
 if ~skipHardware
     % Check if scanner is already initialized before attempting close
-    if yOCTScannerStateGet()
+    [~,~,~,scannerAlreadyInit] = yOCTHardware('status');
+    if scannerAlreadyInit
         if (v)
             fprintf('%s Scanner already initialized. Closing and reinitializing...\n',datestr(datetime));
         end
@@ -32,23 +33,20 @@ if ~skipHardware
             % Ignore errors if scanner wasn't initialized properly
         end
     end
-    
+
     % Initialize scanner based on system type
     switch(octSystemName)
         case 'ganymede'
             % Ganymede: Use C# DLL (ThorlabsImagerNET)
             ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath);
-    
+
         case 'gan632'
             % GAN632: Use Python SDK (pyspectralradar)
             octSystemModule.oct.yOCTScannerInit(octProbePath);
-    
+
         otherwise
             error('This should never happen')
     end
-    
-    % Mark scanner as initialized
-    yOCTScannerStateSet(true);
 end
 
 %% Finish up

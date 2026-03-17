@@ -71,9 +71,9 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
-% Get OCT system and skipHardware mode from SetUp cache.
-% Caller must have called yOCTHardwareLibSetUp before invoking this function.
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+% Get OCT system and skipHardware mode from hardware cache.
+% Caller must have called yOCTHardware('init', ...) before invoking this function.
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Store OCT system name for JSON
 in.octSystem = octSystemName;
@@ -151,7 +151,12 @@ if skipHardware
     return;
 end
 
-yOCTScannerInit(in.octProbePath,v); % Init OCT
+%% Verify scanner is initialized (should have been done by yOCTHardware('init'))
+[~,~,~,scannerInit] = yOCTHardware('status');
+if ~scannerInit
+    error('myOCT:yOCTScanTile:scannerNotInitialized', ...
+        'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTScanTile.');
+end
 
 %% Check working distance
 % Make sure depths are ok for working distance's sake 
@@ -237,8 +242,6 @@ pause(0.5);
 if (v)
     fprintf('%s Finalizing\n', datestr(datetime));
 end
-
-yOCTScannerClose();
 
 % Save scan configuration parameters
 awsWriteJSON(in, [octFolder '\ScanInfo.json']);

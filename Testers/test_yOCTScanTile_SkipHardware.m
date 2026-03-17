@@ -10,13 +10,13 @@ classdef test_yOCTScanTile_SkipHardware < matlab.unittest.TestCase
         function initCache(~)
             % Initialize SetUp cache with skipHardware=true so yOCTScanTile
             % reads the correct mode from cache without requiring real hardware.
-            yOCTHardwareLibSetUp('Ganymede', true);
+            yOCTHardware('init', 'Ganymede', true, '');
         end
     end
 
     methods(TestMethodTeardown)
         function clearCache(~)
-            yOCTHardwareLibSetUp('reset');
+            yOCTHardware('reset');
         end
     end
     

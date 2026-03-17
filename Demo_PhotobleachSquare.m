@@ -12,10 +12,11 @@ yOCTSetLibraryPath(); % Set path
 % physcaily running the test.
 skipHardware = false;
 octSystem = 'Ganymede'; % OCT system selection ('Ganymede' or 'Gan632')
-yOCTHardwareLibSetUp(octSystem, skipHardware);
 
 % Photobleach pattern configuration
 octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Select lens magnification
+
+yOCTHardware('init', octSystem, skipHardware, octProbePath);
 
 % Pattern to photobleach. System will photobleach n lines from 
 % (x_start(i), y_start(i)) to (x_end(i), y_end(i))

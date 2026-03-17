@@ -27,7 +27,7 @@ octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OC
 skipHardware = false;
 
 %% Load hardware
-yOCTHardwareLibSetUp(octSystem, skipHardware, true)
+yOCTHardware('init', octSystem, skipHardware, octProbePath, true)
 
 %% Compute scanning parameters
 
@@ -62,4 +62,4 @@ colorbar;
 grid on;
 
 %% Cleanup for next run
-yOCTHardwareLibTearDown(true);
+yOCTHardware('teardown');

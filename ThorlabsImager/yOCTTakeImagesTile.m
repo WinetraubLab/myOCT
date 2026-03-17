@@ -55,8 +55,8 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
-% Get OCT system from persistent library
-[octSystemModule, octSystemName, ~] = yOCTLoadHardwareLib();
+% Get OCT system from hardware cache
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Store OCT system name for JSON
 in.octSystem = octSystemName;
@@ -81,7 +81,12 @@ if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
 
-yOCTScannerInit(in.octProbePath, v); % Init OCT
+% Verify scanner is initialized (should have been done by yOCTHardware('init'))
+[~,~,~,scannerInit] = yOCTHardware('status');
+if ~scannerInit
+    error('myOCT:yOCTTakeImagesTile:scannerNotInitialized', ...
+        'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTTakeImagesTile.');
+end
 [x0,y0] = yOCTStageInit(in.oct2stageXYAngleDeg);
 
 %Set lightring power
@@ -153,7 +158,6 @@ ThorlabsImagerNET.ThorlabsImager.yOCTSetCameraRingLightIntensity(0);
 if (v)
     fprintf('%s Finalizing\n',datestr(datetime));
 end
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
 
 %Save scan configuration parameters
 awsWriteJSON(in, [imageFolder '\ImageInfo.json']);

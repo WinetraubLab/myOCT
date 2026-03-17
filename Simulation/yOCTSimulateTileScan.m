@@ -55,7 +55,7 @@ in.octFolder = awsModifyPathForCompetability([fileparts(in.octFolder) '/']);
 %% Run yOCTScanTile to get the json
 
 % Simulation always skips hardware; set the cache so yOCTScanTile reads it
-yOCTHardwareLibSetUp('Ganymede', true);
+yOCTHardware('init', 'Ganymede', true, '');
 
 % Create parameters list
 paramToKeep = ones(size(varargin),'logical');

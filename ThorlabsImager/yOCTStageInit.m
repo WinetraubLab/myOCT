@@ -46,7 +46,7 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Initialize position values
 if ~skipHardware

@@ -45,7 +45,7 @@ skipScanning = false;
 scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
 
 %% Load hardware
-yOCTHardwareLibSetUp(octSystem, skipScanning, true)
+yOCTHardware('init', octSystem, skipScanning, octProbePath, true)
 
 %% Compute scanning parameters
 
@@ -177,4 +177,4 @@ yOCTCreateTemporalSliceMovieFrom3DTiffs(...
     );
 
 %% Cleanup for next run
-yOCTHardwareLibTearDown(true);
+yOCTHardware('teardown');

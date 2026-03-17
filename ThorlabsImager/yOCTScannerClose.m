@@ -16,7 +16,7 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 %% Close scanner based on system type
 if ~skipHardware
@@ -56,9 +56,6 @@ else
         fprintf('%s Scanner close skipped (skipHardware = true)\n', datestr(datetime));
     end
 end
-
-% Mark scanner as closed
-yOCTScannerStateSet(false);
 
 %% Finish up
 if (v)

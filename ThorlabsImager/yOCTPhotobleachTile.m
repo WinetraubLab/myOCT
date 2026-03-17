@@ -285,9 +285,9 @@ if json.plotPattern
         photobleachPlan, json.FOV, estimatedPhotobleachTime_sec);
 end
 
-% Read skipHardware and module from SetUp cache.
-% Caller must have called yOCTHardwareLibSetUp before invoking this function.
-[octSystemModule, octSystemName, json.skipHardware] = yOCTHardwareLibSetUp();
+% Read skipHardware and module from hardware cache.
+% Caller must have called yOCTHardware('init', ...) before invoking this function.
+[octSystemModule, octSystemName, json.skipHardware] = yOCTHardware('status');
 json.octSystem = octSystemName;
 
 %% If skip hardware mode, we are done!
@@ -296,8 +296,12 @@ if json.skipHardware
 end
 
 %% Initialize Hardware
-% OCT Scanner
-yOCTScannerInit(json.octProbePath,v);
+% Verify scanner is initialized (should have been done by yOCTHardware('init'))
+[~,~,~,scannerInit] = yOCTHardware('status');
+if ~scannerInit
+    error('myOCT:yOCTPhotobleachTile:scannerNotInitialized', ...
+        'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTPhotobleachTile.');
+end
 
 % Translational stage
 [x0,y0,z0] = yOCTStageInit(json.oct2stageXYAngleDeg, NaN, NaN, v);
@@ -401,8 +405,6 @@ end
 
 % Return stage to original position
 yOCTStageMoveTo(x0,y0,z0,v);
-
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
 
 %% Working with live laser
 function photobleach_lines(ptStart,ptEnd, exposures_sec, v, json)
