@@ -355,12 +355,8 @@ else
         for frameI = 1:numberOfYPlanes
             % Read one slide from the folder
             fpSlide = yScanPath(outputFilePaths{2}, frameI);
-            if isAWS
-                ds = imageDatastore(fpSlide, 'readFcn', @imread);
-                bits = ds.read();
-            else
-                bits = imread(fpSlide);
-            end
+            ds = imageDatastore(fpSlide, 'readFcn', @imread);
+            bits = ds.read();
 
             if frameI > 1
                 t.writeDirectory();
