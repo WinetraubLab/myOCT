@@ -3,8 +3,6 @@ function yOCTTestGeometricTransform()
 % This function tests yOCTTransposeDimensions to ensure transformations
 % preserve data integrity and correctly remap spatial dimensions
 
-fprintf('Testing Geometric Transformations...\n');
-
 % Test parameters
 zSize = 10;  % Depth
 xSize = 15;  % Width
@@ -138,8 +136,6 @@ try
     
     fprintf('  Geometric transformation tests passed!\n');
     
-catch ME
-    % Clean up before rethrowing
     if exist(testFile, 'file')
         delete(testFile);
     end
