@@ -176,7 +176,7 @@ if mode == 0
     end
     
     % encode meta data
-    metaJson = GenerateMetaData(metadata,c);
+    metaJson = buildTiffVolumeMetadata(metadata,c);
     
     if isOutputFile
         t = Tiff(outputFilePaths{1}, 'w8');  % Open Tiff file as BigTIFF
@@ -191,7 +191,7 @@ if mode == 0
                 t.writeDirectory();
             end
 
-            tagstruct = buildTiffTagStruct(bits, metaJson, metadata, size(data,3));
+            tagstruct = buildTiffFrameTags(bits, metaJson, metadata, size(data,3));
             t.setTag(tagstruct);
             t.write(bits);
         end
@@ -339,7 +339,7 @@ else
     awsCopyFile_MW2(outputFilePaths{2});
     
     % Finish generating a folder by placing metadata
-    metaJson = GenerateMetaData(metadata,c);
+    metaJson = buildTiffVolumeMetadata(metadata,c);
     awsWriteJSON(metaJson, ...
                 [outputFilePaths{2} '/TifMetadata.json']);
     
@@ -348,7 +348,7 @@ else
     % the output TIFF slide by slide: read one frame, write it, discard it.
     % This keeps memory usage at 1 slide instead of N slides.
     if isOutputFile
-        metaJson = GenerateMetaData(metadata, c);
+        metaJson = buildTiffVolumeMetadata(metadata, c);
         tn = [tempname '.tif'];
         t = Tiff(tn, 'w8');  % BigTIFF to support files > 4 GB
 
@@ -362,7 +362,7 @@ else
                 t.writeDirectory();
             end
 
-            tagstruct = buildTiffTagStruct(bits, metaJson, metadata, numberOfYPlanes);
+            tagstruct = buildTiffFrameTags(bits, metaJson, metadata, numberOfYPlanes);
             t.setTag(tagstruct);
             t.write(uint16(bits));
         end
@@ -383,16 +383,17 @@ function p = yScanPath(outputFilePaths,yIndex)
 p = awsModifyPathForCompetability(... 
     sprintf('%s/y%04d.tif', outputFilePaths,yIndex));
 
-function metaJson = GenerateMetaData(metadata,c)
+function metaJson = buildTiffVolumeMetadata(metadata,c)
+%  This wrapper is called once per volume before the frame loop
 meta.metadata = metadata;
 meta.clim = c;
 meta.version = 3;
 metaJson = meta;
 
-%% Build the TIFF tag struct used when writing frames
-%  This centralises base tags + ImageJ resolution / metadata so the logic is
-%  written once and shared by mode 0 (regular) and mode 3 (finalization).
-function tagstruct = buildTiffTagStruct(bits, metaJson, metadata, totalFrames)
+%% Build TIFF tags per frame (image dimensions, compression, ImageJ resolution)
+%  This wrapper is called once per frame inside the write loop
+%  It consumes the volume metadata produced by buildTiffVolumeMetadata
+function tagstruct = buildTiffFrameTags(bits, metaJson, metadata, totalFrames)
 tagstruct.ImageLength         = size(bits, 1);
 tagstruct.ImageWidth          = size(bits, 2);
 tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
