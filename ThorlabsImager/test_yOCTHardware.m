@@ -14,6 +14,15 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
         end
     end
 
+    methods(Static, Access = private)
+        function initAndThrow()
+            % Helper: init + onCleanup + throw, mirroring the script pattern.
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
+            cleanupObj = onCleanup(@() yOCTHardware('teardown')); %#ok<NASGU>
+            error('test:deliberate', 'Simulated script error');
+        end
+    end
+
     methods(Test)
 
         %% Init: first call caches all outputs
@@ -106,6 +115,21 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
             [~, name, ~] = yOCTHardware('init', ...
                 'OCTSystem', 'Gan632', 'skipHardware', true);
             testCase.verifyEqual(name, 'gan632');
+        end
+
+        %% onCleanup: teardown runs even when function throws
+        function testOnCleanupRunsTeardownOnError(testCase)
+            % Simulate the script pattern: init + onCleanup + error.
+            % When the helper function exits (via error), onCleanup fires
+            % teardown, clearing the cache.
+            try
+                test_yOCTHardware.initAndThrow();
+            catch
+                % Expected — the helper threw on purpose.
+            end
+            % If onCleanup fired teardown, cache is empty now.
+            testCase.verifyError(@() yOCTHardware('status'), ...
+                'myOCT:yOCTHardware:notInitialized');
         end
 
         %% Reset: clears cache and scanner state

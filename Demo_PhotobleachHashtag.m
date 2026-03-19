@@ -18,6 +18,7 @@ octProbePath = yOCTGetProbeIniPath('40x'); % Select lens magnification
 
 yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipHardware, ...
     'octProbePath', octProbePath);
+cleanupObj = onCleanup(@() yOCTHardware('teardown'));
 
 % Define the pattern 
 base = 100e-3; %base seperation [mm]
@@ -53,3 +54,6 @@ yOCTPhotobleachTile(...
     'plotPattern',true, ...
     'v',true); 
 axis xy
+
+%% Cleanup for next run
+yOCTHardware('teardown');

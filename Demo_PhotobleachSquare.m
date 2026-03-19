@@ -18,6 +18,7 @@ octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Select lens magnification
 
 yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipHardware, ...
     'octProbePath', octProbePath);
+cleanupObj = onCleanup(@() yOCTHardware('teardown'));
 
 % Pattern to photobleach. System will photobleach n lines from 
 % (x_start(i), y_start(i)) to (x_end(i), y_end(i))
@@ -88,3 +89,6 @@ yOCTPhotobleachTile(...
     'nPasses',nPasses,...
     'plotPattern',true, ...
     'v',true); 
+
+%% Cleanup for next run
+yOCTHardware('teardown');

@@ -47,6 +47,7 @@ scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
 %% Load hardware
 yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipScanning, ...
     'octProbePath', octProbePath, 'v', true)
+cleanupObj = onCleanup(@() yOCTHardware('teardown'));
 
 %% Compute scanning parameters
 

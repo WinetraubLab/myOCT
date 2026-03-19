@@ -40,6 +40,7 @@ skipScanning = false;
 %% Load hardware
 yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipScanning, ...
     'octProbePath', octProbePath, 'v', true);
+cleanupObj = onCleanup(@() yOCTHardware('teardown'));
 
 %% Compute scanning parameters
 
