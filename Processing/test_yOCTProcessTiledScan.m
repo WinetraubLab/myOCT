@@ -2,7 +2,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
 
     methods(TestClassSetup)
         function setupHardwareLib(~)
-            yOCTHardware('init', 'Ganymede', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Ganymede', 'skipHardware', true);
         end
     end
     

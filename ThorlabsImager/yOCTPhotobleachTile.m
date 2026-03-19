@@ -285,9 +285,9 @@ if json.plotPattern
         photobleachPlan, json.FOV, estimatedPhotobleachTime_sec);
 end
 
-% Read skipHardware and module from hardware cache.
-% Caller must have called yOCTHardware('init', ...) before invoking this function.
-[octSystemModule, octSystemName, json.skipHardware, scannerInit] = yOCTHardware('status');
+% Verify hardware is initialized and get cached state.
+yOCTHardware('verifyInit');
+[~, octSystemName, json.skipHardware] = yOCTHardware('status');
 json.octSystem = octSystemName;
 
 %% If skip hardware mode, we are done!
@@ -296,14 +296,9 @@ if json.skipHardware
 end
 
 %% Initialize Hardware
-% Verify scanner is initialized (should have been done by yOCTHardware('init'))
-if ~scannerInit
-    error('myOCT:yOCTPhotobleachTile:scannerNotInitialized', ...
-        'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTPhotobleachTile.');
-end
 
 % Translational stage
-[x0,y0,z0] = yOCTStageInit(json.oct2stageXYAngleDeg, NaN, NaN, v);
+[x0,y0,z0] = yOCTHardware_initStage(json.oct2stageXYAngleDeg, NaN, NaN, v);
 
 if (v)
     fprintf('%s Initialzing Motorized Translation Stage Hardware Completed\n',datestr(datetime));

@@ -36,6 +36,7 @@ in = p.Results;
 rotationAngle_deg = 0; % Rotation angle [deg]
 
 %% Get the loaded hardware library
+yOCTHardware('verifyInit');
 [octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 %% Dispatch to appropriate implementation based on system type
@@ -78,7 +79,8 @@ if ~skipHardware
                         in.outputDirectory); % Output folder (must not exist before scan)
                         
                 otherwise
-                    error('Unknown OCT system: %s. Must call yOCTHardware(''init'', ...) first.', octSystemName);
+                    % Should never reach here: yOCTHardware('verifyInit') validates system before this point.
+                    error('Unknown OCT system: %s.', octSystemName);
             end
             
             % If successful, break out of retry loop

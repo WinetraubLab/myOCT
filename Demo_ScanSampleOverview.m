@@ -27,7 +27,8 @@ octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OC
 skipHardware = false;
 
 %% Load hardware
-yOCTHardware('init', octSystem, skipHardware, octProbePath, true)
+yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipHardware, ...
+    'octProbePath', octProbePath, 'v', true)
 
 %% Compute scanning parameters
 

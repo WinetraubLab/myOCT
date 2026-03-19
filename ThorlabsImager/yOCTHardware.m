@@ -1,4 +1,4 @@
-function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yOCTHardware(command, octSystemName, skipHardware, octProbePath, v)
+function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yOCTHardware(command, varargin)
 % Unified OCT hardware manager.
 % Handles module loading, scanner initialization, teardown, and state.
 %
@@ -9,98 +9,116 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %   scannerInitialized - True when scanner is currently initialized
 %
 % COMMANDS:
-%   'init'     - Load module and initialize scanner.
-%                yOCTHardware('init', octSystemName, skipHardware, octProbePath, verbose)
-%                octProbePath can be '' when skipHardware=true.
+%   'init'       - Load module and initialize scanner.
+%                  yOCTHardware('init', 'OCTSystem', name, 'skipHardware', tf, ...
+%                               'octProbePath', path, 'v', tf)
+%                  octProbePath can be '' when skipHardware=true.
 %
-%   'status'   - Return cached state without modification.
-%                [module, name, skip, scannerInit] = yOCTHardware('status')
-%                Errors if init was never called.
+%   'status'     - Return cached state without modification.
+%                  [module, name, skip, scannerInit] = yOCTHardware('status')
+%                  Errors if init was never called.
 %
-%   'teardown' - Close scanner, close hardware, terminate Python (Gan632), reset cache.
-%                yOCTHardware('teardown')
+%   'verifyInit' - Verify that init was called and scanner is ready.
+%                  Throws an error if hardware is not initialized, or if
+%                  skipHardware is false and the scanner has not been opened.
+%                  yOCTHardware('verifyInit')
 %
-%   'reset'    - Clear all persistent variables without closing hardware.
-%                yOCTHardware('reset')
+%   'teardown'   - Close scanner, close hardware, terminate Python (Gan632),
+%                  reset cache.
+%                  yOCTHardware('teardown')
+%                  Optional: yOCTHardware('teardown', 'v', true)
 %
+%   'reset'      - Clear all persistent variables without closing hardware.
+%                  yOCTHardware('reset')
+%
+% VALID COMMAND SEQUENCES:
+%   Most common:         init -> status -> teardown
+%   With cache reset:    init -> status -> reset -> init -> teardown
+%   WARNING: init -> reset -> [no teardown]: leaves hardware open. Always end with teardown.
+
 
 %% Persistent state (single source of truth)
-persistent gOCTSystemModule;
-persistent gOCTSystemName;
-persistent gSkipHardware;
-persistent gOCTProbePath;
-persistent gVerbose;
-persistent gScannerInitialized;
+persistent gOCTHardwareStatus;
+if isempty(gOCTHardwareStatus)
+    gOCTHardwareStatus = resetGlobalStruct();
+end
 
-%% Input defaults
+%% Parse command
 if ~exist('command','var') || isempty(command)
     error('myOCT:yOCTHardware:noCommand', ...
-        'yOCTHardware requires a command: ''init'', ''status'', ''teardown'', or ''reset''.');
+        'yOCTHardware requires a command: ''init'', ''status'', ''verifyInit'', ''teardown'', or ''reset''.');
 end
-if ~exist('octSystemName','var'), octSystemName = ''; end
-if ~exist('skipHardware','var'),  skipHardware = false; end
-if ~exist('octProbePath','var'),  octProbePath = ''; end
-if ~exist('v','var'),             v = false; end
+
+%% Parse optional name-value parameters
+p = inputParser;
+addParameter(p, 'OCTSystem', '', @ischar);
+addParameter(p, 'skipHardware', false, @islogical);
+addParameter(p, 'octProbePath', '', @ischar);
+addParameter(p, 'v', false, @islogical);
+parse(p, varargin{:});
+in = p.Results;
 
 %% Command dispatch
 switch lower(command)
 
 %  RESET: clear cache without closing hardware
 case 'reset'
-    gOCTSystemModule = [];
-    gOCTSystemName   = [];
-    gSkipHardware    = [];
-    gOCTProbePath    = [];
-    gVerbose         = [];
-    gScannerInitialized = false;
-    octSystemModule  = [];
-    octSystemName    = '';
-    skipHardware     = false;
-    scannerInitialized = false;
+    gOCTHardwareStatus = resetGlobalStruct();
+    [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+        getOutputs(gOCTHardwareStatus);
     return;
 
 %  STATUS: return cached state (read only)
 case 'status'
-    if isempty(gOCTSystemName)
+    if isempty(gOCTHardwareStatus.name)
         error('myOCT:yOCTHardware:notInitialized', ...
             'Hardware not initialized. Call yOCTHardware(''init'', ...) first.');
     end
-    octSystemModule = gOCTSystemModule;
-    octSystemName   = gOCTSystemName;
-    skipHardware    = gSkipHardware;
-    scannerInitialized = ~isempty(gScannerInitialized) && gScannerInitialized;
+    [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+        getOutputs(gOCTHardwareStatus);
+    return;
+
+%  VERIFYINIT: guard — errors if not ready for hardware operations
+case 'verifyinit'
+    if isempty(gOCTHardwareStatus.name)
+        error('myOCT:yOCTHardware:notInitialized', ...
+            'Hardware not initialized. Call yOCTHardware(''init'', ...) first.');
+    end
+    if ~gOCTHardwareStatus.skipHardware && ~gOCTHardwareStatus.scannerInitialized
+        error('myOCT:yOCTHardware:scannerNotInitialized', ...
+            'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath.');
+    end
+    [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+        getOutputs(gOCTHardwareStatus);
     return;
 
 %  TEARDOWN: close scanner, close hardware, terminate Python, reset
 case 'teardown'
-    % Use cached verbose if caller didn't pass one
-    if ~v && ~isempty(gVerbose)
-        v = gVerbose;
-    end
+    v = in.v;
 
     % If never initialized, nothing to tear down
-    if isempty(gOCTSystemName)
-        octSystemModule = [];
-        octSystemName   = '';
-        skipHardware    = false;
-        scannerInitialized = false;
+    if isempty(gOCTHardwareStatus.name)
+        [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+            getOutputs(gOCTHardwareStatus);
         return;
     end
 
     % Close scanner if hardware is active
-    if ~gSkipHardware
+    if ~gOCTHardwareStatus.skipHardware
         if v
             fprintf('%s Closing hardware connections...\n', datestr(datetime));
         end
 
-        % Close scanner via the MATLAB wrapper (handles both systems)
-        yOCTScannerClose(v);
+        % yOCTHardware_closeScanner only sends the close-scanner command to
+        % the SDK.  The teardown block here additionally handles
+        % Gan632-specific Python cleanup and interpreter termination.
+        yOCTHardware_closeScanner(v);
 
-        switch gOCTSystemName
+        switch gOCTHardwareStatus.name
             case 'gan632'
                 % Gan632: close all hardware (stages + scanner) via Python cleanup
                 try
-                    gOCTSystemModule.cleanup.yOCTCloseAllHardware();
+                    gOCTHardwareStatus.module.cleanup.yOCTCloseAllHardware();
                 catch ME
                     if v
                         warning('Error during Gan632 cleanup: %s', ME.message);
@@ -109,11 +127,8 @@ case 'teardown'
         end
     end
 
-    % Reset scanner state
-    gScannerInitialized = false;
-
     % Terminate Python interpreter for Gan632
-    if strcmpi(gOCTSystemName, 'gan632')
+    if strcmpi(gOCTHardwareStatus.name, 'gan632')
         try
             terminate(pyenv);
         catch ME
@@ -124,186 +139,200 @@ case 'teardown'
         if v
             fprintf('%s Gan632 cleanup complete.\n', datestr(datetime));
         end
-    elseif strcmpi(gOCTSystemName, 'ganymede')
+    elseif strcmpi(gOCTHardwareStatus.name, 'ganymede')
         if v
             fprintf('%s Ganymede cleanup complete.\n', datestr(datetime));
         end
     end
 
     % Clear all persistent state
-    gOCTSystemModule = [];
-    gOCTSystemName   = [];
-    gSkipHardware    = [];
-    gOCTProbePath    = [];
-    gVerbose         = [];
-    gScannerInitialized = false;
-
-    octSystemModule = [];
-    octSystemName   = '';
-    skipHardware    = false;
-    scannerInitialized = false;
+    gOCTHardwareStatus = resetGlobalStruct();
+    [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+        getOutputs(gOCTHardwareStatus);
     return;
 
 %  INIT: load module + initialize scanner
 case 'init'
-    % Store verbose for reuse in teardown
-    if v
-        gVerbose = true;
-    elseif isempty(gVerbose)
-        gVerbose = false;
-    end
+    octSystemNameIn = in.OCTSystem;
+    skipHw          = in.skipHardware;
+    octProbePath    = in.octProbePath;
+    v               = in.v;
 
     %% Early return if already initialized with same parameters
-    if ~isempty(gOCTSystemName)
-        nameChanged = ~isempty(octSystemName) && ~strcmpi(octSystemName, gOCTSystemName);
-        skipChanged = islogical(skipHardware) && skipHardware ~= gSkipHardware;
-        probeChanged = ~isempty(octProbePath) && ~isempty(gOCTProbePath) && ~strcmp(octProbePath, gOCTProbePath);
+    if ~isempty(gOCTHardwareStatus.name)
+        nameChanged  = ~isempty(octSystemNameIn) && ~strcmpi(octSystemNameIn, gOCTHardwareStatus.name);
+        skipChanged  = islogical(skipHw) && skipHw ~= gOCTHardwareStatus.skipHardware;
+        probeChanged = ~isempty(octProbePath) && ~isempty(gOCTHardwareStatus.probePath) && ...
+            ~strcmp(octProbePath, gOCTHardwareStatus.probePath);
 
         if ~nameChanged && ~skipChanged && ~probeChanged
             % Everything matches — return cached state
-            octSystemModule = gOCTSystemModule;
-            octSystemName   = gOCTSystemName;
-            skipHardware    = gSkipHardware;
-            scannerInitialized = ~isempty(gScannerInitialized) && gScannerInitialized;
+            [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+                getOutputs(gOCTHardwareStatus);
             return;
         end
 
         % Something changed — auto-teardown before re-init
+        changed = {};
+        if nameChanged,  changed{end+1} = sprintf('OCTSystem: %s -> %s', gOCTHardwareStatus.name, octSystemNameIn); end
+        if skipChanged,  changed{end+1} = sprintf('skipHardware: %d -> %d', gOCTHardwareStatus.skipHardware, skipHw); end
+        if probeChanged, changed{end+1} = 'octProbePath changed'; end
         if v
-            fprintf('%s Configuration changed, tearing down before re-init...\n', datestr(datetime));
+            fprintf('%s Configuration changed (%s), tearing down before re-init...\n', ...
+                datestr(datetime), strjoin(changed, ', '));
         end
         yOCTHardware('teardown');
     end
 
     %% Validate inputs
-    if isempty(octSystemName)
+    if isempty(octSystemNameIn)
         error('myOCT:yOCTHardware:noSystemName', ...
-            'yOCTHardware(''init'') requires octSystemName (''Ganymede'' or ''Gan632'').');
+            'yOCTHardware(''init'') requires OCTSystem (''Ganymede'' or ''Gan632'').');
     end
 
     validSystems = {'Ganymede', 'Gan632'};
-    if ~any(strcmpi(octSystemName, validSystems))
+    if ~any(strcmpi(octSystemNameIn, validSystems))
         error('myOCT:yOCTHardware:invalidSystem', ...
-            ['Invalid OCT System: %s' newline 'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemName);
+            ['Invalid OCT System: %s' newline 'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemNameIn);
     end
 
     %% skipHardware path: cache state and return (no module, no scanner)
-    if skipHardware
-        gOCTSystemName   = lower(octSystemName);
-        gOCTSystemModule = [];
-        gSkipHardware    = true;
-        gOCTProbePath    = octProbePath;
+    if skipHw
+        gOCTHardwareStatus.name              = lower(octSystemNameIn);
+        gOCTHardwareStatus.module            = [];
+        gOCTHardwareStatus.skipHardware      = true;
+        gOCTHardwareStatus.probePath         = octProbePath;
+        gOCTHardwareStatus.scannerInitialized = false;
 
-        octSystemModule = gOCTSystemModule;
-        octSystemName   = gOCTSystemName;
-        skipHardware    = gSkipHardware;
-        scannerInitialized = false;
+        [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+            getOutputs(gOCTHardwareStatus);
         return;
     end
 
     %% Load hardware module
-    octSystemName = lower(octSystemName);
-
-    switch octSystemName
-        case 'ganymede'
-            % Ganymede: C# library
-            currentFileFolder = fileparts(mfilename('fullpath'));
-            libFolder = [currentFileFolder '\Lib\'];
-
-            % Check if DLL is already loaded in memory (persists across teardown)
-            if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
-                asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
-                gOCTSystemModule = asm;
-                if v
-                    fprintf('%s ThorlabsImagerNET already loaded. Using existing instance. To fully reset, restart MATLAB.\n', datestr(datetime));
-                end
-            else
-                % First-time load: copy sub-library DLLs if needed
-                if ~exist([libFolder 'SpectralRadar.dll'],'file')
-                    copyfile([libFolder 'LaserDiode\*.*'],libFolder,'f');
-                    copyfile([libFolder 'MotorController\*.*'],libFolder,'f');
-                    copyfile([libFolder 'ThorlabsOCT\*.*'],libFolder,'f');
-                end
-
-                asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
-                gOCTSystemModule = asm;
-            end
-
-        case 'gan632'
-            % Gan632: Python SDK (pyspectralradar)
-
-            % Configure Python environment (out-of-process for SDK robustness)
-            try
-                pe = pyenv;
-                if pe.Status ~= "NotLoaded"
-                    needsRestart = false;
-                    if isprop(pe, 'ExecutionMode')
-                        if ~strcmp(pe.ExecutionMode, 'OutOfProcess')
-                            needsRestart = true;
-                        end
-                    end
-
-                    if needsRestart
-                        if v
-                            fprintf('%s Restarting Python in OutOfProcess mode for SDK robustness...\n', datestr(datetime));
-                        end
-                        terminate(pyenv);
-                        pyenv('ExecutionMode', 'OutOfProcess');
-                    end
-                else
-                    if isprop(pyenv, 'ExecutionMode')
-                        pyenv('ExecutionMode', 'OutOfProcess');
-                    end
-                end
-            catch
-                if v
-                    warning('Could not configure out-of-process Python. Using in-process mode.');
-                end
-            end
-
-            % Import Python modules
-            repoPath = fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython');
-
-            gOCTSystemModule = struct();
-            gOCTSystemModule.oct = yOCTImportPythonModule(...
-                'packageName', 'thorlabs_imager_oct', ...
-                'repoName', repoPath, ...
-                'v', v);
-            gOCTSystemModule.stage = yOCTImportPythonModule(...
-                'packageName', 'thorlabs_imager_stage', ...
-                'repoName', repoPath, ...
-                'v', v);
-            gOCTSystemModule.cleanup = yOCTImportPythonModule(...
-                'packageName', 'thorlabs_imager_cleanup', ...
-                'repoName', repoPath, ...
-                'v', v);
-
-        otherwise
-            error('This should never happen');
-    end
+    octSystemNameIn = lower(octSystemNameIn);
+    gOCTHardwareStatus.module = loadModule(octSystemNameIn, v);
 
     %% Cache state
-    gOCTSystemName = octSystemName;
-    gSkipHardware  = false;
-    gOCTProbePath  = octProbePath;
+    gOCTHardwareStatus.name         = octSystemNameIn;
+    gOCTHardwareStatus.skipHardware = false;
+    gOCTHardwareStatus.probePath    = octProbePath;
 
     %% Initialize scanner (only when octProbePath is provided)
     if ~isempty(octProbePath)
-        yOCTScannerInit(octProbePath, v);
-        gScannerInitialized = true;
+        yOCTHardware_initScanner(octProbePath, v);
+        gOCTHardwareStatus.scannerInitialized = true;
     else
-        gScannerInitialized = false;
+        gOCTHardwareStatus.scannerInitialized = false;
     end
 
     %% Return
-    octSystemModule = gOCTSystemModule;
-    octSystemName   = gOCTSystemName;
-    skipHardware    = gSkipHardware;
-    scannerInitialized = gScannerInitialized;
+    [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
+        getOutputs(gOCTHardwareStatus);
 
 otherwise
     error('myOCT:yOCTHardware:unknownCommand', ...
-        'Unknown command: ''%s''. Use ''init'', ''status'', ''teardown'', or ''reset''.', command);
+        'Unknown command: ''%s''. Use ''init'', ''status'', ''verifyInit'', ''teardown'', or ''reset''.', command);
 end
 
+end
+
+%% Local helpers
+
+function s = resetGlobalStruct()
+%RESETGLOBALSTRUCT Return a clean default state struct.
+s.module            = [];
+s.name              = '';
+s.skipHardware      = false;
+s.probePath         = '';
+s.scannerInitialized = false;
+end
+
+function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = getOutputs(s)
+%GETOUTPUTS Map state struct fields to the function's output variables.
+octSystemModule    = s.module;
+octSystemName      = s.name;
+skipHardware       = s.skipHardware;
+scannerInitialized = s.scannerInitialized;
+end
+
+function module = loadModule(systemName, v)
+%LOADMODULE Load the OCT hardware module for the given system.
+switch systemName
+    case 'ganymede'
+        % Ganymede: C# library
+        currentFileFolder = fileparts(mfilename('fullpath'));
+        libFolder = [currentFileFolder '\Lib\'];
+
+        % Check if DLL is already loaded in memory (persists across teardown)
+        if ~isempty(which('ThorlabsImagerNET.ThorlabsImager'))
+            asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
+            module = asm;
+            if v
+                fprintf('%s ThorlabsImagerNET already loaded. Using existing instance. To fully reset, restart MATLAB.\n', datestr(datetime));
+            end
+        else
+            % First-time load: copy sub-library DLLs if needed
+            if ~exist([libFolder 'SpectralRadar.dll'],'file')
+                copyfile([libFolder 'LaserDiode\*.*'],libFolder,'f');
+                copyfile([libFolder 'MotorController\*.*'],libFolder,'f');
+                copyfile([libFolder 'ThorlabsOCT\*.*'],libFolder,'f');
+            end
+
+            asm = NET.addAssembly([libFolder 'ThorlabsImagerNET.dll']);
+            module = asm;
+        end
+
+    case 'gan632'
+        % Gan632: Python SDK (pyspectralradar)
+
+        % Configure Python environment (out-of-process for SDK robustness)
+        try
+            pe = pyenv;
+            if pe.Status ~= "NotLoaded"
+                needsRestart = false;
+                if isprop(pe, 'ExecutionMode')
+                    if ~strcmp(pe.ExecutionMode, 'OutOfProcess')
+                        needsRestart = true;
+                    end
+                end
+
+                if needsRestart
+                    if v
+                        fprintf('%s Restarting Python in OutOfProcess mode for SDK robustness...\n', datestr(datetime));
+                    end
+                    terminate(pyenv);
+                    pyenv('ExecutionMode', 'OutOfProcess');
+                end
+            else
+                if isprop(pyenv, 'ExecutionMode')
+                    pyenv('ExecutionMode', 'OutOfProcess');
+                end
+            end
+        catch
+            if v
+                warning('Could not configure out-of-process Python. Using in-process mode.');
+            end
+        end
+
+        % Import Python modules
+        repoPath = fullfile(fileparts(mfilename('fullpath')), 'ThorlabsImagerPython');
+
+        module = struct();
+        module.oct = yOCTImportPythonModule(...
+            'packageName', 'thorlabs_imager_oct', ...
+            'repoName', repoPath, ...
+            'v', v);
+        module.stage = yOCTImportPythonModule(...
+            'packageName', 'thorlabs_imager_stage', ...
+            'repoName', repoPath, ...
+            'v', v);
+        module.cleanup = yOCTImportPythonModule(...
+            'packageName', 'thorlabs_imager_cleanup', ...
+            'repoName', repoPath, ...
+            'v', v);
+
+    otherwise
+        error('This should never happen');
+end
 end

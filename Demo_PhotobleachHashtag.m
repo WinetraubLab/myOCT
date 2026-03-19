@@ -16,7 +16,8 @@ octSystem = 'Ganymede'; % OCT system selection ('Ganymede' or 'Gan632')
 % Photobleach pattern configuration
 octProbePath = yOCTGetProbeIniPath('40x'); % Select lens magnification
 
-yOCTHardware('init', octSystem, skipHardware, octProbePath);
+yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipHardware, ...
+    'octProbePath', octProbePath);
 
 % Define the pattern 
 base = 100e-3; %base seperation [mm]

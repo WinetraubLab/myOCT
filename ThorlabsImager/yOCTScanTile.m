@@ -71,9 +71,9 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
-% Get OCT system and skipHardware mode from hardware cache.
-% Caller must have called yOCTHardware('init', ...) before invoking this function.
-[octSystemModule, octSystemName, skipHardware, scannerInit] = yOCTHardware('status');
+% Verify hardware is initialized and get cached state.
+yOCTHardware('verifyInit');
+[~, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Store OCT system name for JSON
 in.octSystem = octSystemName;
@@ -151,12 +151,6 @@ if skipHardware
     return;
 end
 
-%% Verify scanner is initialized (should have been done by yOCTHardware('init'))
-if ~scannerInit
-    error('myOCT:yOCTScanTile:scannerNotInitialized', ...
-        'Scanner is not initialized. Call yOCTHardware(''init'', ...) with octProbePath before yOCTScanTile.');
-end
-
 %% Check working distance
 % Make sure depths are ok for working distance's sake 
 if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
@@ -178,7 +172,7 @@ else
     rg_max = NaN;
 end
 
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
+[x0,y0,z0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
 
 if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));

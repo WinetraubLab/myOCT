@@ -18,7 +18,8 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
 
         %% Init: first call caches all outputs
         function testFirstCallCachesAllOutputs(testCase)
-            [module, name, skip, scanInit] = yOCTHardware('init', 'Gan632', true, '');
+            [module, name, skip, scanInit] = yOCTHardware('init', ...
+                'OCTSystem', 'Gan632', 'skipHardware', true);
             testCase.verifyEqual(name, 'gan632');
             testCase.verifyEmpty(module);
             testCase.verifyTrue(skip);
@@ -28,8 +29,9 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
 
         %% Init: early return with same args
         function testEarlyReturnWithSameArgs(testCase)
-            yOCTHardware('init', 'Gan632', true, '');
-            [module, name, skip, scanInit] = yOCTHardware('init', 'Gan632', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
+            [module, name, skip, scanInit] = yOCTHardware('init', ...
+                'OCTSystem', 'Gan632', 'skipHardware', true);
             testCase.verifyEqual(name, 'gan632');
             testCase.verifyEmpty(module);
             testCase.verifyTrue(skip);
@@ -38,7 +40,7 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
 
         %% Status: returns cache with all outputs
         function testStatusReturnsCache(testCase)
-            yOCTHardware('init', 'Gan632', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
             [module, name, skip, scanInit] = yOCTHardware('status');
             testCase.verifyEqual(name, 'gan632');
             testCase.verifyEmpty(module);
@@ -53,6 +55,20 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
                 'myOCT:yOCTHardware:notInitialized');
         end
 
+        %% verifyInit: errors when not initialized
+        function testVerifyInitErrorsWhenNotInitialized(testCase)
+            testCase.verifyError(@() yOCTHardware('verifyInit'), ...
+                'myOCT:yOCTHardware:notInitialized');
+        end
+
+        %% verifyInit: passes when skipHardware=true (scanner not needed)
+        function testVerifyInitPassesWithSkipHardware(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
+            [~, name, skip] = yOCTHardware('verifyInit');
+            testCase.verifyEqual(name, 'gan632');
+            testCase.verifyTrue(skip);
+        end
+
         %% Teardown: safe when never initialized
         function testTeardownWithoutInitIsSafe(testCase)
             [~, ~, ~, scanInit] = yOCTHardware('teardown');
@@ -61,7 +77,7 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
 
         %% Teardown: clears cache and scanner state
         function testTeardownClearsCache(testCase)
-            yOCTHardware('init', 'Gan632', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
             [~, ~, ~, scanInit] = yOCTHardware('teardown');
             testCase.verifyFalse(scanInit, ...
                 'Scanner state should be false after teardown');
@@ -71,27 +87,30 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
                 'myOCT:yOCTHardware:notInitialized');
 
             % Re-init with a different system must work
-            [~, name, skip] = yOCTHardware('init', 'Ganymede', true, '');
+            [~, name, skip] = yOCTHardware('init', ...
+                'OCTSystem', 'Ganymede', 'skipHardware', true);
             testCase.verifyEqual(name, 'ganymede');
             testCase.verifyTrue(skip);
         end
 
         %% System name change triggers re-init
         function testSystemNameChangeGan632ToGanymede(testCase)
-            yOCTHardware('init', 'Gan632', true, '');
-            [~, name, ~] = yOCTHardware('init', 'Ganymede', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
+            [~, name, ~] = yOCTHardware('init', ...
+                'OCTSystem', 'Ganymede', 'skipHardware', true);
             testCase.verifyEqual(name, 'ganymede');
         end
 
         function testSystemNameChangeGanymedeToGan632(testCase)
-            yOCTHardware('init', 'Ganymede', true, '');
-            [~, name, ~] = yOCTHardware('init', 'Gan632', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Ganymede', 'skipHardware', true);
+            [~, name, ~] = yOCTHardware('init', ...
+                'OCTSystem', 'Gan632', 'skipHardware', true);
             testCase.verifyEqual(name, 'gan632');
         end
 
         %% Reset: clears cache and scanner state
         function testResetClearsCache(testCase)
-            yOCTHardware('init', 'Gan632', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
             [~, ~, ~, scanInit] = yOCTHardware('reset');
             testCase.verifyFalse(scanInit, ...
                 'Scanner state should be false after reset');

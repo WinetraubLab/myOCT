@@ -1,4 +1,4 @@
-function yOCTScannerInit(octProbePath, v)
+function yOCTHardware_initScanner(octProbePath, v)
 % Initialize OCT scanner with probe
 %
 % INPUTS:
@@ -27,7 +27,7 @@ if ~skipHardware
         end
         % Close any existing scanner first (in case of previous error/incomplete run)
         try
-            yOCTScannerClose(false);  % Close quietly
+            yOCTHardware_closeScanner(false);  % Close quietly
         catch
             % Ignore errors if scanner wasn't initialized properly
         end

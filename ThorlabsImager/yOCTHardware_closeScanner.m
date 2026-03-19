@@ -1,6 +1,6 @@
-function yOCTScannerClose(v)
+function yOCTHardware_closeScanner(v)
 % Close OCT scanner based on system type (Ganymede or Gan632).
-% Hardware library must be loaded via yOCTHardwareLibSetUp before calling this function.
+% Hardware must be initialized via yOCTHardware('init', ...) before calling this function.
 %
 % INPUTS:
 %   v: verbose mode, default: false

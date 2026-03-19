@@ -38,7 +38,8 @@ output_folder = '\';
 skipScanning = false;
 
 %% Load hardware
-yOCTHardware('init', octSystem, skipScanning, octProbePath, true);
+yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipScanning, ...
+    'octProbePath', octProbePath, 'v', true);
 
 %% Compute scanning parameters
 

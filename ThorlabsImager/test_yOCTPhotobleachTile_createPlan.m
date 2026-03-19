@@ -10,7 +10,7 @@ classdef test_yOCTPhotobleachTile_createPlan < matlab.unittest.TestCase
             fid = fopen(tc.DummyIni,'wt');
             fprintf(fid,'RangeMaxX=1\nRangeMaxY=1\n');
             fclose(fid);
-            yOCTHardware('init', 'Ganymede', true, '');
+            yOCTHardware('init', 'OCTSystem', 'Ganymede', 'skipHardware', true);
         end
     end
     methods(TestMethodTeardown)
