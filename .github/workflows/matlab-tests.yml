@@ -1,8 +1,10 @@
 name: MATLAB tests
 
 on:
-  push:
+  # Only run on pull requests targeting main
   pull_request:
+    branches: [ "main" ]
+
 
 jobs:
   test:
