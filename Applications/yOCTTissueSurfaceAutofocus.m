@@ -59,8 +59,8 @@ v                       = in.v;
 roi_mm                  = in.roiToAssertFocus_mm;
 acceptableRange_mm      = in.assertInFocusAcceptableRange_mm;
 
-% Read skipHardware from the hardware cache (single source of truth).
-[~, ~, skipHardware] = yOCTHardware('status');
+% Verify hardware is initialized and read skipHardware.
+[~, ~, skipHardware] = yOCTHardware('verifyInit');
 
 if skipHardware % make sure we are moving the stage only if we don't skip hardware
     moveTissueToFocus = false;

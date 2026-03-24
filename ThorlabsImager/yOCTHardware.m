@@ -14,7 +14,7 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %                               'octProbePath', path, 'v', tf)
 %                  octProbePath can be '' when skipHardware=true.
 %
-%   'status'     - Return cached state without modification.
+%   'status'     - Return current state without modification.
 %                  [module, name, skip, scannerInit] = yOCTHardware('status')
 %                  Errors if init was never called.
 %
@@ -24,7 +24,7 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %                  yOCTHardware('verifyInit')
 %
 %   'teardown'   - Close scanner, close hardware, terminate Python (Gan632),
-%                  reset cache.
+%                  reset state.
 %                  yOCTHardware('teardown')
 %                  Optional: yOCTHardware('teardown', 'v', true)
 %
@@ -33,7 +33,7 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %
 % VALID COMMAND SEQUENCES:
 %   Most common:         init -> status -> teardown
-%   With cache reset:    init -> status -> reset -> init -> teardown
+%   With state reset:    init -> status -> reset -> init -> teardown
 %   WARNING: init -> reset -> [no teardown]: leaves hardware open. Always end with teardown.
 
 
@@ -61,14 +61,14 @@ in = p.Results;
 %% Command dispatch
 switch lower(command)
 
-%  RESET: clear cache without closing hardware
+%  RESET: clear state without closing hardware
 case 'reset'
     gOCTHardwareStatus = resetGlobalStruct();
     [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
         getOutputs(gOCTHardwareStatus);
     return;
 
-%  STATUS: return cached state (read only)
+%  STATUS: return current state (read only)
 case 'status'
     if isempty(gOCTHardwareStatus.name)
         error('myOCT:yOCTHardware:notInitialized', ...
@@ -166,7 +166,7 @@ case 'init'
             ~strcmp(octProbePath, gOCTHardwareStatus.probePath);
 
         if ~nameChanged && ~skipChanged && ~probeChanged
-            % Everything matches — return cached state
+            % Everything matches — return current state
             [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
                 getOutputs(gOCTHardwareStatus);
             return;
@@ -196,7 +196,7 @@ case 'init'
             ['Invalid OCT System: %s' newline 'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemNameIn);
     end
 
-    %% skipHardware path: cache state and return (no module, no scanner)
+    %% skipHardware path: store state and return (no module, no scanner)
     if skipHw
         gOCTHardwareStatus.name              = lower(octSystemNameIn);
         gOCTHardwareStatus.module            = [];
@@ -213,7 +213,7 @@ case 'init'
     octSystemNameIn = lower(octSystemNameIn);
     gOCTHardwareStatus.module = loadModule(octSystemNameIn, v);
 
-    %% Cache state
+    %% Store state
     gOCTHardwareStatus.name         = octSystemNameIn;
     gOCTHardwareStatus.skipHardware = false;
     gOCTHardwareStatus.probePath    = octProbePath;

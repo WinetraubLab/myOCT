@@ -1,4 +1,5 @@
 function yOCTHardware_closeScanner(v)
+% Helper function for yOCTHardware.
 % Close OCT scanner based on system type (Ganymede or Gan632).
 % Hardware must be initialized via yOCTHardware('init', ...) before calling this function.
 %

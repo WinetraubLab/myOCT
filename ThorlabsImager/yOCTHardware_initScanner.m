@@ -1,4 +1,5 @@
 function yOCTHardware_initScanner(octProbePath, v)
+% Helper function for yOCTHardware.
 % Initialize OCT scanner with probe
 %
 % INPUTS:
