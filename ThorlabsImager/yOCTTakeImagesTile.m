@@ -82,7 +82,7 @@ if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
 
-[x0,y0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg);
+[x0,y0] = yOCTHardware('initStage', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg);
 
 %Set lightring power
 if (v)
@@ -99,7 +99,7 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
+[x0,y0,z0] = yOCTHardware('initStage', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
 
 %Move to initial position to make a scan
 if (in.zDepth ~= 0)
