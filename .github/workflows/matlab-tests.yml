@@ -1,8 +1,9 @@
 name: MATLAB tests
 
 on:
-  push:
+  # Run tests on all pull requests
   pull_request:
+
 
 jobs:
   test:
