@@ -5,7 +5,7 @@ function yOCTStageMoveTo (newx,newy,newz,v)
 %       not to move stage along some axis. These new position units are in
 %       OCT coordinate system units. A conversion between OCT coordinate
 %       system to the stage coordinate system is done via
-%       goct2stageXYAngleDeg which is set in yOCTStageInit
+%       goct2stageXYAngleDeg which is set in yOCTHardware_initStage
 %   v - verbose mode (default is false)
 
 %% Input checks
@@ -25,8 +25,9 @@ if ~exist('v','var')
     v = false;
 end
 
-% Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+% Verify hardware is initialized
+yOCTHardware('verifyInit');
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 %% Compute current and new coordinates in both OCT and stage coordinate systems
 global gStageCurrentStagePosition_StageCoordinates;

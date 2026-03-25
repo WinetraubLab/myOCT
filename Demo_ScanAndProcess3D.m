@@ -38,7 +38,8 @@ output_folder = '\';
 skipScanning = false;
 
 %% Load hardware
-yOCTHardwareLibSetUp(octSystem, skipScanning, true);
+yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipScanning, ...
+    'octProbePath', octProbePath, 'v', true);
 
 %% Compute scanning parameters
 
@@ -95,7 +96,7 @@ scanParameters = yOCTScanTile (...
     );
 
 %% Cleanup for next run
-yOCTHardwareLibTearDown(true);
+yOCTHardware('teardown');
 
 %% Process the scan
 fprintf('%s Processing\n',datestr(datetime));

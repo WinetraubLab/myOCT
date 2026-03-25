@@ -1,5 +1,6 @@
-function [x0,y0,z0] = yOCTStageInit(oct2stageXYAngleDeg, ...
+function [x0,y0,z0] = yOCTHardware_initStage(oct2stageXYAngleDeg, ...
     minPosition, maxPosition,v)
+% Helper function for yOCTHardware.
 % This function initializes translation stage and returns current position.
 % INPUTS:
 %   oct2stageXYAngleDeg - Optional, the rotation angle to convert between OCT
@@ -46,7 +47,7 @@ if (v)
 end
 
 % Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardwareLibSetUp();
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Initialize position values
 if ~skipHardware
