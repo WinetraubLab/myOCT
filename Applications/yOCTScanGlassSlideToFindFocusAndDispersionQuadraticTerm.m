@@ -87,7 +87,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
                 'octProbePath', in.octProbePath, ...
                 'pixelSize_um', pixelSize_um, ...
                 'zDepths', scanDepths_um*1e-3);
-        else
+        else % Scan using hardware
             json = yOCTScanTile (...
                 tempFolder, ...
                 1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
@@ -248,7 +248,7 @@ for ii = 1:length(zDepths_mm)
     colormap gray;
     if ii == atFocusIndex
         title(sprintf('Estimated\nFocus\n%.0f\\mum',1e3*zDepths_mm(ii)));
-    else % Scan using hardware
+    else
         title(sprintf('%.0f\\mum',1e3*zDepths_mm(ii)));
     end
 
