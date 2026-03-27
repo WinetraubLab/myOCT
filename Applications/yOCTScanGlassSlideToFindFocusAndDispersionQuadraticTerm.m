@@ -71,7 +71,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
     for i=1:length(range_um)
         scanDepths_um = unique(round(bestZ_mm*1e3 + linspace(-range_um(i),range_um(i), nSamplesInRange)));
         if (in.v)
-            fprintf('Scanning [%.0fum, %.0fum]\n', ...
+            fprintf('%s Scanning [%.0fum, %.0fum]\n', datestr(datetime), ...
                 scanDepths_um(1),scanDepths_um(end));
         end
         
@@ -126,7 +126,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
         bestZ_mm = zDepths_mm(atFocusIndex);
 
         if in.v && i >= 2
-            fprintf('Best Focus Positon: %.0fum. ', bestZ_mm*1e3);
+            fprintf('%s Best Focus Positon: %.0fum. ', datestr(datetime), bestZ_mm*1e3);
         end
     end % Loop around
     if (in.v)
@@ -154,7 +154,7 @@ dispersionQuadraticTerm = fminsearch(...
     @dispersionErrorFunction, ...
     in.dispersionQuadraticTermInitialGuess);
 if (in.v)
-    fprintf('dispersionQuadraticTerm = %.4g\n',dispersionQuadraticTerm)
+    fprintf('%s dispersionQuadraticTerm = %.4g\n', datestr(datetime), dispersionQuadraticTerm)
 end
 
 %% Convert all interfs to scans
@@ -189,7 +189,7 @@ end
 focusPositionInImageZpix = findPeakPixel(...
     scans(:,:,atFocusIndex), in.focusPositionInImageZpixInitialGuess);
 if (in.v)
-    fprintf('focusPositionInImageZpix = %d\n',focusPositionInImageZpix)
+    fprintf('%s focusPositionInImageZpix = %d\n', datestr(datetime), focusPositionInImageZpix)
 end
 
 % Sanity check, make sure that Z doesn't change a lot along the scan
@@ -334,7 +334,7 @@ if skipHardware
     if exist(in.tempFolder, 'dir')
         rmdir(in.tempFolder, 's'); % 's' flag removes directory and all contents
         if in.v
-            fprintf('Cleaned up simulation directory: %s\n', in.tempFolder);
+            fprintf('%s Cleaned up simulation directory: %s\n', datestr(datetime), in.tempFolder);
         end
     end
 end
