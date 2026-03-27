@@ -99,7 +99,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
                 );
         end
         
-        atFocusIndex = NaN;
+        atFocusIndex = 1; % Default to first scan; updated below if a higher intensity scan is found
         atFocusIntensity = 0;
         for scanI = 1:length(json.octFolders)
             [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}], ...
@@ -195,7 +195,9 @@ end
 % Sanity check, make sure that Z doesn't change a lot along the scan
 % In theory, the scan should be very small thus z shouldn't change
 pos = alignZ(log(scanAtFocus));
-assert(prctile(abs(pos-focusPositionInImageZpix),95) < 2, 'Check focusPositionInImageZpix against scan failed');
+if ~skipHardware
+    assert(prctile(abs(pos-focusPositionInImageZpix),95) < 2, 'Check focusPositionInImageZpix against scan failed');
+end
 
 %% Compute the slide interface pixel and depth scan
 % This relationship validates that z pixel size is the same.
