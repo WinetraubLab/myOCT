@@ -64,14 +64,14 @@ if (iscell(varargin{1}))
 end 
 
 %Optional Parameters
-OCTSystem = '';
+octSystem = '';
 apodizationCorrection = 'subtract';
 peakOnly = false;
 chirp = [];
 for i=2:2:length(varargin)
     switch(lower(varargin{i}))
         case 'octsystem'
-            OCTSystem = varargin{i+1};
+            octSystem = varargin{i+1};
         case 'dimensions'
             dimensions = varargin{i+1};
         case 'yframestoprocess'
@@ -95,45 +95,44 @@ inputDataFolder = awsModifyPathForCompetability([inputDataFolder '/']);
 
 tt = tic;
 %% Figure out OCT system manufacturer
-if exist('dimensions','var') && isfield(dimensions,'aux') && isfield(dimensions.aux,'OCTSystem')
-    OCTSystem = dimensions.aux.OCTSystem;
+if exist('dimensions','var') && isfield(dimensions,'aux') && isfield(dimensions.aux,'octSystem')
+    octSystem = dimensions.aux.octSystem;
 end
 
-if isempty(OCTSystem)
-    [OCTSystem,OCTSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder);
+if isempty(octSystem)
+    [octSystem,octSystemManufacturer] = yOCTLoadInterfFromFile_WhatOCTSystemIsIt(inputDataFolder);
 else
-    switch(OCTSystem)
-        case {'Ganymede','Telesto'}
-            OCTSystemManufacturer = 'Thorlabs';
-        case {'Ganymede_SRR','Telesto_SRR'}
-            OCTSystemManufacturer = 'Thorlabs_SRR';
-        case {'Wasatch'}
-            OCTSystemManufacturer = 'Wasatch';
-        case {'Simulated Ganymede'}
-            OCTSystemManufacturer = 'Simulated';
+    % Normalize to lowercase for case insensitive comparison
+    switch(lower(octSystem))
+        case {'ganymede','telesto','gan632'}
+            octSystemManufacturer = 'Thorlabs';
+        case {'ganymede_srr','telesto_srr'}
+            octSystemManufacturer = 'Thorlabs_SRR';
+        case {'wasatch'}
+            octSystemManufacturer = 'Wasatch';
+        case {'simulated ganymede'}
+            octSystemManufacturer = 'Simulated';
         otherwise
-            error('ERROR: Wrong OCTSystem name! (yOCTLoadInterfFromFile)')
+            error('ERROR: Wrong OCTSystem name! (yOCTLoadInterfFromFile). Received: "%s". Expected: Ganymede, Telesto, Gan632, etc.', octSystem)
     end
 end
 
 %% Load Header file, get dimensions
 if ~exist('dimensions','var')
     %Load header information
-    switch(OCTSystemManufacturer)
+    switch(octSystemManufacturer)
         case {'Thorlabs'}
-            dimensions = yOCTLoadInterfFromFile_ThorlabsHeader(inputDataFolder, OCTSystem, chirp);
-        
+            dimensions = yOCTLoadInterfFromFile_ThorlabsHeader(inputDataFolder, octSystem, chirp);
+
         case {'Thorlabs_SRR'}
-            dimensions = yOCTLoadInterfFromFile_ThorlabsSRRHeader(inputDataFolder, OCTSystem, chirp);
-                
-        case {'Wasatch'}
+            dimensions = yOCTLoadInterfFromFile_ThorlabsSRRHeader(inputDataFolder, octSystem, chirp);
             dimensions = yOCTLoadInterfFromFile_WasatchHeader(inputDataFolder);
         
         case('Simulated')
             dimensions = load(fullfile(inputDataFolder,'data.mat'), 'dim').dim;
     end
     
-    dimensions.aux.OCTSystem = OCTSystem; %Add the OCT system we just discovered
+    dimensions.aux.octSystem = octSystem; %Add the OCT system we just discovered
 else
     %Header information given by user
 end
@@ -188,33 +187,41 @@ if (peakOnly == true)
 end
 
 %% Load Data - System Specific Configuration
-switch(OCTSystemManufacturer)
+switch(octSystemManufacturer)
     case {'Thorlabs'}
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_ThorlabsData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsData([varargin {'dimensions'} {dimensions}]);
     case {'Thorlabs_SRR'}
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_ThorlabsSRRData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_ThorlabsSRRData([varargin {'dimensions'} {dimensions}]);
     case {'Wasatch'}
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_WasatchData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_WasatchData([varargin {'dimensions'} {dimensions}]);
     case('Simulated')
-        [interferogram, apodization, prof] = yOCTLoadInterfFromFile_SimulatedData([varargin {'dimensions'} {dimensions}]);
+        [interferogram, apodization, prof, isFileValid] = yOCTLoadInterfFromFile_SimulatedData([varargin {'dimensions'} {dimensions}]);
 end
 
 %% Correct For Apodization
-switch (apodizationCorrection)
-    case 'subtract'
-        if isnan(apodization)
-            error('No Apodization Data, Cannot Correct. Please set ''ApodizationCorrection'' to ''None''');
-        end
-        [~, sizeX, sizeY, AScanAvgN, BScanAvgN] = yOCTLoadInterfFromFile_DataSizing(dimensions);   
-        apod = mean(apodization,2); %Mean across x axis
-        s = size(apod);
-        s = [s 1 1 1 1 1]; %Pad with ones
+% Only process apodization if files are valid
+if isFileValid
+    switch (apodizationCorrection)
+        case 'subtract'
+            if isnan(apodization)
+                error('No Apodization Data, Cannot Correct. Please set ''ApodizationCorrection'' to ''None''');
+            else
+                % Perform apodization correction
+                [~, sizeX, sizeY, AScanAvgN, BScanAvgN] = yOCTLoadInterfFromFile_DataSizing(dimensions);   
+                apod = mean(apodization,2); %Mean across x axis
+                s = size(apod);
+                s = [s 1 1 1 1 1]; %Pad with ones
 
-        interferogram = interferogram - repmat(apod,[1 sizeX sizeY/s(3) AScanAvgN BScanAvgN/s(5)]);
-    case 'none'
-        %No correction required
-    otherwise
-        error(['No such Apodization Correction Method Implemented: ' apodizationCorrection]);
+                interferogram = interferogram - repmat(apod,[1 sizeX sizeY/s(3) AScanAvgN BScanAvgN/s(5)]);
+            end
+        case 'none'
+            %No correction required
+        otherwise
+            error(['No such Apodization Correction Method Implemented: ' apodizationCorrection]);
+    end
+else
+    % Files were corrupted/missing: interferogram contains NaN, skip apodization correction
+    % NaN will propagate through subsequent processing
 end
 
 %% Finish

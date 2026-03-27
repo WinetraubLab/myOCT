@@ -9,23 +9,23 @@
 yOCTSetLibraryPath(); % Set path
 
 %% Inputs
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
 % Define the 3D Volume
 pixel_size_um = 1; % x-y Pixel size in microns
-xOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
-yOverall_mm = [-0.15 0.15]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 40x use [-0.25 0.25]
+xOverall_mm = [-0.25 0.25]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 20x use [-0.375 0.375], for 40x use [-0.25 0.25]
+yOverall_mm = [-0.15 0.15]; % Define the overall volume you would like to scan [start, finish]. OBJECTIVE_DEPENDENT: For 10x use [-0.5 0.5], for 20x use [-0.375 0.375], for 40x use [-0.25 0.25]
 % Uncomment below to scan one B-Scan.
 % yOverall_mm = 0;
 
 % Define probe 
-octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x' or '40x', and scanning system dependent 'OCTP900' or ''
-octProbeFOV_mm = 0.5; % How much of the field of view to use from the probe. OBJECTIVE_DEPENDENT: For 10x use 1, for 40x use 0.5
+octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x', '20x', or '40x', and scanning system dependent 'OCTP900' or ''
+octProbeFOV_mm = 0.5; % How much of the field of view to use from the probe. OBJECTIVE_DEPENDENT: For 10x use 1, for 20x use 0.75, for 40x use 0.5
 
 % Define z stack and z-stitching
-scanZJump_um = 5; % microns. OBJECTIVE_DEPENDENT: For 10x use 15, for 40x use 5
+scanZJump_um = 5; % microns. OBJECTIVE_DEPENDENT: For 10x use 15, for 20x use 10, for 40x use 5
 zToScan_mm = unique([-100 (-30:scanZJump_um:400), 0])*1e-3; %[mm]
-focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 40x use 10 or 1
-
+focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 20x use 15, for 40x use 10 or 1
 % Other scanning parameters
 tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 
@@ -35,11 +35,18 @@ if (outputFolder(end) ~= '\' || outputFolder(end) ~= '/')
     outputFolder(end+1) = '/';
 end
 
+% OCT System Selection
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
+
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
 
 % Time interval
 scanTimeIntervals_min = (0:1:16)*60; % At what times to scan
+
+%% Load hardware
+yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipScanning, ...
+    'octProbePath', octProbePath, 'v', true)
 
 %% Compute scanning parameters
 
@@ -58,8 +65,7 @@ fprintf('%s Please adjust the OCT focus such that it is precisely at the interse
 [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
     yOCTScanGlassSlideToFindFocusAndDispersionQuadraticTerm( ...
     'octProbePath',octProbePath, ...
-    'tissueRefractiveIndex',tissueRefractiveIndex, ...
-    'skipHardware',skipScanning);
+    'tissueRefractiveIndex',tissueRefractiveIndex);
 
 % Uncomment below to set manually
 % dispersionQuadraticTerm=-1.549e08;
@@ -77,8 +83,7 @@ fprintf('%s Please adjust the OCT focus such that it is precisely at the interse
         'octProbePath', octProbePath, ...
         'pixel_size_um', 25,...
         'focusPositionInImageZpix', focusPositionInImageZpix,...
-        'dispersionQuadraticTerm', dispersionQuadraticTerm, ...
-        'skipHardware',skipScanning);
+        'dispersionQuadraticTerm', dispersionQuadraticTerm);
 
 %% Perform the scans
 
@@ -122,7 +127,6 @@ for scanI = 1:length(scanTimeIntervals_min)
         'xOffset',   0, ...
         'yOffset',   0, ... 
         'zDepths',   zToScan_mm, ... [mm]
-        'skipHardware',skipScanning, ...
         'v',true  ...
         );
 	
@@ -172,3 +176,6 @@ yOCTCreateTemporalSliceMovieFrom3DTiffs(...
     zz, ... some slice
     'xy','average', 5, [-24 14] ...
     );
+
+%% Cleanup for next run
+yOCTHardware('teardown');

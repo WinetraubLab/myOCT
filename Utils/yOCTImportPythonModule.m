@@ -80,7 +80,14 @@ pyexe = char(pe.Executable);
 if isempty(in.repoName)
     repoBase = pwd;
 else
-    repoBase = fullfile(pwd, char(in.repoName));
+    % Check if repoName is already an absolute path
+    if isfolder(char(in.repoName))
+        % It's an absolute path, use it directly
+        repoBase = char(in.repoName);
+    else
+        % It's a relative name, append to pwd
+        repoBase = fullfile(pwd, char(in.repoName));
+    end
 end
 candidates = string({repoBase, fullfile(repoBase,'src')});
 parts  = split(string(in.packageName), '.');   % top-level package name
@@ -95,7 +102,8 @@ existing = string(cellfun(@char, cell(py.list(pypath)), 'UniformOutput', false))
 
 added = false;
 for c = candidates
-    if isfolder(fullfile(char(c), char(topPkg)))
+    % Check if package exists as folder OR as .py file
+    if isfolder(fullfile(char(c), char(topPkg))) || isfile(fullfile(char(c), char(topPkg) + ".py"))
         if ~any(existing == c)
             if in.v, fprintf('[Bridge] Adding to sys.path: %s\n', char(c)); end
             % Call the Python list.insert(...) method

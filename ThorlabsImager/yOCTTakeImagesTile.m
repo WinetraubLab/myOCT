@@ -55,6 +55,13 @@ if ~exist(in.octProbePath,'file')
 	error(['Cannot find probe file: ' in.octProbePath]);
 end
 
+% Verify hardware is initialized and get cached state.
+yOCTHardware('verifyInit');
+[~, octSystemName, skipHardware] = yOCTHardware('status');
+
+% Store OCT system name for JSON
+in.octSystem = octSystemName;
+
 %Load probe ini
 ini = yOCTReadProbeIniToStruct(in.octProbePath);
 
@@ -74,10 +81,8 @@ in.imagesFP = arrayfun(@(x)(sprintf('Data%02d.jpg',x)),scanOrder,'UniformOutput'
 if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
- 
-ThorlabsImagerNETLoadLib(); %Init library
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(in.octProbePath); %Init OCT
-[x0,y0] = yOCTStageInit(in.oct2stageXYAngleDeg);
+
+[x0,y0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg);
 
 %Set lightring power
 if (v)
@@ -94,7 +99,7 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTStageInit(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
+[x0,y0,z0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
 
 %Move to initial position to make a scan
 if (in.zDepth ~= 0)
@@ -148,7 +153,6 @@ ThorlabsImagerNET.ThorlabsImager.yOCTSetCameraRingLightIntensity(0);
 if (v)
     fprintf('%s Finalizing\n',datestr(datetime));
 end
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
 
 %Save scan configuration parameters
 awsWriteJSON(in, [imageFolder '\ImageInfo.json']);

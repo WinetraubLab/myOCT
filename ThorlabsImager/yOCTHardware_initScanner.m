@@ -1,0 +1,55 @@
+function yOCTHardware_initScanner(octProbePath, v)
+% Helper function for yOCTHardware.
+% Initialize OCT scanner with probe
+%
+% INPUTS:
+%   octProbePath: path to probe
+%   v: verbose mode, default: false
+
+%% Input checks
+if ~exist('v','var')
+    v = false;
+end
+
+%% Start Initialization
+if (v)
+    fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
+end
+
+% Load library (should already be loaded to memory)
+[octSystemModule, octSystemName, skipHardware, scannerAlreadyInit] = yOCTHardware('status');
+
+%% Initialize scanner
+if ~skipHardware
+    % Check if scanner is already initialized before attempting close
+    if scannerAlreadyInit
+        if (v)
+            fprintf('%s Scanner already initialized. Closing and reinitializing...\n',datestr(datetime));
+        end
+        % Close any existing scanner first (in case of previous error/incomplete run)
+        try
+            yOCTHardware_closeScanner(false);  % Close quietly
+        catch
+            % Ignore errors if scanner wasn't initialized properly
+        end
+    end
+
+    % Initialize scanner based on system type
+    switch(octSystemName)
+        case 'ganymede'
+            % Ganymede: Use C# DLL (ThorlabsImagerNET)
+            ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(octProbePath);
+
+        case 'gan632'
+            % GAN632: Use Python SDK (pyspectralradar)
+            octSystemModule.oct.yOCTScannerInit(octProbePath);
+
+        otherwise
+            error('This should never happen')
+    end
+end
+
+%% Finish up
+if (v)
+    fprintf('%s Initialzing Hardware Completed\n',datestr(datetime));
+end

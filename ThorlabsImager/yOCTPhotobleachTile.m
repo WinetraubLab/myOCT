@@ -48,7 +48,6 @@ function json = yOCTPhotobleachTile(varargin)
 %   minLineLength           10e-3           Minimal line length to photobleach, shorter lines are skipped [mm].
 % Debug parameters:
 %   v                       true            verbose mode  
-%   skipHardware            false           Set to true if you would like to calculate only and not move or photobleach 
 %   plotPattern             false           Plot the pattern of photonleach before executing on it.
 %	laserToggleMethod		'OpticalSwitch' In order to turn off laser in between photobleach lines we can either use 'OpticalSwitch', or 'LaserPowerSwitch'
 %											'OpticalSwitch' is faster and more reliable, but if you don't have optical switch in the system setup
@@ -75,7 +74,6 @@ addParameter(p,'enableZoneAccuracy',5e-3,@isnumeric);
 addParameter(p,'minLineLength',10e-3,@isnumeric);
 
 addParameter(p,'v',true);
-addParameter(p,'skipHardware',false);
 addParameter(p,'plotPattern',false);
 addParameter(p,'laserToggleMethod','OpticalSwitch');
 addParameter(p,'surfaceMap', [], @(x) isempty(x) || (isstruct(x) && ...
@@ -287,26 +285,20 @@ if json.plotPattern
         photobleachPlan, json.FOV, estimatedPhotobleachTime_sec);
 end
 
+% Verify hardware is initialized and get cached state.
+yOCTHardware('verifyInit');
+[~, octSystemName, json.skipHardware] = yOCTHardware('status');
+json.octSystem = octSystemName;
+
 %% If skip hardware mode, we are done!
-if (json.skipHardware)
+if json.skipHardware
     return;
 end
 
-%% Initialize Hardware Library
+%% Initialize Hardware
 
-if (v)
-    fprintf('%s Initialzing Hardware Dll Library... \n\t(if Matlab is taking more than 2 minutes to finish this step, restart matlab and try again)\n',datestr(datetime));
-end
-ThorlabsImagerNETLoadLib(); %Init library
-if (v)
-    fprintf('%s Done Hardware Dll Init.\n',datestr(datetime));
-end
-
-%% Initialize Translation Stage
-[x0,y0,z0] = yOCTStageInit(json.oct2stageXYAngleDeg, NaN, NaN, v);
-
-%Initialize scanner
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerInit(json.octProbePath); %Init OCT
+% Translational stage
+[x0,y0,z0] = yOCTHardware_initStage(json.oct2stageXYAngleDeg, NaN, NaN, v);
 
 if (v)
     fprintf('%s Initialzing Motorized Translation Stage Hardware Completed\n',datestr(datetime));
@@ -407,8 +399,6 @@ end
 
 % Return stage to original position
 yOCTStageMoveTo(x0,y0,z0,v);
-
-ThorlabsImagerNET.ThorlabsImager.yOCTScannerClose(); %Close scanner
 
 %% Working with live laser
 function photobleach_lines(ptStart,ptEnd, exposures_sec, v, json)

@@ -4,6 +4,7 @@ function p = yOCTGetProbeIniPath(magnificationStr, otherKeyword)
 % 	p = yOCTGetProbeIniPath('10x'); 
 %	p = yOCTGetProbeIniPath('40x')
 %	p = yOCTGetProbeIniPath('10x','OCTP900')
+%	p = yOCTGetProbeIniPath('20x','OCTP900')
 
 %% Input checks
 if ~exist('magnificationStr','var') || isempty(magnificationStr)
@@ -23,6 +24,8 @@ switch(overallKeyword)
 		probeName = 'Probe - Olympus 40x.ini';
 	case '10xoctp900'
 		probeName = 'Probe - Olympus 10x - OCTP900.ini';
+	case '20xoctp900'
+		probeName = 'Probe - Olympus 20x - OCTP900.ini';
 	case '40xoctp900'
 		probeName = 'Probe - Olympus 40x - OCTP900.ini';
 	otherwise

@@ -22,7 +22,8 @@ function yOCTProcessTiledScan(varargin)
 %   focusSigma                  20      If stitching along Z axis (multiple focus points), what is the size of each focus in z [pixel]
 %   focusPositionInImageZpix    NaN     For all B-Scans, this parameter defines the depth (Z, pixels) that the focus is located at. 
 %                                       See yOCTFindFocusTilledScan for more details.
-%   cropZAroundFocusArea        true    When set to true, will crop output processed scan around the area of z focus. 
+%   cropZRange_mm               []      Custom Z crop range [zMin_mm, zMax_mm] in mm relative to tissue surface (z=0).
+%                                       When empty ([]), no Z cropping is applied and the full scan range is kept.
 % Save some Y planes in a debug folder:
 %   yPlanesOutputFolder         ''      If set will save some y planes for debug purpose in that folder
 %   howManyYPlanes              3       How many y planes to save (if yPlanesOutput folder is set)
@@ -54,7 +55,7 @@ addRequired(p,'outputPath');
 addParameter(p,'dispersionQuadraticTerm',79430000,@isnumeric);
 addParameter(p,'focusSigma',20,@isnumeric);
 addParameter(p,'focusPositionInImageZpix',NaN,@isnumeric);
-addParameter(p,'cropZAroundFocusArea',true);
+addParameter(p,'cropZRange_mm',[],@(x)(isempty(x) || (isnumeric(x) && numel(x)==2 && x(1)<x(2))));
 
 % Save some Y planes in a debug folder
 addParameter(p,'yPlanesOutputFolder','',@isstr);
@@ -101,14 +102,14 @@ elseif awsIsAWSPath(in.tiledScanInputFolder)
     awsSetCredentials();
 end
 
-cropZAroundFocusArea = in.cropZAroundFocusArea;
-if (cropZAroundFocusArea && isnan(in.focusPositionInImageZpix))
-    warning('Because no focus position was set, cropZAroundFocusArea cannot be "true", changed to "false". See help of yOCTProcessTiledScan function.');
-    cropZAroundFocusArea = false;
-end
 
 %% Load configuration file & set parameters
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
+
+%% Unzip compressed .oct files if they exist in the data folder
+unzipResults = yOCTUnzipTiledScan(tiledScanInputFolder, ...
+    'deleteCompressedAfterUnzip', true, ...
+    'v', v);
 
 %Figure out dispersion parameters
 if isempty(in.dispersionQuadraticTerm)
@@ -135,29 +136,19 @@ if length(in.focusPositionInImageZpix) == 1 %#ok<ISCL>
     focusPositionInImageZpix = in.focusPositionInImageZpix * ones(1, length(json.zDepths));
 end
 focusSigma = in.focusSigma;
-OCTSystem = json.OCTSystem; %Provide OCT system to prevent unesscecary polling of file system
 
-%% z depth check
-% A working assumption of yOCTProcessTiledScan is that when yOCTScanTile
-% was called, zDepths list included "0". 
-% The meaning of this constraint is that exists a scan in the stack in
-% which the focus is at the tissue interface (according to the user's best
-% guess). This constraint helps us align coordinate such that z=0 is at the
-% surface of the tissue.
-%
-% In this section  we check that zDepths structure exists and that zdepth 0
-% is included in the stack.
+% Read OCT system name
+if isfield(json, 'octSystem')
+    octSystem = json.octSystem; % New format (lowercase)
+elseif isfield(json, 'OCTSystem')
+    warning("json contains 'OCTSystem' field instead of 'octSystem' field. Please make sure to replace field name by January 2027 as this name will be deprecated")
+    octSystem = json.OCTSystem; % Old format (uppercase) for backward compatibility
+else
+    error('ScanInfo.json is missing required field "octSystem" (or legacy "OCTSystem"). Cannot determine OCT system type.');
+end
 
 if isempty(json.zDepths) || ~isnumeric(json.zDepths) % Validate presence of z-depths data
     error("ScanInfo.json doesn't include valid zDepths.");
-end
-
-if min(abs(json.zDepths)) > 0.001 % 1um tolerance
-    error( ...
-        ['It seems that yOCTScanTile was executed without including ' ...
-        'zDepth=0 in the list of depths which breaks our ability to ' ...
-        'estimate dimension z coordinate, please scan again.' ...
-        'See Demo_ScanAndProcess_3D.m for an example.'])
 end
 
 %% Extract some data (refactor candidate)
@@ -203,29 +194,28 @@ if ~isempty(in.outputFilePixelSize_um)
     dimOutput_mm.z.index = 1:length(dimOutput_mm.z.values);
 end
 
-if cropZAroundFocusArea
-    % Remove Z positions that are way out of focus (if we are doing focus processing)
-
+if ~isempty(in.cropZRange_mm)
+    % Crop Z to the requested range
+    cropZMin_mm = in.cropZRange_mm(1);
+    cropZMax_mm = in.cropZRange_mm(2);
+    
     zAll = dimOutput_mm.z.values;
-
-    % Remove depths that are out of focus
-    % Final crop is from first focus position to last focus position.
-    zAll( ...
-        ( zAll < min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1)  )) ) ...
-        | ...
-        ( zAll > max(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(end))) ) ...
-        ) = []; 
-
+    zAll(zAll < cropZMin_mm | zAll > cropZMax_mm) = [];
+    
     if isempty(zAll)
-        % No zAll matches our criteria, find the closest one.
-        [dist, i] = min(abs(dimOutput_mm.z.values - ...
-            ( ...
-            min(zDepths) + dimOneTile_mm.z.values(round(focusPositionInImageZpix(1))) ...
-            ) ...
-            ));
-        assert(dist<1e-3,'Closest Z is >1um away from target, too far');
-        zAll = dimOutput_mm.z.values(i);
+        error('cropZRange_mm [%.4f, %.4f] does not overlap with the available Z range [%.4f, %.4f]. Adjust cropZRange_mm or check scan parameters.', ...
+            cropZMin_mm, cropZMax_mm, dimOutput_mm.z.values(1), dimOutput_mm.z.values(end));
     end
+    
+    dimOutput_mm.z.values = zAll(:)';
+    dimOutput_mm.z.index = 1:length(zAll);
+    
+    if v
+        fprintf('cropZRange_mm active: Z cropped to [%.3f, %.3f] mm (%d pixels)\n', ...
+            zAll(1), zAll(end), length(zAll));
+    end
+else
+    zAll = dimOutput_mm.z.values; % Keep full Z range, no crop
 
     dimOutput_mm.z.values = zAll(:)';
     dimOutput_mm.z.index = 1:length(zAll);
@@ -234,6 +224,10 @@ end
 % Dimensions check
 assert(length(dimOutput_mm.z.values) == length(dimOutput_mm.z.index));
 assert(length(dimOutput_mm.x.values) == length(dimOutput_mm.x.index));
+
+% Store z-depths used during scanning in the dimensions structure.
+% Use length(metadata.scanZDepths_mm) > 1 to determine if the scan was a z-stack or a single depth scan.
+dimOutput_mm.scanZDepths_mm = json.zDepths(:)'; % Row vector [mm]
 
 %% Save some Y planes in a debug folder if needed
 if ~isempty(in.yPlanesOutputFolder) && in.howManyYPlanes > 0
@@ -288,7 +282,7 @@ parfor yI=1:length(dimOutput_mm.y.values)
                 % Note that a frame is smaller than one tile as frame contains only one YFrameToPRocess, thus dim structure needs an update. 
                 [intFrame, dimFrame] = ...
                     yOCTLoadInterfFromFile([{fpTxt}, reconstructConfig, ...
-                    {'dimensions', dimOneTile_mm 'YFramesToProcess', yIInFile, 'OCTSystem', OCTSystem}]);
+                    {'dimensions', dimOneTile_mm 'YFramesToProcess', yIInFile, 'octSystem', octSystem}]);
                 [scan1,~] = yOCTInterfToScanCpx([{intFrame} {dimFrame} reconstructConfig]);
                 intFrame = []; %#ok<NASGU> %Freeup some memory
                 scan1 = abs(scan1);

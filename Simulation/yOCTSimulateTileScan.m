@@ -23,7 +23,7 @@ addParameter(p,'pixelSize_um',1)
 listOfParametersToKeep_yOCTScanTile={...
     'xRange_mm','yRange_mm','zDepths','pixelSize_um', 'octProbePath', ...
     'octProbeFOV_mm', 'oct2stageXYAngleDeg', 'isVerifyMotionRange', ...
-    'xOffset','yOffset','tissueRefractiveIndex','nBScanAvg','unzipOCTFile','skipHardware'};
+    'xOffset','yOffset','tissueRefractiveIndex','nBScanAvg','unzipOCTFile'};
 
 listOfParametersToKeep_yOCTSimulateInterferogram={...
     'pixelSize_um','tissueRefractiveIndex', ...
@@ -54,12 +54,15 @@ in.octFolder = awsModifyPathForCompetability([fileparts(in.octFolder) '/']);
 
 %% Run yOCTScanTile to get the json
 
+% Simulation always skips hardware; set the cache so yOCTScanTile reads it
+yOCTHardware('init', 'OCTSystem', 'Ganymede', 'skipHardware', true);
+
 % Create parameters list
 paramToKeep = ones(size(varargin),'logical');
 paramToKeep(1) = 0; % Remove data
 paramToKeep = myRMAll(varargin,listOfParametersToRemove_yOCTScanTile,paramToKeep);
 paramToKeep = myRM(varargin,'skipHardware', paramToKeep); % Also remove Skip Hardware as we set it to true
-pr = [varargin(paramToKeep) {'skipHardware',true}];
+pr = varargin(paramToKeep);
 
 % Add xRange_mm, yRange_mm
 xRange_mm = pixelSize_um*size(data,2)/1e3/2*[-1 1];
@@ -67,7 +70,7 @@ yRange_mm = pixelSize_um*size(data,3)/1e3/2*[-1 1];
 
 pr = [pr(1) {xRange_mm}, {yRange_mm} pr(2:end)];
 json = yOCTScanTile(pr{:});
-json.OCTSystem = 'Simulated Ganymede';
+json.octSystem = 'Simulated Ganymede';
 
 % Make folder, place Json
 if exist(in.octFolder, 'dir')

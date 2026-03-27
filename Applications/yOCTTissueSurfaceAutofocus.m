@@ -2,6 +2,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 % This function uses the OCT to scan and identify the tissue surface from 
 % the OCT image, evaluates focus, and (if requested) automatically moves 
 % the Z-stage to bring the surface into focus.
+% INPUTS:
 %   xRange_mm, yRange_mm: what range to scan, default [-1 1] mm.
 %   pixelSize_um: Pixel resolution for this analysis, default: 25 um.
 %   octProbePath: Where is the probe.ini is saved to be used. Default 'probe.ini'.
@@ -17,8 +18,7 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 %       Use [] to test the full scan area (default).
 %   moveTissueToFocus: When set to true, it will move the Z stage automatically when the surface is out of focus.
 %       When set to false, it will not move stage, but will notify user how to move stage back to focus.
-%       Default is true. If skipHardware is set to true then moveTissueToFocus is forced to false.
-%   skipHardware: Set to true to skip hardware operation. Default: false.
+%       Default is true. If skipHardware is set to true (via yOCTHardwareLibSetUp) then moveTissueToFocus is forced to false.
 %   v: Verbose mode for debugging purposes and visualization default is 
 %       false.
 % OUTPUTS:
@@ -43,7 +43,6 @@ addParameter(p,'assertInFocusAcceptableRange_mm',0.025);
 addParameter(p,'roiToAssertFocus_mm',[], @(z) isempty(z) || ...
          (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
 addParameter(p,'moveTissueToFocus',true,@islogical);
-addParameter(p,'skipHardware',false);
 addParameter(p,'v',false);
 
 parse(p,varargin{:});
@@ -60,14 +59,17 @@ v                       = in.v;
 roi_mm                  = in.roiToAssertFocus_mm;
 acceptableRange_mm      = in.assertInFocusAcceptableRange_mm;
 
-if in.skipHardware % make sure we are moving the stage only if we don't skip hardware
+% Verify hardware is initialized and read skipHardware.
+[~, ~, skipHardware] = yOCTHardware('verifyInit');
+
+if skipHardware % make sure we are moving the stage only if we don't skip hardware
     moveTissueToFocus = false;
 else
     moveTissueToFocus = in.moveTissueToFocus;
 end
 
 % Return if skipHardware is true
-if in.skipHardware % No need to continue, we can't scan because hardware is skipped
+if skipHardware % No need to continue, we can't scan because hardware is skipped
 
     % How wide (X) and tall (Y) the requested scan area is:
     spanX_mm = xRange_mm(2) - xRange_mm(1); % total width  in millimetres
@@ -104,8 +106,7 @@ yOCTScanTile (...
     'octProbeFOV_mm',  octProbeFOV_mm, ...
     'octProbePath',    octProbePath, ...
     'pixelSize_um',    pixelSize_um, ...
-    'v',               v,  ...
-    'skipHardware',    in.skipHardware ...
+    'v',               v  ...
     );
 
 %% Reconstruct OCT Image for Subsequent Surface Analysis
@@ -118,7 +119,6 @@ yOCTProcessTiledScan(...
     {outputTiffFile},... Save only Tiff file as folder will be generated after smoothing
     'focusPositionInImageZpix', focusPositionInImageZpix, ...
     'dispersionQuadraticTerm',  dispersionQuadraticTerm, ...
-    'cropZAroundFocusArea',     false, ...
     'outputFilePixelSize_um',   [],...
     'v',                        v);
 [logMeanAbs, dimensions, ~] = yOCTFromTif(outputTiffFile);
@@ -160,7 +160,7 @@ if ~isempty(acceptableRange_mm) % If acceptableRange_mm is empty, then no need t
         'v',                            v);
 
     % Move the stage in Z if surface is out of focus, user wants to move and it's not a simulation
-    needMove = ~isSurfaceInFocus && moveTissueToFocus && ~in.skipHardware;
+    needMove = ~isSurfaceInFocus && moveTissueToFocus && ~skipHardware;
     
     % Cap movement to safety limits only if need to move the stage
     maxMovementSafetyCap_mm = 0.10;  % 100 micron safety cap
@@ -171,7 +171,7 @@ if ~isempty(acceptableRange_mm) % If acceptableRange_mm is empty, then no need t
     
     % Move the stage to bring tissue into focus if needed
     if needMove
-        [~,~,z0] = yOCTStageInit();  % query current Z
+        [~,~,z0] = yOCTHardware_initStage();  % query current Z
         try
             % Move the stage
             yOCTStageMoveTo(NaN, NaN, z0 + zOffsetCorrection_mm, v);

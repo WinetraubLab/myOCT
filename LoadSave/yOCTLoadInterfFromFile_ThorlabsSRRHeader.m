@@ -1,4 +1,4 @@
-function dimensions = yOCTLoadInterfFromFile_ThorlabsSRRHeader (inputDataFolder,OCTSystem,chirp)
+function dimensions = yOCTLoadInterfFromFile_ThorlabsSRRHeader (inputDataFolder,octSystem,chirp)
 %In case this is a thorlabs file that is saved in srr format.
 %Make sure SRR Name convention is 'Data_Y%04d_Total%d_B%04d_Total%d_%s.srr
 %Specifing (by order)
@@ -45,17 +45,17 @@ end
 
 sizeY = t{2};
 BScanAvgN = t{4};
-OCTSystem1 = t{end}{:};
+octSystem1 = t{end}{:};
 
-if ~exist('OCTSystem','var') || isempty(OCTSystem)
-    OCTSystem = OCTSystem1; %We had no idea what was the OCT system, now we do
+if ~exist('octSystem','var') || isempty(octSystem)
+    octSystem = octSystem1; %We had no idea what was the OCT system, now we do
 end
 
 %% Lambda
 order = 1;
 
 %Lambda Size
-dimensions = yOCTLoadInterfFromFile_ThorlabsHeaderLambda(inputDataFolder,OCTSystem,chirp);
+dimensions = yOCTLoadInterfFromFile_ThorlabsHeaderLambda(inputDataFolder,octSystem,chirp);
 order = order + 1;
 
 if length(dimensions.lambda.values) ~= headerFile.size1
@@ -101,7 +101,7 @@ dimensions.aux.scanstart = headerFile.scanstart+1;
 dimensions.aux.scanend = headerFile.scanend;
 dimensions.aux.apodstart = headerFile.apodstart+1;
 dimensions.aux.apodend = headerFile.apodend;
-dimensions.aux.OCTSystem = OCTSystem;
+dimensions.aux.octSystem = octSystem;
 
 end
 

@@ -6,12 +6,13 @@
 yOCTSetLibraryPath(); % Set path
 
 %% Inputs
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
 
 % Define the scan
 sampleSize_mm = 2; % Will scan from -sampleSize_mm to +sampleSize_mm
 
 % Define probe 
-octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x' or '40x', and scanning system dependent 'OCTP900' or ''
+octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x', '20x', or '40x', and scanning system dependent 'OCTP900' or ''
 
 % Define the scan
 pixelSize_um = 25; % x-y Pixel size in microns
@@ -19,8 +20,15 @@ pixelSize_um = 25; % x-y Pixel size in microns
 % Other scanning parameters
 tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 
+% OCT System Selection
+octSystem = 'Ganymede'; % Use either 'Ganymede' or 'Gan632' depending on your OCT system
+
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipHardware = false;
+
+%% Load hardware
+yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipHardware, ...
+    'octProbePath', octProbePath, 'v', true)
 
 %% Compute scanning parameters
 
@@ -32,8 +40,7 @@ skipHardware = false;
 [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
     yOCTScanGlassSlideToFindFocusAndDispersionQuadraticTerm( ...
     'octProbePath',octProbePath, ...
-    'tissueRefractiveIndex',tissueRefractiveIndex, ...
-    'skipHardware',skipHardware);
+    'tissueRefractiveIndex',tissueRefractiveIndex);
 
 %% Scan Overview
 
@@ -44,8 +51,7 @@ skipHardware = false;
         'octProbePath', octProbePath, ...
         'pixelSize_um', pixelSize_um,...
         'focusPositionInImageZpix', focusPositionInImageZpix,...
-        'dispersionQuadraticTerm', dispersionQuadraticTerm, ...
-        'skipHardware',skipHardware);
+        'dispersionQuadraticTerm', dispersionQuadraticTerm);
 
 %% Plot results
 figure(1)
@@ -55,3 +61,6 @@ ylabel('y [mm]');
 title('Tissue Interface Depth [mm]');
 colorbar;
 grid on;
+
+%% Cleanup for next run
+yOCTHardware('teardown');

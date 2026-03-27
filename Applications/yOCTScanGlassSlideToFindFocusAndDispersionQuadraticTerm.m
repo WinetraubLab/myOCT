@@ -14,7 +14,6 @@ function [dispersionQuadraticTerm, focusPositionInImageZpix] = ...
 %       focus, what range should we expect it to be within? Units: microns.
 %   tempFolder: path to temporary folder to save OCT volumes.
 %   tissueRefractiveIndex: Refractive index of tissue.
-%   skipHardware: set to true to skip hardware.
 %   v: verbose (and visualize) option.
 
 %% Parse inputs
@@ -24,7 +23,6 @@ addParameter(p,'octProbePath','probe.ini',@ischar);
 addParameter(p,'dispersionQuadraticTermInitialGuess',-1.482e8,@isnumeric);
 addParameter(p,'focusPositionInImageZpixInitialGuess',400,@isnumeric);
 addParameter(p,'focusSearchSize_um',25,@(x)(isnumeric(x) & x>0));
-addParameter(p,'skipHardware',false,@islogical);
 addParameter(p,'tissueRefractiveIndex',1.4);
 addParameter(p,'tempFolder','./TmpOCTVolume/',@ischar);
 addParameter(p,'v',true,@islogical);
@@ -36,17 +34,10 @@ tempFolder = in.tempFolder;
 if (tempFolder(end) ~= '\' &&  tempFolder(end) ~= '/')
     tempFolder(end+1) = '/';
 end
-
-% If using skipHardware mode, create simulated data in separate subdirectory
-% to avoid confusion with real hardware data
-if in.skipHardware
-    tempFolder = [tempFolder 'simulation/'];
-    if ~exist(tempFolder, 'dir')
-        mkdir(tempFolder);
-    end
-end
-
 in.tempFolder = tempFolder;
+
+% Get hardware state from yOCTHardware
+[~, ~, skipHardware] = yOCTHardware('status');
 
 %% Scan multiple depths to find focus
 if (in.v)
@@ -84,7 +75,7 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
                 scanDepths_um(1),scanDepths_um(end));
         end
         
-        if in.skipHardware
+        if skipHardware
             % Use simulation library to generate complete tile scan with all files
             % Create simple reflector data to simulate glass-air interface
             nZ = 1024; nX = nuberOfPixels; nY = 2;
@@ -103,7 +94,6 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
                 1e-3 * [-1, 1] * pixelSize_um, ...
                 'octProbePath', in.octProbePath, ...
                 'pixelSize_um', pixelSize_um, ...
-                'skipHardware', in.skipHardware, ...
                 'zDepths', scanDepths_um*1e-3, ... zDepths are in mm
                 'v',in.v  ...
                 );
@@ -112,14 +102,9 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
         atFocusIndex = NaN;
         atFocusIntensity = 0;
         for scanI = 1:length(json.octFolders)
-            % For simulated data, pass OCTSystem explicitly to avoid detection error
-            if in.skipHardware
-                [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}], ...
-                    'YFramesToProcess', 1, ...
-                    'OCTSystem', json.OCTSystem);
-            else
-                [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}], 'YFramesToProcess',1);
-            end
+            [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}], ...
+                'YFramesToProcess', 1, ...
+                'OCTSystem', json.octSystem);
 
             score = mean(abs(interf(:)));
             
@@ -135,13 +120,6 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
                 atFocusIntensity = score;
                 atFocusIndex = size(interfs,3);
             end
-        end
-
-        % In simulation mode, intensity scores may be uniform across all scans
-        % because simulated data has identical structure at all depths. Default to
-        % middle scan as a reasonable approximation for testing.
-        if in.skipHardware && isnan(atFocusIndex)
-            atFocusIndex = ceil(length(zDepths_mm)/2);
         end
         
         % Update best focus position
@@ -348,7 +326,7 @@ saveas(gcf, [in.tempFolder 'dispersion.png']);
 
 %% Cleanup simulated data
 % In skipHardware mode, remove simulation directory and close figures
-if in.skipHardware
+if skipHardware
     % Close all figures created during simulation
     close all;
     

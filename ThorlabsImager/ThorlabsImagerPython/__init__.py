@@ -1,0 +1,2 @@
+# Imager package initialization
+
