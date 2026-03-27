@@ -248,7 +248,7 @@ for ii = 1:length(zDepths_mm)
     colormap gray;
     if ii == atFocusIndex
         title(sprintf('Estimated\nFocus\n%.0f\\mum',1e3*zDepths_mm(ii)));
-    else
+    else % Scan using hardware
         title(sprintf('%.0f\\mum',1e3*zDepths_mm(ii)));
     end
 
