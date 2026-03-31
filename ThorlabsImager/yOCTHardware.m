@@ -374,6 +374,10 @@ case 'stagestatus'
 
 %  UPDATESTAGEPOSITION: update tracked stage position after movement
 case 'updatestageposition'
+    if ~gOCTHardwareStatus.stageInitialized
+        error('myOCT:yOCTHardware:stageNotInitialized', ...
+            'Stage not initialized. Call yOCTHardware(''initStage'', ...) first.');
+    end
     if ~isempty(in.posOCT)
         gOCTHardwareStatus.stagePosition_OCT = in.posOCT(:);
     end
