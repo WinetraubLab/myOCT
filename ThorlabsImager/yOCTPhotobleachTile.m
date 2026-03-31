@@ -298,7 +298,7 @@ end
 %% Initialize Hardware
 
 % Translational stage
-[x0,y0,z0] = yOCTHardware_initStage(json.oct2stageXYAngleDeg, NaN, NaN, v);
+[x0,y0,z0] = yOCTHardware('initStage', 'oct2stageXYAngleDeg', json.oct2stageXYAngleDeg, 'v', v);
 
 if (v)
     fprintf('%s Initialzing Motorized Translation Stage Hardware Completed\n',datestr(datetime));

@@ -5,7 +5,7 @@ function yOCTStageMoveTo (newx,newy,newz,v)
 %       not to move stage along some axis. These new position units are in
 %       OCT coordinate system units. A conversion between OCT coordinate
 %       system to the stage coordinate system is done via
-%       goct2stageXYAngleDeg which is set in yOCTHardware_initStage
+%       oct2stageXYAngleDeg which is set via yOCTHardware('initStage')
 %   v - verbose mode (default is false)
 
 %% Input checks
@@ -30,30 +30,29 @@ yOCTHardware('verifyInit');
 [octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 %% Compute current and new coordinates in both OCT and stage coordinate systems
-global gStageCurrentStagePosition_StageCoordinates;
-global gStageCurrentStagePosition_OCTCoordinates;
+[oct2stageAngle, posOCT, posStage] = yOCTHardware('stageStatus');
 
 % Where do we need to move in coordinate system
-d = [newx;newy;newz]-gStageCurrentStagePosition_OCTCoordinates(:);
+d = [newx;newy;newz]-posOCT(:);
 d(isnan(d)) = 0; % Where there is nan, we don't need to move, keep as is
 
 %% Compute where the new point is in Stage coordinate system
-global goct2stageXYAngleDeg;
-c = cos(goct2stageXYAngleDeg*pi/180);
-s = sin(goct2stageXYAngleDeg*pi/180);
+c = cos(oct2stageAngle*pi/180);
+s = sin(oct2stageAngle*pi/180);
 d_ = [c -s 0; s c 0; 0 0 1]*d;
 
-% Update global position trackers
-gStageCurrentStagePosition_OCTCoordinates = gStageCurrentStagePosition_OCTCoordinates + d;
-gStageCurrentStagePosition_StageCoordinates = gStageCurrentStagePosition_StageCoordinates + d_;
+% Update position state
+posOCT = posOCT + d;
+posStage = posStage + d_;
+yOCTHardware('updateStagePosition', 'posOCT', posOCT, 'posStage', posStage);
 
 
 %% Display new position
 
 if (v)
     fprintf('New Stage Position. ');
-    fprintf('At Stage Coordinate System: (%.3f, %.3f, %.3f) mm. ',gStageCurrentStagePosition_StageCoordinates);
-    fprintf('At OCT Coordinate System: (%.3f, %.3f, %.3f) mm.\n',gStageCurrentStagePosition_OCTCoordinates);
+    fprintf('At Stage Coordinate System: (%.3f, %.3f, %.3f) mm. ',posStage);
+    fprintf('At OCT Coordinate System: (%.3f, %.3f, %.3f) mm.\n',posOCT);
 end
 
 %% Move stage - system-specific commands
@@ -64,11 +63,11 @@ if ~skipHardware
             switch(octSystemName)
                 case 'ganymede'
                     % Ganymede: C# DLL stage control
-                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i), gStageCurrentStagePosition_StageCoordinates(i));
+                    ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(s(i), posStage(i));
                     
                 case 'gan632'
                     % Gan632: Python stage control
-                    octSystemModule.stage.yOCTStageSetPosition_1axis(s(i), gStageCurrentStagePosition_StageCoordinates(i));
+                    octSystemModule.stage.yOCTStageSetPosition_1axis(s(i), posStage(i));
                     
                 otherwise
                     error('Unknown OCT system: %s', octSystemName);
