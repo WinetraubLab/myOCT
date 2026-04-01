@@ -46,7 +46,7 @@ if (v)
     fprintf('%s Initialzing Stage Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
 
-% Retry settings for transient stage init failures (for example: XA device exception 2)
+% Retry settings for transient stage init failures
 stageInitMaxRetries = 3;
 stageInitRetryDelaySec = 0.5;
 
@@ -165,7 +165,6 @@ end
 end
 
 function pos = stageInitWithRetry(initFcn, axisName, maxRetries, retryDelaySec, v)
-% Retry stage axis initialization only for known transient XA device exceptions.
 for attempt = 1:maxRetries
     try
         pos = initFcn();
