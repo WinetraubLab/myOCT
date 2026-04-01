@@ -46,6 +46,10 @@ if (v)
     fprintf('%s Initialzing Stage Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
 
+% Retry settings for transient stage init failures (for example: XA device exception 2)
+stageInitMaxRetries = 3;
+stageInitRetryDelaySec = 0.5;
+
 % Load library (should already be loaded to memory)
 [octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
@@ -58,18 +62,24 @@ if ~skipHardware
             if (v)
                 fprintf('%s [Ganymede] Initializing C# DLL-based stage control (3 axes)...\n', datestr(datetime));
             end
-            z0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z');
-            x0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x');
-            y0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y');
+            z0 = stageInitWithRetry(@() ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z'), ...
+                'z', stageInitMaxRetries, stageInitRetryDelaySec, v);
+            x0 = stageInitWithRetry(@() ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x'), ...
+                'x', stageInitMaxRetries, stageInitRetryDelaySec, v);
+            y0 = stageInitWithRetry(@() ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y'), ...
+                'y', stageInitMaxRetries, stageInitRetryDelaySec, v);
             
         case 'gan632'
             % GAN632: Python stage control
             if (v)
                 fprintf('%s [Gan632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
             end
-            z0 = octSystemModule.stage.yOCTStageInit_1axis('z');
-            x0 = octSystemModule.stage.yOCTStageInit_1axis('x');
-            y0 = octSystemModule.stage.yOCTStageInit_1axis('y');
+            z0 = stageInitWithRetry(@() octSystemModule.stage.yOCTStageInit_1axis('z'), ...
+                'z', stageInitMaxRetries, stageInitRetryDelaySec, v);
+            x0 = stageInitWithRetry(@() octSystemModule.stage.yOCTStageInit_1axis('x'), ...
+                'x', stageInitMaxRetries, stageInitRetryDelaySec, v);
+            y0 = stageInitWithRetry(@() octSystemModule.stage.yOCTStageInit_1axis('y'), ...
+                'y', stageInitMaxRetries, stageInitRetryDelaySec, v);
             
         otherwise
             error('Unknown OCT system: %s', octSystemName);
@@ -150,4 +160,32 @@ else
     if (v)
         fprintf('%s Motion Range Test skipped (skipHardware = true)\n', datestr(datetime));
     end
+end
+
+end
+
+function pos = stageInitWithRetry(initFcn, axisName, maxRetries, retryDelaySec, v)
+% Retry stage axis initialization only for known transient XA device exceptions.
+for attempt = 1:maxRetries
+    try
+        pos = initFcn();
+        return;
+    catch ME
+        errText = lower([ME.identifier ' ' ME.message]);
+        isTransientXA = contains(errText, 'xa device exception 2') || ...
+            (contains(errText, 'device exception 2') && contains(errText, 'xa'));
+
+        if (~isTransientXA) || (attempt == maxRetries)
+            rethrow(ME);
+        end
+
+        if v
+            fprintf('%s Stage init axis %s failed (attempt %d/%d): %s\n', ...
+                datestr(datetime), axisName, attempt, maxRetries, ME.message);
+            fprintf('%s Retrying axis %s initialization in %.2f sec...\n', ...
+                datestr(datetime), axisName, retryDelaySec);
+        end
+        pause(retryDelaySec);
+    end
+end
 end
