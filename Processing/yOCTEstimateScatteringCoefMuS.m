@@ -25,13 +25,9 @@ parse(p, octData, dimensions, varargin{:});
 v = p.Results.v;
 tempFolder = p.Results.tempFolder;
 
-%% Align OCT volume to tissue surface (z=0 at tissue surface)
-[octCorrected, dimensionsCorrected] = ...
-    alignOctToSurface(octData, dimensions);
-
-%% Compute median depth profile across all a-scans
-medianIntensity_dB = median(octCorrected, [2 3], 'omitnan');  % Median over (x,y)
-medianIntensity_dB = medianIntensity_dB(:);  % Convert to column vector
+%% Compute median depth profile aligned to tissue surface
+[medianIntensity_dB, dimensionsCorrected] = ...
+    computeAlignedMedianProfile(octData, dimensions);
 tissueZDepth_um = dimensionsCorrected.z.values(:);  % Depth values
 
 % Remove NaN values at end where aligned data ran out
@@ -76,9 +72,13 @@ end
 
 
 %% Helper functions
-function [octCorrected, dimensionsCorrected] = alignOctToSurface(oct, dimensions)
-    % Align OCT volume so that z=0 corresponds to tissue surface
-    % It copies data from surface to end for each a-scan
+function [medianIntensity_dB, dimensionsCorrected] = computeAlignedMedianProfile(oct, dimensions)
+    % Compute the median depth profile after aligning each A-scan to the
+    % tissue surface. For each corrected Z level, gathers the corresponding
+    % values directly from the input volume using linear indexing and
+    % computes the median across all (x,y) positions.
+
+    pixZOffset = 5;
 
     %% Find surface position
     % Ensure dimensions in um for depth calculations
@@ -87,45 +87,40 @@ function [octCorrected, dimensionsCorrected] = alignOctToSurface(oct, dimensions
         'outputUnits', 'pix', 'isVisualize', false);
     surfacePosition_pix = permute(surfacePosition_pix, [2 1]); % Align with oct coordinates (x,y)
 
-    %% Create output data structure
-    octCorrected = zeros(size(oct)) * NaN;
+    %% Precompute surface offsets for valid (x,y) positions
+    nZ = size(oct, 1);
+    nX = size(oct, 2);
+    nY = size(oct, 3);
 
-    %% Loop over all x,y pixels to compute average intensity profile
-    pixZOffset = 5;
-    for xi=1:size(oct,2)
-        for yi=1:size(oct,3)
-            sp = surfacePosition_pix(xi,yi) - pixZOffset;
-            if isnan(sp) || sp<=0
-                continue; % Can't find surface
-            end
+    surfStart = round(surfacePosition_pix) - pixZOffset;
+    validMask = ~isnan(surfStart) & surfStart >= 1;
 
-            aScan = oct(:,xi,yi);
-            aScan = aScan(:);
-            inTissueIndexes = sp:length(aScan);
+    [xGrid, yGrid] = ndgrid(1:nX, 1:nY);
+    xValid = xGrid(validMask);
+    yValid = yGrid(validMask);
+    surfStartValid = surfStart(validMask);
 
-            octCorrected(1:length(inTissueIndexes),xi,yi) = ...
-                aScan(inTissueIndexes);
+    %% Compute median for each corrected Z level
+    medianIntensity_dB = NaN(nZ, 1);
+
+    for zi = 1:nZ
+        srcZ = surfStartValid + zi - 1;
+        inBounds = srcZ >= 1 & srcZ <= nZ;
+
+        if ~any(inBounds)
+            continue;
         end
+
+        linearIdx = sub2ind([nZ, nX, nY], ...
+            srcZ(inBounds), xValid(inBounds), yValid(inBounds));
+        medianIntensity_dB(zi) = median(oct(linearIdx), 'omitnan');
     end
 
-    %% Generate dimensions
+    %% Generate corrected dimensions
     dimensionsCorrected = dimensions;
-    dimensionsCorrected.z.values = diff(dimensions.z.values(1:2)) * ...
-        ((1:size(octCorrected,1))-pixZOffset);
-    dimensionsCorrected.z.index = 1:length(dimensionsCorrected.z.values);
-
-    % Plot original vs corrected (only use for debugging/verification)
-    if false  % Set to true to visualize alignment
-        figure(1)
-        subplot(1,2,1)
-        imagesc(dimensions.x.values,dimensions.z.values,squeeze(oct(:,:,end/2)));
-        title('Orig')
-        colormap gray
-        subplot(1,2,2)
-        imagesc(dimensionsCorrected.x.values,dimensionsCorrected.z.values,squeeze(octCorrected(:,:,end/2)));
-        title('Corrected')
-        colormap gray
-    end
+    dz = diff(dimensions.z.values(1:2));
+    dimensionsCorrected.z.values = dz * ((1:nZ) - pixZOffset);
+    dimensionsCorrected.z.index = 1:nZ;
 end
 
 function [mu_s, noiseFloor, modelFunc] = fitExponentialModel(im, tissueZDepth_um)

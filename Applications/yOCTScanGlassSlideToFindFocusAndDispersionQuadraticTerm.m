@@ -36,6 +36,9 @@ if (tempFolder(end) ~= '\' &&  tempFolder(end) ~= '/')
 end
 in.tempFolder = tempFolder;
 
+% Get hardware state from yOCTHardware
+[~, ~, skipHardware] = yOCTHardware('status');
+
 %% Scan multiple depths to find focus
 if (in.v)
     fprintf('%s Please adjust the OCT focus such that it is at glass silde interface, closest to the tissue.\n', datestr(datetime));
@@ -68,26 +71,41 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
     for i=1:length(range_um)
         scanDepths_um = unique(round(bestZ_mm*1e3 + linspace(-range_um(i),range_um(i), nSamplesInRange)));
         if (in.v)
-            fprintf('Scanning [%.0fum, %.0fum]\n', ...
+            fprintf('%s Scanning [%.0fum, %.0fum]\n', datestr(datetime), ...
                 scanDepths_um(1),scanDepths_um(end));
         end
-        yOCTScanTile (...
-            tempFolder, ...
-            1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
-            1e-3 * [-1, 1] * pixelSize_um, ...
-            'octProbePath', in.octProbePath, ...
-            'pixelSize_um', pixelSize_um, ...
-            'zDepths', scanDepths_um*1e-3, ... zDepths are in mm
-            'v',in.v  ...
-            );
         
-        % Load all the scans, find the scan that is in focus
-        json = awsReadJSON([tempFolder 'ScanInfo.json']);
-        atFocusIndex = NaN;
+        if skipHardware
+            % Use simulation library to generate complete tile scan with all files
+            % Create simple reflector data to simulate glass-air interface
+            nZ = 1024; nX = nuberOfPixels; nY = 2;
+            data = zeros(nZ, nX, nY); data(round(nZ/2), :, :) = 1; % Single strong reflector at center depth
+            
+            json = yOCTSimulateTileScan(data, tempFolder, ...
+                'xRange_mm', 1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
+                'yRange_mm', 1e-3 * [-1, 1] * pixelSize_um, ...
+                'octProbePath', in.octProbePath, ...
+                'pixelSize_um', pixelSize_um, ...
+                'zDepths', scanDepths_um*1e-3);
+        else % Scan using hardware
+            json = yOCTScanTile (...
+                tempFolder, ...
+                1e-3 * [-1, 1] * pixelSize_um * nuberOfPixels/2, ...
+                1e-3 * [-1, 1] * pixelSize_um, ...
+                'octProbePath', in.octProbePath, ...
+                'pixelSize_um', pixelSize_um, ...
+                'zDepths', scanDepths_um*1e-3, ... zDepths are in mm
+                'v',in.v  ...
+                );
+        end
+        
+        atFocusIndex = 1; % Default to first scan; updated below if a higher intensity scan is found
         atFocusIntensity = 0;
         for scanI = 1:length(json.octFolders)
-            [interf, dim] = yOCTLoadInterfFromFile(...
-                [tempFolder json.octFolders{scanI}], 'YFramesToProcess',1);
+            [interf, dim] = yOCTLoadInterfFromFile([tempFolder json.octFolders{scanI}], ...
+                'YFramesToProcess', 1, ...
+                'OCTSystem', json.octSystem);
+
             score = mean(abs(interf(:)));
             
             % Collect data
@@ -103,12 +121,12 @@ function [interfs, zDepths_mm, atFocusIndex, dim] = scanToFindFocus()
                 atFocusIndex = size(interfs,3);
             end
         end
-
+        
         % Update best focus position
         bestZ_mm = zDepths_mm(atFocusIndex);
 
         if in.v && i >= 2
-            fprintf('Best Focus Positon: %.0fum. ', bestZ_mm*1e3);
+            fprintf('%s Best Focus Positon: %.0fum. ', datestr(datetime), bestZ_mm*1e3);
         end
     end % Loop around
     if (in.v)
@@ -136,7 +154,7 @@ dispersionQuadraticTerm = fminsearch(...
     @dispersionErrorFunction, ...
     in.dispersionQuadraticTermInitialGuess);
 if (in.v)
-    fprintf('dispersionQuadraticTerm = %.4g\n',dispersionQuadraticTerm)
+    fprintf('%s dispersionQuadraticTerm = %.4g\n', datestr(datetime), dispersionQuadraticTerm)
 end
 
 %% Convert all interfs to scans
@@ -171,13 +189,15 @@ end
 focusPositionInImageZpix = findPeakPixel(...
     scans(:,:,atFocusIndex), in.focusPositionInImageZpixInitialGuess);
 if (in.v)
-    fprintf('focusPositionInImageZpix = %d\n',focusPositionInImageZpix)
+    fprintf('%s focusPositionInImageZpix = %d\n', datestr(datetime), focusPositionInImageZpix)
 end
 
 % Sanity check, make sure that Z doesn't change a lot along the scan
 % In theory, the scan should be very small thus z shouldn't change
 pos = alignZ(log(scanAtFocus));
-assert(prctile(abs(pos-focusPositionInImageZpix),95) < 2, 'Check focusPositionInImageZpix against scan failed');
+if ~skipHardware
+    assert(prctile(abs(pos-focusPositionInImageZpix),95) < 2, 'Check focusPositionInImageZpix against scan failed');
+end
 
 %% Compute the slide interface pixel and depth scan
 % This relationship validates that z pixel size is the same.
@@ -306,9 +326,27 @@ for ii = 1:length(dValues)
 end
 saveas(gcf, [in.tempFolder 'dispersion.png']);
 
+%% Cleanup simulated data
+% In skipHardware mode, remove simulation directory and close figures
+if skipHardware
+    % Close all figures created during simulation
+    close all;
+    
+    % Remove simulation directory to avoid confusion with real data
+    if exist(in.tempFolder, 'dir')
+        rmdir(in.tempFolder, 's'); % 's' flag removes directory and all contents
+        if in.v
+            fprintf('%s Cleaned up simulation directory: %s\n', datestr(datetime), in.tempFolder);
+        end
+    end
+end
+
 end
 
 function [pos, width] = alignZ(scan, template)
+    % Ensure scan is double precision for fminsearch compatibility
+    scan = double(scan);
+    
     zI = 1:size(scan,1); zI = zI(:);
     
     pos = zeros(1,size(scan,2));
@@ -316,7 +354,10 @@ function [pos, width] = alignZ(scan, template)
     for xI = 1:length(pos)
         s = scan(:, xI);
         [~, maxIdZ] = max(s);
-        maxIdZEnv = maxIdZ + (-5:5); maxIdZEnv=maxIdZEnv(:);
+
+        maxIdZEnv = maxIdZ + (-5:5);
+        maxIdZEnv = maxIdZEnv(maxIdZEnv >= 1 & maxIdZEnv <= length(s));
+        maxIdZEnv = maxIdZEnv(:);
 
         if ~exist('template','var') % Gaussian template
             model = @(x)(x(1)*exp( -(zI(maxIdZEnv)-x(2)).^2/(2*x(3)^2) ) + x(4));
