@@ -172,7 +172,8 @@ else
     rg_max = NaN;
 end
 
-[x0,y0,z0] = yOCTHardware('initStage', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
+yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
+[x0, y0, z0] = yOCTHardware('getStageStatus');
 
 if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));
@@ -197,7 +198,7 @@ for scanI=1:length(in.scanOrder)
     end
         
     % Move to position
-    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI));
+    yOCTHardware('moveStage', 'x', x0+in.gridXcc(scanI), 'y', y0+in.gridYcc(scanI), 'z', z0+in.gridZcc(scanI));
 
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
@@ -229,7 +230,7 @@ end
 
 % Return stage to home position
 pause(0.5);
-yOCTStageMoveTo(x0,y0,z0);
+yOCTHardware('moveStage', 'x', x0, 'y', y0, 'z', z0);
 pause(0.5);
 
 if (v)

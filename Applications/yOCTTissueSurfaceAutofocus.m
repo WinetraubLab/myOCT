@@ -171,11 +171,10 @@ if ~isempty(acceptableRange_mm) % If acceptableRange_mm is empty, then no need t
     
     % Move the stage to bring tissue into focus if needed
     if needMove
-        [~, posOCT, ~] = yOCTHardware('stageStatus');
-        z0 = posOCT(3);  % current Z position in OCT coordinates
+        [~, ~, z0] = yOCTHardware('getStageStatus');
         try
             % Move the stage
-            yOCTStageMoveTo(NaN, NaN, z0 + zOffsetCorrection_mm, v);
+            yOCTHardware('moveStage', 'z', z0 + zOffsetCorrection_mm, 'v', v);
 
             % Correct surface map by updating it with the new positions after movement
             surfacePosition_mm = surfacePosition_mm - zOffsetCorrection_mm;

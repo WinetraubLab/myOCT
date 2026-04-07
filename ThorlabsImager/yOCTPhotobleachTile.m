@@ -298,7 +298,8 @@ end
 %% Initialize Hardware
 
 % Translational stage
-[x0,y0,z0] = yOCTHardware('initStage', 'oct2stageXYAngleDeg', json.oct2stageXYAngleDeg, 'v', v);
+yOCTHardware('init', 'oct2stageXYAngleDeg', json.oct2stageXYAngleDeg, 'v', v);
+[x0, y0, z0] = yOCTHardware('getStageStatus');
 
 if (v)
     fprintf('%s Initialzing Motorized Translation Stage Hardware Completed\n',datestr(datetime));
@@ -360,11 +361,11 @@ for i=1:length(photobleachPlan)
     end
     
     % Move stage to next position
-    yOCTStageMoveTo(...
-        x0 + ppStep.stageCenterX_mm, ...
-        y0 + ppStep.stageCenterY_mm, ...
-        z0 + ppStep.stageCenterZ_mm, ...
-        v);
+    yOCTHardware('moveStage', ...
+        'x', x0 + ppStep.stageCenterX_mm, ...
+        'y', y0 + ppStep.stageCenterY_mm, ...
+        'z', z0 + ppStep.stageCenterZ_mm, ...
+        'v', v);
     
     % Perform photobleaching of this FOV
     photobleach_lines(...
@@ -398,7 +399,7 @@ if (v)
 end
 
 % Return stage to original position
-yOCTStageMoveTo(x0,y0,z0,v);
+yOCTHardware('moveStage', 'x', x0, 'y', y0, 'z', z0, 'v', v);
 
 %% Working with live laser
 function photobleach_lines(ptStart,ptEnd, exposures_sec, v, json)

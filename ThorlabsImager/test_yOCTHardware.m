@@ -130,82 +130,77 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
                 'myOCT:yOCTHardware:noCommand');
         end
 
-        %% initStage
+        %% Stage init (via init with stage params)
 
-        %% initStage returns (0,0,0) when skipHardware is true
+        %% init with stage params returns (0,0,0) when skipHardware is true
         function testInitStageReturnsOrigin(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            [x0, y0, z0] = yOCTHardware('initStage');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            [x0, y0, z0] = yOCTHardware('getStageStatus');
             testCase.verifyEqual([x0; y0; z0], [0;0;0]);
         end
 
-        %% initStage errors if init was never called
+        %% init with stage params errors if OCT not initialized
         function testInitStageErrorsWithoutInit(testCase)
             testCase.verifyError(...
-                @() yOCTHardware('initStage'), ...
-                'myOCT:yOCTHardware:notInitialized');
+                @() yOCTHardware('init', 'oct2stageXYAngleDeg', 0), ...
+                'myOCT:yOCTHardware:noSystemName');
         end
 
-        %% initStage with no angle defaults to 0 (not NaN)
-        function testInitStageDefaultAngleIsZero(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            yOCTHardware('initStage');
-            [angle, ~, ~] = yOCTHardware('stageStatus');
-            testCase.verifyEqual(angle, 0);
+        %% init with stage angle 0: moveStage preserves coordinates
+        function testInitStageAngleZeroPreservesCoordinates(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            yOCTHardware('moveStage', 'x', 3, 'y', 4, 'z', 5);
+            [x0, y0, z0] = yOCTHardware('getStageStatus');
+            testCase.verifyEqual([x0; y0; z0], [3;4;5]);
         end
 
-        %% Calling initStage twice re-homes: tracked position resets to origin
+        %% Calling init with stage params twice re-connects: tracked position resets
         function testInitStageTwiceResetsPosition(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            yOCTHardware('initStage');
-            yOCTHardware('updateStagePosition', ...
-                'posOCT', [5;6;7], 'posStage', [5;6;7]);
-            % Second call re-homes — previous position is lost
-            [x0, y0, z0] = yOCTHardware('initStage');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            yOCTHardware('moveStage', 'x', 5, 'y', 6, 'z', 7);
+            % Second init with stage params re-connects — position resets
+            yOCTHardware('init', 'oct2stageXYAngleDeg', 0);
+            [x0, y0, z0] = yOCTHardware('getStageStatus');
             testCase.verifyEqual([x0; y0; z0], [0;0;0]);
-            [~, posOCT, ~] = yOCTHardware('stageStatus');
-            testCase.verifyEqual(posOCT, [0;0;0]);
         end
 
-        %% stageStatus
+        %% getStageStatus
 
-        %% stageStatus returns angle and position set by initStage
-        function testStageStatusReturnsAngleAndPosition(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            yOCTHardware('initStage', 'oct2stageXYAngleDeg', 5);
-            [angle, posOCT, posStage] = yOCTHardware('stageStatus');
-            testCase.verifyEqual(angle, 5);
-            testCase.verifyEqual(posOCT, [0;0;0]);
-            testCase.verifyEqual(posStage, [0;0;0]);
+        %% getStageStatus returns position set by init
+        function testGetStageStatusReturnsPosition(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 5);
+            [x0, y0, z0] = yOCTHardware('getStageStatus');
+            testCase.verifyEqual([x0; y0; z0], [0;0;0]);
         end
 
-        %% stageStatus errors if initStage was never called
-        function testStageStatusErrorsWithoutInitStage(testCase)
+        %% getStageStatus errors if stage was never initialized
+        function testGetStageStatusErrorsWithoutStageInit(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
             testCase.verifyError(...
-                @() yOCTHardware('stageStatus'), ...
+                @() yOCTHardware('getStageStatus'), ...
                 'myOCT:yOCTHardware:stageNotInitialized');
         end
 
-        %% updateStagePosition
+        %% moveStage
 
-        %% updateStagePosition writes position, stageStatus reads it back
-        function testUpdateThenReadPosition(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            yOCTHardware('initStage');
-            yOCTHardware('updateStagePosition', ...
-                'posOCT', [1;2;3], 'posStage', [1.1;2.2;3.3]);
-            [~, posOCT, posStage] = yOCTHardware('stageStatus');
-            testCase.verifyEqual(posOCT, [1;2;3]);
-            testCase.verifyEqual(posStage, [1.1;2.2;3.3]);
+        %% moveStage writes position, getStageStatus reads it back
+        function testMoveThenReadPosition(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            yOCTHardware('moveStage', 'x', 1, 'y', 2, 'z', 3);
+            [x0, y0, z0] = yOCTHardware('getStageStatus');
+            testCase.verifyEqual([x0; y0; z0], [1;2;3]);
         end
 
-        %% updateStagePosition errors if initStage was never called
-        function testUpdatePositionErrorsWithoutInitStage(testCase)
+        %% moveStage errors if stage was never initialized
+        function testMoveStageErrorsWithoutStageInit(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
             testCase.verifyError(...
-                @() yOCTHardware('updateStagePosition', ...
-                    'posOCT', [1;2;3], 'posStage', [1;2;3]), ...
+                @() yOCTHardware('moveStage', 'x', 1, 'y', 2, 'z', 3), ...
                 'myOCT:yOCTHardware:stageNotInitialized');
         end
 
@@ -213,30 +208,30 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
 
         %% reset clears stage state
         function testResetClearsStageState(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            yOCTHardware('initStage');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
             yOCTHardware('reset');
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            testCase.verifyError(@() yOCTHardware('stageStatus'), ...
+            testCase.verifyError(@() yOCTHardware('getStageStatus'), ...
                 'myOCT:yOCTHardware:stageNotInitialized');
         end
 
         %% Teardown: clears stage state
         function testTeardownClearsStageState(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            yOCTHardware('initStage');
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
             yOCTHardware('teardown');
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            testCase.verifyError(@() yOCTHardware('stageStatus'), ...
+            testCase.verifyError(@() yOCTHardware('getStageStatus'), ...
                 'myOCT:yOCTHardware:stageNotInitialized');
         end
 
         %% Changing OCT system auto-teardowns and clears stage state
         function testSystemChangeClearsStageState(testCase)
-            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
-            yOCTHardware('initStage', 'oct2stageXYAngleDeg', 10);
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 10);
             yOCTHardware('init', 'OCTSystem', 'Ganymede', 'skipHardware', true);
-            testCase.verifyError(@() yOCTHardware('stageStatus'), ...
+            testCase.verifyError(@() yOCTHardware('getStageStatus'), ...
                 'myOCT:yOCTHardware:stageNotInitialized');
         end
 

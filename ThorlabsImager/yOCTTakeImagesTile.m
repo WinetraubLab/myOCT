@@ -82,7 +82,8 @@ if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
 
-[x0,y0] = yOCTHardware('initStage', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg);
+yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg);
+[x0, y0] = yOCTHardware('getStageStatus');
 
 %Set lightring power
 if (v)
@@ -99,11 +100,12 @@ else
     rg_min = NaN;
     rg_max = NaN;
 end
-[x0,y0,z0] = yOCTHardware('initStage', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
+yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
+[x0, y0, z0] = yOCTHardware('getStageStatus');
 
 %Move to initial position to make a scan
 if (in.zDepth ~= 0)
-    yOCTStageMoveTo(NaN,NaN,z0+in.zDepth);
+    yOCTHardware('moveStage', 'z', z0+in.zDepth);
     pause(0.5);
 end
 
@@ -124,7 +126,7 @@ for scanI=1:length(scanOrder)
     end
         
     %Move to position
-    yOCTStageMoveTo(x0+in.gridXcc(scanI),y0+in.gridYcc(scanI));
+    yOCTHardware('moveStage', 'x', x0+in.gridXcc(scanI), 'y', y0+in.gridYcc(scanI));
     
     %Make a folder
     s = sprintf('%s\\%s',imageFolder,in.imagesFP{scanI});
@@ -141,7 +143,7 @@ end
 
 %Home (if required)
 pause(0.5);
-yOCTStageMoveTo(x0,y0,z0);
+yOCTHardware('moveStage', 'x', x0, 'y', y0, 'z', z0);
 pause(0.5);
 
 %Set lightring power
