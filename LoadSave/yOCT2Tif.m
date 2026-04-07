@@ -349,7 +349,15 @@ else
     % This keeps memory usage at 1 slide instead of N slides.
     if isOutputFile
         metaJson = buildTiffVolumeMetadata(metadata, c);
-        tn = [tempname '.tif'];
+
+        % For local paths, write directly to the output to avoid filling
+        % the system temp drive with a multi GB BigTIFF.
+        % For AWS, write to a temp file first then upload.
+        if isAWS
+            tn = [tempname '.tif'];
+        else
+            tn = outputFilePaths{1};
+        end
         t = Tiff(tn, 'w8');  % BigTIFF to support files > 4 GB
 
         for frameI = 1:numberOfYPlanes
@@ -368,9 +376,11 @@ else
         end
         t.close();
 
-        % Copy the assembled file to the final output destination
-        awsCopyFileFolder(tn, outputFilePaths{1});
-        delete(tn);
+        % For AWS, copy the assembled file to the final destination
+        if isAWS
+            awsCopyFileFolder(tn, outputFilePaths{1});
+            delete(tn);
+        end
     end
     
     % If output folder is not required, delete it
