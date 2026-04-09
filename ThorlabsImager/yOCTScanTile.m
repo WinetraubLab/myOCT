@@ -198,7 +198,7 @@ for scanI=1:length(in.scanOrder)
     end
         
     % Move to position
-    yOCTHardware('moveStage', 'x', x0+in.gridXcc(scanI), 'y', y0+in.gridYcc(scanI), 'z', z0+in.gridZcc(scanI));
+    yOCTStageMoveTo(x0+in.gridXcc(scanI), y0+in.gridYcc(scanI), z0+in.gridZcc(scanI));
 
     % Create folder path to scan
     s = sprintf('%s\\%s\\',octFolder,in.octFolders{scanI});
@@ -230,7 +230,7 @@ end
 
 % Return stage to home position
 pause(0.5);
-yOCTHardware('moveStage', 'x', x0, 'y', y0, 'z', z0);
+yOCTStageMoveTo(x0,y0,z0);
 pause(0.5);
 
 if (v)

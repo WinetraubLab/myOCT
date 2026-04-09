@@ -147,11 +147,11 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
                 'myOCT:yOCTHardware:noSystemName');
         end
 
-        %% init with stage angle 0: moveStage preserves coordinates
-        function testInitStageAngleZeroPreservesCoordinates(testCase)
+        %% init with stage angle 0: yOCTStageMoveTo updates position
+        function testInitStageAngleZeroMoveTo(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
                 'oct2stageXYAngleDeg', 0);
-            yOCTHardware('moveStage', 'x', 3, 'y', 4, 'z', 5);
+            yOCTStageMoveTo(3, 4, 5);
             [x0, y0, z0] = yOCTHardware('getStageStatus');
             testCase.verifyEqual([x0; y0; z0], [3;4;5]);
         end
@@ -160,7 +160,7 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
         function testInitStageTwiceResetsPosition(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
                 'oct2stageXYAngleDeg', 0);
-            yOCTHardware('moveStage', 'x', 5, 'y', 6, 'z', 7);
+            yOCTStageMoveTo(5, 6, 7);
             % Second init with stage params re-connects — position resets
             yOCTHardware('init', 'oct2stageXYAngleDeg', 0);
             [x0, y0, z0] = yOCTHardware('getStageStatus');
@@ -185,22 +185,22 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
                 'myOCT:yOCTHardware:stageNotInitialized');
         end
 
-        %% moveStage
+        %% yOCTStageMoveTo
 
-        %% moveStage writes position, getStageStatus reads it back
+        %% yOCTStageMoveTo writes position, getStageStatus reads it back
         function testMoveThenReadPosition(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
                 'oct2stageXYAngleDeg', 0);
-            yOCTHardware('moveStage', 'x', 1, 'y', 2, 'z', 3);
+            yOCTStageMoveTo(1, 2, 3);
             [x0, y0, z0] = yOCTHardware('getStageStatus');
             testCase.verifyEqual([x0; y0; z0], [1;2;3]);
         end
 
-        %% moveStage errors if stage was never initialized
-        function testMoveStageErrorsWithoutStageInit(testCase)
+        %% yOCTStageMoveTo errors if stage was never initialized
+        function testMoveToErrorsWithoutStageInit(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true);
             testCase.verifyError(...
-                @() yOCTHardware('moveStage', 'x', 1, 'y', 2, 'z', 3), ...
+                @() yOCTStageMoveTo(1, 2, 3), ...
                 'myOCT:yOCTHardware:stageNotInitialized');
         end
 

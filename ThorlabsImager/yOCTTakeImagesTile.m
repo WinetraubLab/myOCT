@@ -105,7 +105,7 @@ yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition
 
 %Move to initial position to make a scan
 if (in.zDepth ~= 0)
-    yOCTHardware('moveStage', 'z', z0+in.zDepth);
+    yOCTStageMoveTo(NaN,NaN,z0+in.zDepth);
     pause(0.5);
 end
 
@@ -126,7 +126,7 @@ for scanI=1:length(scanOrder)
     end
         
     %Move to position
-    yOCTHardware('moveStage', 'x', x0+in.gridXcc(scanI), 'y', y0+in.gridYcc(scanI));
+    yOCTStageMoveTo(x0+in.gridXcc(scanI),y0+in.gridYcc(scanI));
     
     %Make a folder
     s = sprintf('%s\\%s',imageFolder,in.imagesFP{scanI});
@@ -143,7 +143,7 @@ end
 
 %Home (if required)
 pause(0.5);
-yOCTHardware('moveStage', 'x', x0, 'y', y0, 'z', z0);
+yOCTStageMoveTo(x0,y0,z0);
 pause(0.5);
 
 %Set lightring power

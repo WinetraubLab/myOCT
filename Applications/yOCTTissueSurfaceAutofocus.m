@@ -174,7 +174,7 @@ if ~isempty(acceptableRange_mm) % If acceptableRange_mm is empty, then no need t
         [~, ~, z0] = yOCTHardware('getStageStatus');
         try
             % Move the stage
-            yOCTHardware('moveStage', 'z', z0 + zOffsetCorrection_mm, 'v', v);
+            yOCTStageMoveTo(NaN, NaN, z0 + zOffsetCorrection_mm, v);
 
             % Correct surface map by updating it with the new positions after movement
             surfacePosition_mm = surfacePosition_mm - zOffsetCorrection_mm;
