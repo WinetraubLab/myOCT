@@ -83,7 +83,7 @@ if (v)
 end
 
 yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg);
-[x0, y0] = yOCTHardware('getStageStatus');
+[x0, y0] = yOCTHardware('getStagePosition');
 
 %Set lightring power
 if (v)
@@ -101,7 +101,7 @@ else
     rg_max = NaN;
 end
 yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
-[x0, y0, z0] = yOCTHardware('getStageStatus');
+[x0, y0, z0] = yOCTHardware('getStagePosition');
 
 %Move to initial position to make a scan
 if (in.zDepth ~= 0)

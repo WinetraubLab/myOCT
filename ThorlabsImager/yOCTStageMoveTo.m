@@ -27,11 +27,16 @@ end
 
 % Verify hardware is initialized
 yOCTHardware('verifyInit');
-[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
-%% Compute current and new coordinates in both OCT and stage coordinate systems
+% Verify stage is initialized (globals must be populated)
 global gStageCurrentStagePosition_StageCoordinates;
 global gStageCurrentStagePosition_OCTCoordinates;
+if isempty(gStageCurrentStagePosition_OCTCoordinates)
+    error('myOCT:yOCTHardware:stageNotInitialized', ...
+        'Stage not initialized. Call yOCTHardware(''init'', ..., ''oct2stageXYAngleDeg'', deg) first.');
+end
+
+[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Where do we need to move in coordinate system
 d = [newx;newy;newz]-gStageCurrentStagePosition_OCTCoordinates(:);

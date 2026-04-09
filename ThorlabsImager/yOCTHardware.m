@@ -36,13 +36,13 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %   'reset'      - Clear all persistent variables without closing hardware.
 %                  yOCTHardware('reset')
 %
-%   'getStageStatus' - Return current stage position.
-%                  [x0, y0, z0] = yOCTHardware('getStageStatus')
+%   'getStagePosition' - Return current stage position.
+%                  [x0, y0, z0] = yOCTHardware('getStagePosition')
 %                  Errors if stage was never initialized via init.
 %
 % VALID COMMAND SEQUENCES:
-%   Most common:         init (with stage params) -> getStageStatus -> yOCTStageMoveTo -> teardown
-%   Stage after OCT:     init -> init (stage only) -> getStageStatus -> yOCTStageMoveTo -> teardown
+%   Most common:         init (with stage params) -> getStagePosition -> yOCTStageMoveTo -> teardown
+%   Stage after OCT:     init -> init (stage only) -> getStagePosition -> yOCTStageMoveTo -> teardown
 %   With state reset:    init -> status -> reset -> init -> teardown
 %   WARNING: init -> reset -> [no teardown]: leaves hardware open. Always end with teardown.
 
@@ -61,7 +61,7 @@ global gStageCurrentStagePosition_StageCoordinates;
 %% Parse command
 if ~exist('command','var') || isempty(command)
     error('myOCT:yOCTHardware:noCommand', ...
-        'yOCTHardware requires a command: ''init'', ''status'', ''verifyInit'', ''teardown'', ''reset'', or ''getStageStatus''.');
+        'yOCTHardware requires a command: ''init'', ''status'', ''verifyInit'', ''teardown'', ''reset'', or ''getStagePosition''.');
 end
 
 %% Parse optional name-value parameters
@@ -140,7 +140,7 @@ case 'teardown'
                     gOCTHardwareStatus.module.cleanup.yOCTCloseAllHardware();
                 catch ME
                     if v
-                        warning('Error during Gan632 cleanup: %s', ME.message);
+                        warning(ME.identifier, '%s', ME.message);
                     end
                 end
         end
@@ -152,7 +152,7 @@ case 'teardown'
             terminate(pyenv);
         catch ME
             if v
-                warning('Failed to terminate Python interpreter: %s', ME.message);
+                warning(ME.identifier, '%s', ME.message);
             end
         end
         if v
@@ -356,8 +356,8 @@ case 'init'
     [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
         getOutputs(gOCTHardwareStatus);
 
-%  GETSTAGESTATUS: return stage position from globals
-case 'getstagestatus'
+%  GETSTAGEPOSITION: return stage position from globals
+case 'getstageposition'
     if ~gOCTHardwareStatus.stageInitialized
         error('myOCT:yOCTHardware:stageNotInitialized', ...
             'Stage not initialized. Call yOCTHardware(''init'', ..., ''oct2stageXYAngleDeg'', deg) first.');
@@ -370,7 +370,7 @@ case 'getstagestatus'
 
 otherwise
     error('myOCT:yOCTHardware:unknownCommand', ...
-        'Unknown command: ''%s''. Use ''init'', ''status'', ''verifyInit'', ''teardown'', ''reset'', or ''getStageStatus''.', command);
+        'Unknown command: ''%s''. Use ''init'', ''status'', ''verifyInit'', ''teardown'', ''reset'', or ''getStagePosition''.', command);
 end
 
 end
