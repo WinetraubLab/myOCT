@@ -172,7 +172,8 @@ else
     rg_max = NaN;
 end
 
-[x0,y0,z0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
+yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
+[x0, y0, z0] = yOCTHardware('getStagePosition');
 
 if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));

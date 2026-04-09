@@ -9,10 +9,15 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %   scannerInitialized - True when scanner is currently initialized
 %
 % COMMANDS:
-%   'init'       - Load module and initialize scanner.
+%   'init'       - Load module, initialize scanner, and optionally initialize translation stage.
 %                  yOCTHardware('init', 'OCTSystem', name, 'skipHardware', tf, ...
-%                               'octProbePath', path, 'v', tf)
+%                               'octProbePath', path, 'v', tf, ...
+%                               'oct2stageXYAngleDeg', deg, ...
+%                               'minPosition', vec, 'maxPosition', vec)
 %                  octProbePath can be '' when skipHardware=true.
+%                  Stage parameters are optional. If hardware is already
+%                  initialized, calling init with only stage parameters
+%                  connects the stage without re-initializing the OCT system.
 %
 %   'status'     - Return current state without modification.
 %                  [module, name, skip, scannerInit] = yOCTHardware('status')
@@ -31,8 +36,13 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %   'reset'      - Clear all persistent variables without closing hardware.
 %                  yOCTHardware('reset')
 %
+%   'getStagePosition' - Return current stage position.
+%                  [x0, y0, z0] = yOCTHardware('getStagePosition')
+%                  Errors if stage was never initialized via init.
+%
 % VALID COMMAND SEQUENCES:
-%   Most common:         init -> status -> teardown
+%   Most common:         init (with stage params) -> getStagePosition -> yOCTStageMoveTo -> teardown
+%   Stage after OCT:     init -> init (stage only) -> getStagePosition -> yOCTStageMoveTo -> teardown
 %   With state reset:    init -> status -> reset -> init -> teardown
 %   WARNING: init -> reset -> [no teardown]: leaves hardware open. Always end with teardown.
 
@@ -43,10 +53,15 @@ if isempty(gOCTHardwareStatus)
     gOCTHardwareStatus = resetGlobalStruct();
 end
 
+% Stage position globals shared with yOCTStageMoveTo
+global goct2stageXYAngleDeg;
+global gStageCurrentStagePosition_OCTCoordinates;
+global gStageCurrentStagePosition_StageCoordinates;
+
 %% Parse command
 if ~exist('command','var') || isempty(command)
     error('myOCT:yOCTHardware:noCommand', ...
-        'yOCTHardware requires a command: ''init'', ''status'', ''verifyInit'', ''teardown'', or ''reset''.');
+        'yOCTHardware requires a command: ''init'', ''status'', ''verifyInit'', ''teardown'', ''reset'', or ''getStagePosition''.');
 end
 
 %% Parse optional name-value parameters
@@ -55,6 +70,9 @@ addParameter(p, 'OCTSystem', '', @ischar);
 addParameter(p, 'skipHardware', false, @islogical);
 addParameter(p, 'octProbePath', '', @ischar);
 addParameter(p, 'v', false, @islogical);
+addParameter(p, 'oct2stageXYAngleDeg', NaN, @isnumeric);
+addParameter(p, 'minPosition', [0 0 0], @isnumeric);
+addParameter(p, 'maxPosition', [0 0 0], @isnumeric);
 parse(p, varargin{:});
 in = p.Results;
 
@@ -64,6 +82,7 @@ switch lower(command)
 %  RESET: clear state without closing hardware
 case 'reset'
     gOCTHardwareStatus = resetGlobalStruct();
+    clearStageGlobals();
     [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
         getOutputs(gOCTHardwareStatus);
     return;
@@ -121,7 +140,7 @@ case 'teardown'
                     gOCTHardwareStatus.module.cleanup.yOCTCloseAllHardware();
                 catch ME
                     if v
-                        warning('Error during Gan632 cleanup: %s', ME.message);
+                        warning(ME.identifier, '%s', ME.message);
                     end
                 end
         end
@@ -133,7 +152,7 @@ case 'teardown'
             terminate(pyenv);
         catch ME
             if v
-                warning('Failed to terminate Python interpreter: %s', ME.message);
+                warning(ME.identifier, '%s', ME.message);
             end
         end
         if v
@@ -147,92 +166,211 @@ case 'teardown'
 
     % Clear all persistent state
     gOCTHardwareStatus = resetGlobalStruct();
+    clearStageGlobals();
     [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
         getOutputs(gOCTHardwareStatus);
     return;
 
-%  INIT: load module + initialize scanner
+%  INIT: load module + initialize scanner + optionally initialize stage
 case 'init'
     octSystemNameIn = in.OCTSystem;
     skipHw          = in.skipHardware;
     octProbePath    = in.octProbePath;
+    oct2stageAngle  = in.oct2stageXYAngleDeg;
+    minPos          = in.minPosition;
+    maxPos          = in.maxPosition;
     v               = in.v;
+
+    stageRequested = ~isnan(oct2stageAngle);
+    octParamsProvided = ~isempty(octSystemNameIn);
 
     %% Early return if already initialized with same parameters
     if ~isempty(gOCTHardwareStatus.name)
-        nameChanged  = ~isempty(octSystemNameIn) && ~strcmpi(octSystemNameIn, gOCTHardwareStatus.name);
-        skipChanged  = islogical(skipHw) && skipHw ~= gOCTHardwareStatus.skipHardware;
-        probeChanged = ~isempty(octProbePath) && ~isempty(gOCTHardwareStatus.probePath) && ...
-            ~strcmp(octProbePath, gOCTHardwareStatus.probePath);
+        needOCTReinit = false;
 
-        if ~nameChanged && ~skipChanged && ~probeChanged
-            % Everything matches — return current state
+        if octParamsProvided
+            nameChanged  = ~strcmpi(octSystemNameIn, gOCTHardwareStatus.name);
+            skipChanged  = islogical(skipHw) && skipHw ~= gOCTHardwareStatus.skipHardware;
+            probeChanged = ~isempty(octProbePath) && ~isempty(gOCTHardwareStatus.probePath) && ...
+                ~strcmp(octProbePath, gOCTHardwareStatus.probePath);
+            needOCTReinit = nameChanged || skipChanged || probeChanged;
+        end
+
+        if ~needOCTReinit && ~stageRequested
+            % Nothing changed, nothing new requested — return current state
             [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
                 getOutputs(gOCTHardwareStatus);
             return;
         end
 
-        % Something changed — auto-teardown before re-init
-        changed = {};
-        if nameChanged,  changed{end+1} = sprintf('OCTSystem: %s -> %s', gOCTHardwareStatus.name, octSystemNameIn); end
-        if skipChanged,  changed{end+1} = sprintf('skipHardware: %d -> %d', gOCTHardwareStatus.skipHardware, skipHw); end
-        if probeChanged, changed{end+1} = 'octProbePath changed'; end
-        if v
-            fprintf('%s Configuration changed (%s), tearing down before re-init...\n', ...
-                datestr(datetime), strjoin(changed, ', '));
+        if needOCTReinit
+            % OCT config changed — auto-teardown before re-init
+            changed = {};
+            if nameChanged,  changed{end+1} = sprintf('OCTSystem: %s -> %s', gOCTHardwareStatus.name, octSystemNameIn); end
+            if skipChanged,  changed{end+1} = sprintf('skipHardware: %d -> %d', gOCTHardwareStatus.skipHardware, skipHw); end
+            if probeChanged, changed{end+1} = 'octProbePath changed'; end
+            if v
+                fprintf('%s Configuration changed (%s), tearing down before re-init...\n', ...
+                    datestr(datetime), strjoin(changed, ', '));
+            end
+            yOCTHardware('teardown');
+            % Fall through to full init below
         end
-        yOCTHardware('teardown');
+        % If only stageRequested (no OCT reinit), skip to stage init below
     end
 
-    %% Validate inputs
-    if isempty(octSystemNameIn)
-        error('myOCT:yOCTHardware:noSystemName', ...
-            'yOCTHardware(''init'') requires OCTSystem (''Ganymede'' or ''Gan632'').');
+    %% OCT init (only if not already initialized)
+    if isempty(gOCTHardwareStatus.name)
+        if ~octParamsProvided
+            error('myOCT:yOCTHardware:noSystemName', ...
+                'yOCTHardware(''init'') requires OCTSystem (''Ganymede'' or ''Gan632'').');
+        end
+
+        validSystems = {'Ganymede', 'Gan632'};
+        if ~any(strcmpi(octSystemNameIn, validSystems))
+            error('myOCT:yOCTHardware:invalidSystem', ...
+                ['Invalid OCT System: %s' newline 'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemNameIn);
+        end
+
+        if skipHw
+            gOCTHardwareStatus.name              = lower(octSystemNameIn);
+            gOCTHardwareStatus.module            = [];
+            gOCTHardwareStatus.skipHardware      = true;
+            gOCTHardwareStatus.probePath         = octProbePath;
+            gOCTHardwareStatus.scannerInitialized = false;
+        else
+            %% Load hardware module
+            octSystemNameIn = lower(octSystemNameIn);
+            gOCTHardwareStatus.module = loadModule(octSystemNameIn, v);
+
+            %% Store state
+            gOCTHardwareStatus.name         = octSystemNameIn;
+            gOCTHardwareStatus.skipHardware = false;
+            gOCTHardwareStatus.probePath    = octProbePath;
+
+            %% Initialize scanner (only when octProbePath is provided)
+            if ~isempty(octProbePath)
+                yOCTHardware_initScanner(octProbePath, v);
+                gOCTHardwareStatus.scannerInitialized = true;
+            else
+                gOCTHardwareStatus.scannerInitialized = false;
+            end
+        end
     end
 
-    validSystems = {'Ganymede', 'Gan632'};
-    if ~any(strcmpi(octSystemNameIn, validSystems))
-        error('myOCT:yOCTHardware:invalidSystem', ...
-            ['Invalid OCT System: %s' newline 'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemNameIn);
-    end
+    %% Stage init (if oct2stageXYAngleDeg was provided)
+    if stageRequested
+        % Normalize min/max position inputs
+        minPos(isnan(minPos)) = 0;
+        tmp = zeros(1,3); tmp(1:length(minPos)) = minPos; minPos = tmp;
+        maxPos(isnan(maxPos)) = 0;
+        tmp = zeros(1,3); tmp(1:length(maxPos)) = maxPos; maxPos = tmp;
 
-    %% skipHardware path: store state and return (no module, no scanner)
-    if skipHw
-        gOCTHardwareStatus.name              = lower(octSystemNameIn);
-        gOCTHardwareStatus.module            = [];
-        gOCTHardwareStatus.skipHardware      = true;
-        gOCTHardwareStatus.probePath         = octProbePath;
-        gOCTHardwareStatus.scannerInitialized = false;
+        if v
+            fprintf('%s Initialzing Stage Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n', datestr(datetime));
+        end
 
-        [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
-            getOutputs(gOCTHardwareStatus);
-        return;
-    end
+        % Initialize stage axes
+        if ~gOCTHardwareStatus.skipHardware
+            switch gOCTHardwareStatus.name
+                case 'ganymede'
+                    if v
+                        fprintf('%s [Ganymede] Initializing C# DLL-based stage control (3 axes)...\n', datestr(datetime));
+                    end
+                    z0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('z');
+                    x0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('x');
+                    y0 = ThorlabsImagerNET.ThorlabsImager.yOCTStageInit('y');
 
-    %% Load hardware module
-    octSystemNameIn = lower(octSystemNameIn);
-    gOCTHardwareStatus.module = loadModule(octSystemNameIn, v);
+                case 'gan632'
+                    if v
+                        fprintf('%s [Gan632] Initializing Python-based stage control (3 axes)...\n', datestr(datetime));
+                    end
+                    z0 = gOCTHardwareStatus.module.stage.yOCTStageInit_1axis('z');
+                    x0 = gOCTHardwareStatus.module.stage.yOCTStageInit_1axis('x');
+                    y0 = gOCTHardwareStatus.module.stage.yOCTStageInit_1axis('y');
 
-    %% Store state
-    gOCTHardwareStatus.name         = octSystemNameIn;
-    gOCTHardwareStatus.skipHardware = false;
-    gOCTHardwareStatus.probePath    = octProbePath;
+                otherwise
+                    error('Unknown OCT system: %s', gOCTHardwareStatus.name);
+            end
+        else
+            if v
+                fprintf('%s Stage initialization skipped (skipHardware = true), using origin (0,0,0)\n', datestr(datetime));
+            end
+            x0 = 0; y0 = 0; z0 = 0;
+        end
 
-    %% Initialize scanner (only when octProbePath is provided)
-    if ~isempty(octProbePath)
-        yOCTHardware_initScanner(octProbePath, v);
-        gOCTHardwareStatus.scannerInitialized = true;
-    else
-        gOCTHardwareStatus.scannerInitialized = false;
+        % Store stage state
+        gOCTHardwareStatus.oct2stageXYAngleDeg = oct2stageAngle;
+        gOCTHardwareStatus.stageInitialized = true;
+
+        % Write to globals (shared with yOCTStageMoveTo)
+        goct2stageXYAngleDeg = oct2stageAngle;
+        gStageCurrentStagePosition_OCTCoordinates = [x0;y0;z0];
+        gStageCurrentStagePosition_StageCoordinates = [x0;y0;z0];
+
+        % Motion range test
+        if any(minPos ~= maxPos)
+            if v
+                fprintf('%s Motion Range Test...\n\t(if Matlab is taking more than 2 minutes to finish this step, stage might be at its limit and need to center)\n', datestr(datetime));
+            end
+            if ~gOCTHardwareStatus.skipHardware
+                axes = 'xyz';
+                for i = 1:length(axes)
+                    if minPos(i) ~= maxPos(i)
+                        switch gOCTHardwareStatus.name
+                            case 'ganymede'
+                                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(axes(i), ...
+                                    gStageCurrentStagePosition_StageCoordinates(i) + minPos(i));
+                                pause(0.5);
+                                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(axes(i), ...
+                                    gStageCurrentStagePosition_StageCoordinates(i) + maxPos(i));
+                                pause(0.5);
+                                ThorlabsImagerNET.ThorlabsImager.yOCTStageSetPosition(axes(i), ...
+                                    gStageCurrentStagePosition_StageCoordinates(i));
+
+                            case 'gan632'
+                                gOCTHardwareStatus.module.stage.yOCTStageSetPosition_1axis(axes(i), ...
+                                    gStageCurrentStagePosition_StageCoordinates(i) + minPos(i));
+                                pause(0.5);
+                                gOCTHardwareStatus.module.stage.yOCTStageSetPosition_1axis(axes(i), ...
+                                    gStageCurrentStagePosition_StageCoordinates(i) + maxPos(i));
+                                pause(0.5);
+                                gOCTHardwareStatus.module.stage.yOCTStageSetPosition_1axis(axes(i), ...
+                                    gStageCurrentStagePosition_StageCoordinates(i));
+
+                            otherwise
+                                error('Unknown OCT system: %s', gOCTHardwareStatus.name);
+                        end
+                        pause(0.5);
+                    end
+                end
+            else
+                if v
+                    fprintf('%s Motion Range Test skipped (skipHardware = true)\n', datestr(datetime));
+                end
+            end
+        end
     end
 
     %% Return
     [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
         getOutputs(gOCTHardwareStatus);
 
+%  GETSTAGEPOSITION: return stage position from globals
+case 'getstageposition'
+    if ~gOCTHardwareStatus.stageInitialized
+        error('myOCT:yOCTHardware:stageNotInitialized', ...
+            'Stage not initialized. Call yOCTHardware(''init'', ..., ''oct2stageXYAngleDeg'', deg) first.');
+    end
+    pos = gStageCurrentStagePosition_OCTCoordinates;
+    octSystemModule = pos(1);  % x0
+    octSystemName   = pos(2);  % y0
+    skipHardware    = pos(3);  % z0
+    return;
+
 otherwise
     error('myOCT:yOCTHardware:unknownCommand', ...
-        'Unknown command: ''%s''. Use ''init'', ''status'', ''verifyInit'', ''teardown'', or ''reset''.', command);
+        'Unknown command: ''%s''. Use ''init'', ''status'', ''verifyInit'', ''teardown'', ''reset'', or ''getStagePosition''.', command);
 end
 
 end
@@ -244,8 +382,20 @@ function s = resetGlobalStruct()
 s.module            = [];
 s.name              = '';
 s.skipHardware      = false;
-s.probePath         = '';
-s.scannerInitialized = false;
+s.probePath              = '';
+s.scannerInitialized     = false;
+s.stageInitialized       = false;
+s.oct2stageXYAngleDeg    = 0;
+end
+
+function clearStageGlobals()
+%CLEARSTAGEGLOBALS Reset stage globals shared with yOCTStageMoveTo.
+global goct2stageXYAngleDeg;
+global gStageCurrentStagePosition_OCTCoordinates;
+global gStageCurrentStagePosition_StageCoordinates;
+goct2stageXYAngleDeg = [];
+gStageCurrentStagePosition_OCTCoordinates = [];
+gStageCurrentStagePosition_StageCoordinates = [];
 end
 
 function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = getOutputs(s)
