@@ -10,7 +10,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             dummyData = zeros(1000,100,5)+1;
             pixel_size_um = 1; 
             outputFolder = 'tmp/';
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             focusPositionInImageZpix = 1;
             focusSigma = 1000; % Very large focus, such that it has no effect
             dummyData([100, 200, 300],:,:) = 100;
@@ -61,7 +61,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             dummyData = zeros(1000,100,5)+1;
             pixel_size_um = 1; 
             outputFolder = 'tmp/';
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             focusPositionInImageZpix = 69; % 69 pixels (corresponding to 100um).
             focusSigma = 10; % thighter focus 
             dummyData([100, 200, 300],:,:) = 100; % Three lines, but only 100um is in focus.
@@ -103,7 +103,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             dummyData = zeros(1000,100,5)+1;
             pixel_size_um = 1; 
             outputFolder = 'tmp/';
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             focusPositionInImageZpix = 69; % 69 pixels (corresponding to 100um).
             focusSigma = 10; % thighter focus 
             dummyData([100, 200, 300],:,:) = 100; % Three lines, but only 100um is in focus.
@@ -165,7 +165,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             dummyData = zeros(1000,100,5)+1;
             pixel_size_um = 1; 
             outputFolder = 'tmp/';
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             focusPositionInImageZpix = 69;
             focusSigma = 10;
             dummyData(100,:,:) = 100;
@@ -207,7 +207,7 @@ classdef test_yOCTSimulateTileScan < matlab.unittest.TestCase
             dummyData = zeros(1000,100,1)+1;
             pixel_size_um = 1; 
             outputFolder = 'tmp/';
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             focusPositionInImageZpix = 1;
             focusSigma = 1000; % Very large focus, such that it has no effect
             dummyData([100, 200, 300],:,:) = 100;
