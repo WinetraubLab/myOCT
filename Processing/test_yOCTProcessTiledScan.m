@@ -23,7 +23,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             
             dummyData = zeros(512, 200, 2) + 1;
             dummyData([50, 150, 300], :, :) = 100;
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             focusPositionInImageZpix = 256;
             focusSigma = 1000;
             
@@ -61,7 +61,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             dummyData = zeros(1000,500,2)+1;
             pixelSize_um = 1; 
             outputFolder = 'tmp/';
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             focusPositionInImageZpix = 1;
             focusSigma = 1000;
             dummyData([100, 200, 300],:,:) = 100;
@@ -129,7 +129,7 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             % Verify that octSystem field works correctly in ScanInfo.json
             % Test both exact case and case-insensitive matching
             
-            octProbePath = yOCTGetProbeIniPath('40x','OCTP900');
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
             dummyData = zeros(1000,500,2)+1;
             dummyData([100, 200, 300],:,:) = 100;
             pixelSize_um = 1;

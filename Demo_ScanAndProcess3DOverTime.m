@@ -19,7 +19,7 @@ yOverall_mm = [-0.15 0.15]; % Define the overall volume you would like to scan [
 % yOverall_mm = 0;
 
 % Define probe 
-octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Inputs to the function are OBJECTIVE_DEPENDENT: '10x', '20x', or '40x', and scanning system dependent 'OCTP900' or ''
+octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER'); % magnification ('10x','20x','40x'), scanHead ('OCTG' or 'OCTP900'), variant ('WINTER','SUMMER','')
 octProbeFOV_mm = 0.5; % How much of the field of view to use from the probe. OBJECTIVE_DEPENDENT: For 10x use 1, for 20x use 0.75, for 40x use 0.5
 
 % Define z stack and z-stitching
