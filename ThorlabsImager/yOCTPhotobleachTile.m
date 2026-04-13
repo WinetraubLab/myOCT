@@ -299,7 +299,7 @@ end
 
 % Translational stage
 yOCTHardware('init', 'oct2stageXYAngleDeg', json.oct2stageXYAngleDeg, 'v', v);
-[x0, y0, z0] = yOCTHardware('getStagePosition');
+[x0, y0, z0] = yOCTGetStagePosition();
 
 if (v)
     fprintf('%s Initialzing Motorized Translation Stage Hardware Completed\n',datestr(datetime));
