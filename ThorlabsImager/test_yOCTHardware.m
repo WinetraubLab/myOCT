@@ -185,7 +185,7 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
         %% yOCTStageMoveTo errors if never initialized
         function testMoveToErrorsAfterReset(testCase)
             testCase.verifyError(@() yOCTStageMoveTo(1, 2, 3), ...
-                'myOCT:yOCTHardware:stageNotInitialized');
+                'myOCT:yOCTHardware:notInitialized');
         end
 
         %% reset clears stage state
