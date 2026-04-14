@@ -11,7 +11,7 @@ function mod = yOCTImportPythonModule(varargin)
 % Inputs:
 %   'packageName'  - Python module to import (required)
 %                    Example: 'database_library.log_scan_operations'
-%   'repoName'     - Repository folder name (default: '' = current folder)
+%   'repoName'     - Repository folder/path override (default: '' = deterministic root relative to this file)
 %                    Example: 'collect-virtual-histology-samples'
 %   'v'            - Show verbose output messages (default: false)
 %
@@ -76,18 +76,31 @@ if pe.Status ~= "NotLoaded"
 end
 pyexe = char(pe.Executable);
 
-% Add repo (or pwd) to Python's sys.path; also try <repo>\src
+% Resolve repository base deterministically relative to this file:
+%   <python library root>/myOCT/Utils/yOCTImportPythonModule.m
+% If repoName is provided, it explicitly overrides the default.
+thisFile = mfilename('fullpath');
+utilsFolder = fileparts(thisFile);
+myOCTFolder = fileparts(utilsFolder);
+defaultRepoBase = fileparts(myOCTFolder);
+
 if isempty(in.repoName)
-    repoBase = pwd;
+    repoBase = defaultRepoBase;
 else
-    % Check if repoName is already an absolute path
-    if isfolder(char(in.repoName))
-        % It's an absolute path, use it directly
-        repoBase = char(in.repoName);
+    repoName = char(in.repoName);
+
+    % Absolute path override (or any existing folder path) wins.
+    if isfolder(repoName)
+        repoBase = repoName;
     else
-        % It's a relative name, append to pwd
-        repoBase = fullfile(pwd, char(in.repoName));
+        % Relative override is resolved from deterministic default root,
+        % not from pwd, to avoid loading from unrelated working directories.
+        repoBase = fullfile(defaultRepoBase, repoName);
     end
+end
+
+if in.v
+    fprintf('[Bridge] Repo base: %s\n', repoBase);
 end
 candidates = string({repoBase, fullfile(repoBase,'src')});
 parts  = split(string(in.packageName), '.');   % top-level package name
@@ -138,6 +151,36 @@ for attempt = 1:maxRetries
             if in.v, fprintf('[Bridge] Loading module for first time: %s\n', char(in.packageName)); end
             mod = py.importlib.import_module(in.packageName);
         end
+
+        % Enforce repository path integrity: imported module must come from
+        % the expected repository root (or its src folder), not another clone/install.
+        moduleFile = "";
+        try
+            if py.hasattr(mod, '__file__')
+                moduleFile = string(char(py.getattr(mod, '__file__')));
+            end
+        catch
+            moduleFile = "";
+        end
+
+        if strlength(moduleFile) > 0
+            actualPath = localCanonicalPath(moduleFile);
+            expectedRoot = localCanonicalPath(string(repoBase));
+            expectedSrcRoot = localCanonicalPath(string(fullfile(repoBase, 'src')));
+
+            inExpectedRoot = startsWith(actualPath, expectedRoot + filesep) || actualPath == expectedRoot;
+            inExpectedSrcRoot = startsWith(actualPath, expectedSrcRoot + filesep) || actualPath == expectedSrcRoot;
+
+            if ~(inExpectedRoot || inExpectedSrcRoot)
+                error('yOCTImportPythonModule:RepositoryPathMismatch', ...
+                    ['Repository path integrity check failed for module: %s\n' ...
+                     'Imported module path: %s\n' ...
+                     'Expected under repository root: %s\n' ...
+                     'Or expected under repository src root: %s\n' ...
+                     'This usually means MATLAB/Python is loading code from a different repository clone or environment path.'], ...
+                    char(in.packageName), char(actualPath), char(expectedRoot), char(expectedSrcRoot));
+            end
+        end
         
         if in.v, fprintf('[Bridge] Successfully imported module: %s\n', char(in.packageName)); end
         return
@@ -174,4 +217,17 @@ end
 
 error('yOCTImportPythonModule:ExceededRetries', ...
       'Exceeded install/retry attempts while importing %s.', char(in.packageName));
+end
+
+function out = localCanonicalPath(pathIn)
+% Normalize path for robust comparisons across separators and case.
+try
+    out = string(char(java.io.File(char(pathIn)).getCanonicalPath()));
+catch
+    out = string(pathIn);
+end
+out = replace(out, '/', filesep);
+if ispc
+    out = lower(out);
+end
 end

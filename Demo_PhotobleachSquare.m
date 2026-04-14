@@ -14,7 +14,7 @@ skipHardware = false;
 octSystem = 'Ganymede'; % OCT system selection ('Ganymede' or 'Gan632')
 
 % Photobleach pattern configuration
-octProbePath = yOCTGetProbeIniPath('40x','OCTP900'); % Select lens magnification
+octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER'); % magnification ('10x','20x','40x'), scanHead ('OCTG' or 'OCTP900'), variant ('WINTER','SUMMER','')
 
 yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipHardware, ...
     'octProbePath', octProbePath);
