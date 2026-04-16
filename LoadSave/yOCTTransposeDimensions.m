@@ -33,8 +33,8 @@ function [dataOut, metadataOut, climOut] = yOCTTransposeDimensions(varargin)
 %   climOut - color limits (unchanged from input)
 %
 % DIMENSION ORDER:
-%   Input data from yOCTFromTif is always (Z, X, Y)
-%   newOrder string specifies how to rearrange: 'ZXY' = no change, 'YZX' = swap to (Y,Z,X), etc.
+%   Input data order is determined from metadata.z.order / metadata.x.order / metadata.y.order
+%   newOrder string specifies how to rearrange to output: 'ZXY' = no change, 'YZX' = swap to (Y,Z,X), etc.
 %   
 % EXAMPLES:
 %   % Load, transpose from (Z,X,Y) to (Y,Z,X), and return in memory
@@ -103,12 +103,31 @@ if length(newOrder) ~= 3 || ~all(ismember(newOrder, 'XYZ')) || ...
 end
 
 %% Create dimension mapping
-% Input dimensions are always (Z, X, Y) from yOCTFromTif
-% Position 1 = Z, Position 2 = X, Position 3 = Y
-inputOrder = 'ZXY';
+% Determine input order from metadata.(z/x/y).order.
+if ~(isstruct(metadata) && isfield(metadata, 'z') && isfield(metadata, 'x') && isfield(metadata, 'y') && ...
+        isfield(metadata.z, 'order') && isfield(metadata.x, 'order') && isfield(metadata.y, 'order'))
+    error(['metadata.z.order, metadata.x.order, and metadata.y.order are required ' ...
+        'to determine input dimension order.']);
+end
+
+orders = [metadata.z.order, metadata.x.order, metadata.y.order];
+if ~(isnumeric(orders) && all(isfinite(orders)) && all(orders == round(orders)) && ...
+        all(ismember(orders, 1:3)) && numel(unique(orders)) == 3)
+    error(['Invalid metadata order fields. Expected unique integer values in [1 2 3] for ' ...
+        'metadata.z.order, metadata.x.order, metadata.y.order.']);
+end
+
+orderByPosition = repmat(' ', 1, 3);
+orderByPosition(metadata.z.order) = 'Z';
+orderByPosition(metadata.x.order) = 'X';
+orderByPosition(metadata.y.order) = 'Y';
+inputOrder = orderByPosition;
 
 % Map each dimension letter to its position in original data
-dimNameToInputPos = struct('Z', 1, 'X', 2, 'Y', 3);
+dimNameToInputPos = struct();
+for i = 1:3
+    dimNameToInputPos.(inputOrder(i)) = i;
+end
 
 % Create permutation vector
 % permuteOrder(i) tells which input dimension goes to output position i
