@@ -49,6 +49,9 @@ yOCTTestReconstruction([mainTestVectorFolder2 'TiledScans/TiledXYZ/']);
 %% Test reslicing
 yOCTTestReslice;
 
+%% Test geometric transformations
+disp('Geometric Transformation Tests');
+yOCTTestGeometricTransform;
 
 %% Done!
 disp('All Tests Completed');
