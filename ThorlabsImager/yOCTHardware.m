@@ -183,29 +183,40 @@ case 'init'
     stageRequested = ~isnan(oct2stageAngle);
 
     %% Early return if already initialized with same parameters
+    octAlreadyInitialized = false;
     if ~isempty(gOCTHardwareStatus.name)
         nameChanged  = ~strcmpi(octSystemNameIn, gOCTHardwareStatus.name);
         skipChanged  = islogical(skipHw) && skipHw ~= gOCTHardwareStatus.skipHardware;
         probeChanged = ~isempty(octProbePath) && ~isempty(gOCTHardwareStatus.probePath) && ...
             ~strcmp(octProbePath, gOCTHardwareStatus.probePath);
+        octConfigMatches = ~nameChanged && ~skipChanged && ~probeChanged;
 
-        if ~nameChanged && ~skipChanged && ~probeChanged
+        % Stage is being requested but not yet initialized: fall through to
+        % stage init path (but keep existing OCT state)
+        needsStageInit = stageRequested && ~gOCTHardwareStatus.stageInitialized;
+
+        if octConfigMatches && ~needsStageInit
             % Everything matches — return current state
             [octSystemModule, octSystemName, skipHardware, scannerInitialized] = ...
                 getOutputs(gOCTHardwareStatus);
             return;
         end
 
-        % Something changed — auto-teardown before re-init
-        changed = {};
-        if nameChanged,  changed{end+1} = sprintf('OCTSystem: %s -> %s', gOCTHardwareStatus.name, octSystemNameIn); end
-        if skipChanged,  changed{end+1} = sprintf('skipHardware: %d -> %d', gOCTHardwareStatus.skipHardware, skipHw); end
-        if probeChanged, changed{end+1} = 'octProbePath changed'; end
-        if v
-            fprintf('%s Configuration changed (%s), tearing down before re-init...\n', ...
-                datestr(datetime), strjoin(changed, ', '));
+        if octConfigMatches && needsStageInit
+            % OCT is fine, only stage init is needed
+            octAlreadyInitialized = true;
+        else
+            % Something changed — auto-teardown before re-init
+            changed = {};
+            if nameChanged,  changed{end+1} = sprintf('OCTSystem: %s -> %s', gOCTHardwareStatus.name, octSystemNameIn); end
+            if skipChanged,  changed{end+1} = sprintf('skipHardware: %d -> %d', gOCTHardwareStatus.skipHardware, skipHw); end
+            if probeChanged, changed{end+1} = 'octProbePath changed'; end
+            if v
+                fprintf('%s Configuration changed (%s), tearing down before re-init...\n', ...
+                    datestr(datetime), strjoin(changed, ', '));
+            end
+            yOCTHardware('teardown');
         end
-        yOCTHardware('teardown');
     end
 
     validSystems = {'Ganymede', 'Gan632'};
@@ -214,29 +225,31 @@ case 'init'
             ['Invalid OCT System: %s' newline 'Valid options are: ''Ganymede'' or ''Gan632'''], octSystemNameIn);
     end
 
-    %% OCT init
-    if skipHw
-        gOCTHardwareStatus.name              = lower(octSystemNameIn);
-        gOCTHardwareStatus.module            = [];
-        gOCTHardwareStatus.skipHardware      = true;
-        gOCTHardwareStatus.probePath         = octProbePath;
-        gOCTHardwareStatus.scannerInitialized = false;
-    else
-        %% Load hardware module
-        octSystemNameIn = lower(octSystemNameIn);
-        gOCTHardwareStatus.module = loadModule(octSystemNameIn, v);
-
-        %% Store state
-        gOCTHardwareStatus.name         = octSystemNameIn;
-        gOCTHardwareStatus.skipHardware = false;
-        gOCTHardwareStatus.probePath    = octProbePath;
-
-        %% Initialize scanner (only when octProbePath is provided)
-        if ~isempty(octProbePath)
-            yOCTHardware_initScanner(octProbePath, v);
-            gOCTHardwareStatus.scannerInitialized = true;
-        else
+    %% OCT init (skip if OCT was already initialized with matching config)
+    if ~octAlreadyInitialized
+        if skipHw
+            gOCTHardwareStatus.name              = lower(octSystemNameIn);
+            gOCTHardwareStatus.module            = [];
+            gOCTHardwareStatus.skipHardware      = true;
+            gOCTHardwareStatus.probePath         = octProbePath;
             gOCTHardwareStatus.scannerInitialized = false;
+        else
+            %% Load hardware module
+            octSystemNameIn = lower(octSystemNameIn);
+            gOCTHardwareStatus.module = loadModule(octSystemNameIn, v);
+
+            %% Store state
+            gOCTHardwareStatus.name         = octSystemNameIn;
+            gOCTHardwareStatus.skipHardware = false;
+            gOCTHardwareStatus.probePath    = octProbePath;
+
+            %% Initialize scanner (only when octProbePath is provided)
+            if ~isempty(octProbePath)
+                yOCTHardware_initScanner(octProbePath, v);
+                gOCTHardwareStatus.scannerInitialized = true;
+            else
+                gOCTHardwareStatus.scannerInitialized = false;
+            end
         end
     end
 
