@@ -172,7 +172,7 @@ else
     rg_max = NaN;
 end
 
-yOCTHardware('init', 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
+yOCTHardware('init', 'OCTSystem', octSystemName, 'oct2stageXYAngleDeg', in.oct2stageXYAngleDeg, 'minPosition', rg_min, 'maxPosition', rg_max, 'v', v);
 [x0, y0, z0] = yOCTGetStagePosition();
 
 if (v)
