@@ -248,6 +248,21 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
             testCase.verifyEqual(gRegisteredMotionRangeMax_OCT(:), [ 1; 2; 3]);
         end
 
+        %% Registered range always includes the origin so homing is allowed
+        %  even when the scan's bounding box does not contain (0,0,0).
+        function testVerifyMotionRangeIncludesOrigin(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'octProbePath', testCase.ProbeIni);
+
+            % Scan bounding box entirely in z>0; origin (z=0) must still be allowed
+            yOCTVerifyMotionRange([0 0 0.002], [0 0 0.020]);
+
+            % Homing back to (0,0,0) must not error
+            yOCTStageMoveTo(0, 0, 0);
+            [x0, y0, z0] = yOCTGetStagePosition();
+            testCase.verifyEqual([x0; y0; z0], [0; 0; 0]);
+        end
+
         %% yOCTStageMoveTo: when a range is registered, targets inside are allowed
         function testMoveToAllowsWithinRegisteredRange(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
