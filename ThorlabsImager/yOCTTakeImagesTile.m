@@ -56,7 +56,6 @@ if ~exist(in.octProbePath,'file')
 end
 
 % Verify hardware is initialized and get cached state.
-yOCTHardware('verifyInit');
 [~, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Store OCT system name for JSON

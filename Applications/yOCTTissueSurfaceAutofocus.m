@@ -60,7 +60,7 @@ roi_mm                  = in.roiToAssertFocus_mm;
 acceptableRange_mm      = in.assertInFocusAcceptableRange_mm;
 
 % Verify hardware is initialized and read skipHardware.
-[~, ~, skipHardware] = yOCTHardware('verifyInit');
+[~, ~, skipHardware] = yOCTHardware('status');
 
 if skipHardware % make sure we are moving the stage only if we don't skip hardware
     moveTissueToFocus = false;
@@ -171,7 +171,7 @@ if ~isempty(acceptableRange_mm) % If acceptableRange_mm is empty, then no need t
     
     % Move the stage to bring tissue into focus if needed
     if needMove
-        [~, ~, z0] = yOCTGetStagePosition();
+        [~, ~, z0] = yOCTGetStagePosition(); % query current Z
         try
             % Move the stage
             yOCTStageMoveTo(NaN, NaN, z0 + zOffsetCorrection_mm, v);

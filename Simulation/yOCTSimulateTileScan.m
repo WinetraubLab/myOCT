@@ -54,8 +54,18 @@ in.octFolder = awsModifyPathForCompetability([fileparts(in.octFolder) '/']);
 
 %% Run yOCTScanTile to get the json
 
-% Simulation always skips hardware; set the cache so yOCTScanTile reads it
-yOCTHardware('init', 'OCTSystem', 'Ganymede', 'skipHardware', true);
+% Simulation always skips hardware; set the cache so yOCTScanTile reads it.
+% Forward octProbePath / oct2stageXYAngleDeg (if provided) so that yOCTHardware
+% initializes the stage (needed for motion range checks).
+initArgs = {'OCTSystem', 'Ganymede', 'skipHardware', true};
+for ii = 1:2:numel(varargin)-1
+    key = varargin{ii};
+    if ischar(key) && any(strcmpi(key, {'octProbePath','oct2stageXYAngleDeg'}))
+        initArgs{end+1} = key; %#ok<AGROW>
+        initArgs{end+1} = varargin{ii+1}; %#ok<AGROW>
+    end
+end
+yOCTHardware('init', initArgs{:});
 
 % Create parameters list
 paramToKeep = ones(size(varargin),'logical');

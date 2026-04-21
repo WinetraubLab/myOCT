@@ -286,7 +286,6 @@ if json.plotPattern
 end
 
 % Verify hardware is initialized and get cached state.
-yOCTHardware('verifyInit');
 [~, octSystemName, json.skipHardware] = yOCTHardware('status');
 json.octSystem = octSystemName;
 
@@ -295,14 +294,11 @@ if json.skipHardware
     return;
 end
 
-%% Initialize Hardware
-
-% Translational stage
-yOCTHardware('init', 'oct2stageXYAngleDeg', json.oct2stageXYAngleDeg, 'v', v);
+%% Get Stage Starting Position
 [x0, y0, z0] = yOCTGetStagePosition();
 
 if (v)
-    fprintf('%s Initialzing Motorized Translation Stage Hardware Completed\n',datestr(datetime));
+    fprintf('%s Hardware ready for photobleach (OCT + Stage)\n',datestr(datetime));
 end
 
 %% Before turning diode on, draw a line with galvo to see if it works

@@ -59,17 +59,11 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
                 'myOCT:yOCTHardware:notInitialized');
         end
 
-        %% verifyInit: errors when not initialized
-        function testVerifyInitErrorsWhenNotInitialized(testCase)
-            testCase.verifyError(@() yOCTHardware('verifyInit'), ...
-                'myOCT:yOCTHardware:notInitialized');
-        end
-
-        %% verifyInit: passes when skipHardware=true (scanner not needed)
-        function testVerifyInitPassesWithSkipHardware(testCase)
+        %% Status: passes when skipHardware=true (scanner not needed)
+        function testStatusPassesWithSkipHardware(testCase)
             yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
                 'oct2stageXYAngleDeg', 0);
-            [~, name, skip] = yOCTHardware('verifyInit');
+            [~, name, skip] = yOCTHardware('status');
             testCase.verifyEqual(name, 'gan632');
             testCase.verifyTrue(skip);
         end
@@ -185,7 +179,7 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
         %% yOCTStageMoveTo errors if never initialized
         function testMoveToErrorsAfterReset(testCase)
             testCase.verifyError(@() yOCTStageMoveTo(1, 2, 3), ...
-                'myOCT:yOCTHardware:notInitialized');
+                'myOCT:yOCTHardware:stageNotInitialized');
         end
 
         %% reset clears stage state
@@ -215,6 +209,89 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
             % After system change, stage should be re-initialized at origin
             [x0, y0, z0] = yOCTGetStagePosition();
             testCase.verifyEqual([x0; y0; z0], [0;0;0]);
+        end
+
+        %% INI auto-read: when oct2stageXYAngleDeg is NaN and octProbePath is provided,
+        %  init should read the angle from the INI and initialize the stage automatically.
+        function testInitReadsAngleFromIni(testCase)
+            iniPath = fullfile(fileparts(mfilename('fullpath')), ...
+                'Probe Olympus - 10x - OCTP900.ini');
+            testCase.assumeTrue(exist(iniPath, 'file') == 2, ...
+                'Probe INI not found; cannot run test.');
+
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'octProbePath', iniPath);
+
+            % Stage must have been initialized (globals populated)
+            global goct2stageXYAngleDeg; %#ok<GVMIS>
+            probe = yOCTReadProbeIniToStruct(iniPath);
+            testCase.verifyEqual(goct2stageXYAngleDeg, probe.Oct2StageXYAngleDeg);
+
+            [x0, y0, z0] = yOCTGetStagePosition();
+            testCase.verifyEqual([x0; y0; z0], [0;0;0]);
+        end
+
+        %% yOCTVerifyMotionRange registers range in globals (skipHardware
+        %  mode avoids any real motion).
+        function testVerifyMotionRangeRegistersGlobals(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+
+            yOCTVerifyMotionRange([-1 -2 -3], [1 2 3]);
+
+            global gRegisteredMotionRangeMin_OCT; %#ok<GVMIS>
+            global gRegisteredMotionRangeMax_OCT; %#ok<GVMIS>
+            testCase.verifyEqual(gRegisteredMotionRangeMin_OCT(:), [-1;-2;-3]);
+            testCase.verifyEqual(gRegisteredMotionRangeMax_OCT(:), [ 1; 2; 3]);
+        end
+
+        %% yOCTStageMoveTo: when a range is registered, targets inside are allowed
+        function testMoveToAllowsWithinRegisteredRange(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            yOCTVerifyMotionRange([-1 -1 -1], [1 1 1]);
+
+            yOCTStageMoveTo(0.5, -0.5, 0);
+            [x0, y0, z0] = yOCTGetStagePosition();
+            testCase.verifyEqual([x0; y0; z0], [0.5; -0.5; 0]);
+        end
+
+        %% yOCTStageMoveTo: when a range is registered, targets outside error
+        function testMoveToRejectsOutsideRegisteredRange(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            yOCTVerifyMotionRange([-1 -1 -1], [1 1 1]);
+
+            testCase.verifyError(@() yOCTStageMoveTo(2, 0, 0), ...
+                'myOCT:yOCTHardware:positionOutOfRange');
+        end
+
+        %% reset clears registered motion range
+        function testResetClearsRegisteredRange(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            yOCTVerifyMotionRange([-1 -1 -1], [1 1 1]);
+
+            yOCTHardware('reset');
+
+            global gRegisteredMotionRangeMin_OCT; %#ok<GVMIS>
+            global gRegisteredMotionRangeMax_OCT; %#ok<GVMIS>
+            testCase.verifyEmpty(gRegisteredMotionRangeMin_OCT);
+            testCase.verifyEmpty(gRegisteredMotionRangeMax_OCT);
+        end
+
+        %% teardown clears registered motion range
+        function testTeardownClearsRegisteredRange(testCase)
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'oct2stageXYAngleDeg', 0);
+            yOCTVerifyMotionRange([-1 -1 -1], [1 1 1]);
+
+            yOCTHardware('teardown');
+
+            global gRegisteredMotionRangeMin_OCT; %#ok<GVMIS>
+            global gRegisteredMotionRangeMax_OCT; %#ok<GVMIS>
+            testCase.verifyEmpty(gRegisteredMotionRangeMin_OCT);
+            testCase.verifyEmpty(gRegisteredMotionRangeMax_OCT);
         end
 
     end

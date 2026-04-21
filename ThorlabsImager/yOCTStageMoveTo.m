@@ -25,9 +25,6 @@ if ~exist('v','var')
     v = false;
 end
 
-% Verify hardware is initialized
-yOCTHardware('verifyInit');
-
 % Verify stage is initialized (globals must be populated)
 global gStageCurrentStagePosition_StageCoordinates;
 global gStageCurrentStagePosition_OCTCoordinates;
@@ -37,6 +34,25 @@ if isempty(gStageCurrentStagePosition_OCTCoordinates)
 end
 
 [octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
+
+% Verify target is within the registered motion range (if yOCTVerifyMotionRange was called). 
+% NaN targets mean 'do not move that axis' and are excluded from the check.
+global gRegisteredMotionRangeMin_OCT;
+global gRegisteredMotionRangeMax_OCT;
+if ~isempty(gRegisteredMotionRangeMin_OCT) && ~isempty(gRegisteredMotionRangeMax_OCT)
+    target = [newx; newy; newz];
+    checkAxes = ~isnan(target);
+    rgMin = gRegisteredMotionRangeMin_OCT(:);
+    rgMax = gRegisteredMotionRangeMax_OCT(:);
+    outOfRange = checkAxes & (target < rgMin - eps | target > rgMax + eps);
+    if any(outOfRange)
+        error('myOCT:yOCTHardware:positionOutOfRange', ...
+            ['Requested stage position (%.3f, %.3f, %.3f) mm (OCT coords) is outside ', ...
+             'the registered motion range [%.3f %.3f %.3f] to [%.3f %.3f %.3f]. ', ...
+             'Call yOCTVerifyMotionRange with a wider range before moving.'], ...
+            newx, newy, newz, rgMin(1), rgMin(2), rgMin(3), rgMax(1), rgMax(2), rgMax(3));
+    end
+end
 
 % Where do we need to move in coordinate system
 d = [newx;newy;newz]-gStageCurrentStagePosition_OCTCoordinates(:);
