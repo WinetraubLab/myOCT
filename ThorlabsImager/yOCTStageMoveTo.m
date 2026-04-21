@@ -3,9 +3,9 @@ function yOCTStageMoveTo (newx,newy,newz,v)
 % INPUTS:
 %   newx,newy,newz - new stage position (mm). Set to nan if you would like
 %       not to move stage along some axis. These new position units are in
-%       OCT coordinate system units. A conversion between OCT coordinate
-%       system to the stage coordinate system is done via
-%       oct2stageXYAngleDeg which is set via yOCTHardware('init', ..., 'oct2stageXYAngleDeg', deg)
+%       OCT coordinate system units. The rotation angle between OCT and
+%       stage coordinates is read from the Oct2StageXYAngleDeg field in
+%       the probe INI by yOCTHardware('init').
 %   v - verbose mode (default is false)
 
 %% Input checks
@@ -30,7 +30,7 @@ global gStageCurrentStagePosition_StageCoordinates;
 global gStageCurrentStagePosition_OCTCoordinates;
 if isempty(gStageCurrentStagePosition_OCTCoordinates)
     error('myOCT:yOCTHardware:stageNotInitialized', ...
-        'Stage not initialized. Call yOCTHardware(''init'', ..., ''oct2stageXYAngleDeg'', deg) first.');
+        'Stage not initialized. Call yOCTHardware(''init'') first.');
 end
 
 [octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
