@@ -31,7 +31,7 @@ global gStageCurrentStagePosition_OCTCoordinates;
 global gStageCurrentStagePosition_StageCoordinates;
 if isempty(gStageCurrentStagePosition_OCTCoordinates)
     error('myOCT:yOCTHardware:stageNotInitialized', ...
-        'Stage not initialized. Call yOCTHardware(''init'', ..., ''oct2stageXYAngleDeg'', deg) first.');
+        'Stage not initialized. Call yOCTHardware(''init'') first.');
 end
 
 %% Normalize inputs
