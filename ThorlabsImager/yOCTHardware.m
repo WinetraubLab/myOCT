@@ -15,7 +15,6 @@ function [octSystemModule, octSystemName, skipHardware, scannerInitialized] = yO
 %                  Parameters:
 %                    OCTSystem            - System name: 'Ganymede' or 'Gan632'. Required.
 %                    octProbePath         - Path to the probe .ini file. Required unless skipHardware=true.
-%                    oct2stageXYAngleDeg  - (default NaN) Override for the stage rotation angle in degrees.
 %                    skipHardware         - (default false) If true, skips all hardware calls (scanner + stage).
 %                    v                    - (default false) Verbose logging.
 %
@@ -60,7 +59,6 @@ addParameter(p, 'OCTSystem', '', @ischar);
 addParameter(p, 'skipHardware', false, @islogical);
 addParameter(p, 'octProbePath', '', @ischar);
 addParameter(p, 'v', false, @islogical);
-addParameter(p, 'oct2stageXYAngleDeg', NaN, @isnumeric);
 parse(p, varargin{:});
 in = p.Results;
 
@@ -154,7 +152,6 @@ case 'init'
     octSystemNameIn = in.OCTSystem;
     skipHw          = in.skipHardware;
     octProbePath    = in.octProbePath;
-    oct2stageAngle  = in.oct2stageXYAngleDeg;
     v               = in.v;
 
     %% Validate required inputs
@@ -163,10 +160,9 @@ case 'init'
             'yOCTHardware(''init'') requires OCTSystem (''Ganymede'' or ''Gan632'').');
     end
 
-    %% If stage angle was not provided explicitly, read it from the probe INI.
-    % This lets demos and scripts init everything in a single call without
-    % needing to parse the INI themselves.
-    if isnan(oct2stageAngle) && ~isempty(octProbePath) && exist(octProbePath, 'file')
+    %% Read stage rotation angle from the probe INI.
+    oct2stageAngle = NaN;
+    if ~isempty(octProbePath) && exist(octProbePath, 'file')
         probeIni = yOCTReadProbeIniToStruct(octProbePath);
         oct2stageAngle = probeIni.Oct2StageXYAngleDeg;
     end
@@ -225,14 +221,19 @@ case 'init'
 
         %% Initialize scanner (only when octProbePath is provided)
         if ~isempty(octProbePath)
-            yOCTHardware_initScanner(octProbePath, v);
+            yOCTHardware_initScanner(octProbePath, ...
+                gOCTHardwareStatus.name, ...
+                gOCTHardwareStatus.module, ...
+                gOCTHardwareStatus.skipHardware, ...
+                gOCTHardwareStatus.scannerInitialized, ...
+                v);
             gOCTHardwareStatus.scannerInitialized = true;
         else
             gOCTHardwareStatus.scannerInitialized = false;
         end
     end
 
-    %% Stage init (only when oct2stageXYAngleDeg is known)
+    %% Stage init
     if stageRequested
         if v
             fprintf('%s Initialzing Stage Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n', datestr(datetime));
