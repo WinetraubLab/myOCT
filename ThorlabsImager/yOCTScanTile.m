@@ -72,7 +72,6 @@ if ~exist(in.octProbePath,'file')
 end
 
 % Verify hardware is initialized and get cached state.
-yOCTHardware('verifyInit');
 [~, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Store OCT system name for JSON
@@ -159,20 +158,18 @@ if (max(in.zDepths) - min(in.zDepths) > objectiveWorkingDistance ...
         min(in.zDepths), max(in.zDepths), objectiveWorkingDistance);
 end
 
-%% Initialize Stage
+%% Verify Motion Range
 if (v)
-    fprintf('%s Initializing Stage (3 axes)...\n', datestr(datetime));
+    fprintf('%s Verifying stage motion range...\n', datestr(datetime));
 end
 
 if in.isVerifyMotionRange
     rg_min = [min(in.xCenters_mm) min(in.yCenters_mm) min(in.zDepths)];
     rg_max = [max(in.xCenters_mm) max(in.yCenters_mm) max(in.zDepths)];
-else
-    rg_min = NaN;
-    rg_max = NaN;
+    yOCTVerifyMotionRange(rg_min, rg_max, v);
 end
 
-[x0,y0,z0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg, rg_min, rg_max, v);
+[x0, y0, z0] = yOCTGetStagePosition();
 
 if (v)
     fprintf('%s Hardware Initialization Complete (OCT + Stage)\n', datestr(datetime));

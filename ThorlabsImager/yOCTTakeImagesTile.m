@@ -56,7 +56,6 @@ if ~exist(in.octProbePath,'file')
 end
 
 % Verify hardware is initialized and get cached state.
-yOCTHardware('verifyInit');
 [~, octSystemName, skipHardware] = yOCTHardware('status');
 
 % Store OCT system name for JSON
@@ -77,12 +76,8 @@ in.gridYcc = in.gridYcc(:);
 scanOrder = 1:length(in.gridXcc);
 in.imagesFP = arrayfun(@(x)(sprintf('Data%02d.jpg',x)),scanOrder,'UniformOutput',false);
 
-%% Initialize hardware
-if (v)
-    fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
-end
-
-[x0,y0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg);
+%% Get starting stage position
+[x0, y0] = yOCTGetStagePosition();
 
 %Set lightring power
 if (v)
@@ -91,15 +86,13 @@ end
 ThorlabsImagerNET.ThorlabsImager.yOCTSetCameraRingLightIntensity(round(in.lightRingIntensity));
 
 
-% Init stage and verify range if needed
+% Verify the stage motion range
 if in.isVerifyMotionRange
     rg_min = [min(in.gridXcc) min(in.gridYcc) NaN];
     rg_max = [max(in.gridXcc) max(in.gridYcc) NaN];
-else
-    rg_min = NaN;
-    rg_max = NaN;
+    yOCTVerifyMotionRange(rg_min, rg_max, v);
 end
-[x0,y0,z0] = yOCTHardware_initStage(in.oct2stageXYAngleDeg,rg_min,rg_max,v);
+[x0, y0, z0] = yOCTGetStagePosition();
 
 %Move to initial position to make a scan
 if (in.zDepth ~= 0)

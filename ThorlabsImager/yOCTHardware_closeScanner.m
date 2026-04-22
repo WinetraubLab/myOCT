@@ -1,10 +1,14 @@
-function yOCTHardware_closeScanner(v)
+function yOCTHardware_closeScanner(octSystemModule, octSystemName, skipHardware, v)
 % Helper function for yOCTHardware.
 % Close OCT scanner based on system type (Ganymede or Gan632).
-% Hardware must be initialized via yOCTHardware('init', ...) before calling this function.
+% Receives system state directly to avoid calling yOCTHardware('status') during teardown,
+% which would fail if the scanner was never fully initialized.
 %
 % INPUTS:
-%   v: verbose mode, default: false
+%   octSystemModule - module handle (from gOCTHardwareStatus.module)
+%   octSystemName   - system name string (from gOCTHardwareStatus.name)
+%   skipHardware    - logical (from gOCTHardwareStatus.skipHardware)
+%   v               - verbose mode, default: false
 
 %% Input checks
 if ~exist('v','var')
@@ -15,9 +19,6 @@ end
 if (v)
     fprintf('%s Closing Scanner...\n', datestr(datetime));
 end
-
-% Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware] = yOCTHardware('status');
 
 %% Close scanner based on system type
 if ~skipHardware

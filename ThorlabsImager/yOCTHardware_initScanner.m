@@ -1,10 +1,14 @@
-function yOCTHardware_initScanner(octProbePath, v)
+function yOCTHardware_initScanner(octProbePath, octSystemName, octSystemModule, skipHardware, scannerAlreadyInit, v)
 % Helper function for yOCTHardware.
 % Initialize OCT scanner with probe
 %
 % INPUTS:
-%   octProbePath: path to probe
-%   v: verbose mode, default: false
+%   octProbePath       - Path to probe .ini file
+%   octSystemName      - 'ganymede' or 'gan632'
+%   octSystemModule    - Hardware module handle (C# assembly or Python struct)
+%   skipHardware       - True to skip real hardware calls
+%   scannerAlreadyInit - True if scanner was previously initialized
+%   v                  - Verbose mode (default false)
 
 %% Input checks
 if ~exist('v','var')
@@ -15,9 +19,6 @@ end
 if (v)
     fprintf('%s Initialzing Hardware...\n\t(if Matlab is taking more than 2 minutes to finish this step, restart hardware and try again)\n',datestr(datetime));
 end
-
-% Load library (should already be loaded to memory)
-[octSystemModule, octSystemName, skipHardware, scannerAlreadyInit] = yOCTHardware('status');
 
 %% Initialize scanner
 if ~skipHardware
