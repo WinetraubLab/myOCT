@@ -107,7 +107,7 @@ case 'teardown'
         % yOCTHardware_closeScanner only sends the close-scanner command to
         % the SDK.  The teardown block here additionally handles
         % Gan632-specific Python cleanup and interpreter termination.
-        yOCTHardware_closeScanner(v);
+        yOCTHardware_closeScanner(gOCTHardwareStatus.module, gOCTHardwareStatus.name, gOCTHardwareStatus.skipHardware, v);
 
         switch gOCTHardwareStatus.name
             case 'gan632'

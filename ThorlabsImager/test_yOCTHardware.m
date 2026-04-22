@@ -312,5 +312,20 @@ classdef test_yOCTHardware < matlab.unittest.TestCase
             testCase.verifyEmpty(gRegisteredMotionRangeMax_OCT);
         end
 
+        %% Auto-teardown on system change does not error when scanner was never fully initialized
+        function testSystemChangeTeardownWithUninitializedScanner(testCase)
+            % Init with Ganymede but skipHardware=true -> scannerInitialized=false
+            yOCTHardware('init', 'OCTSystem', 'Ganymede', 'skipHardware', true, ...
+                'octProbePath', testCase.ProbeIni);
+
+            % Re-init with a different system: triggers auto-teardown.
+            % Must complete without error even though scanner was never initialized.
+            yOCTHardware('init', 'OCTSystem', 'Gan632', 'skipHardware', true, ...
+                'octProbePath', testCase.ProbeIni);
+
+            [~, name] = yOCTHardware('status');
+            testCase.verifyEqual(name, 'gan632');
+        end
+
     end
 end
