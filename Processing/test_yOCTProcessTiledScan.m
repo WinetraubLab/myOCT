@@ -648,6 +648,84 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             testCase.verifyEqual(climOut(:)', climRef(:)', 'AbsTol', 1e-6, ...
                 'Corrupted clim must be recomputed, matching a clean run');
         end
+
+        function testResume_OrphanStageDirInOutputFolder_IsCleaned(testCase)
+            % If MATLAB is interrupted mid-write, a y####.tif/ directory can remain in
+            % the output folder instead of a file. imageDatastore crashes on it.
+            % Step 1b sweeps those orphans before the BigTIFF build.
+            % Test that resume completes successfully and output matches a clean run.
+
+            [scanFolder, outFile] = testCase.makeResumeFixture('orphan_out');
+            commonArgs = { ...
+                'focusPositionInImageZpix', 1, ...
+                'focusSigma', 1000, ...
+                'dispersionQuadraticTerm', 0, ...
+                'v', false};
+
+            % Reference: clean run
+            [~, refOut] = testCase.makeResumeFixture('orphan_out_ref');
+            yOCTProcessTiledScan(scanFolder, {refOut}, commonArgs{:}, 'resume', false);
+            [dataRef, ~] = yOCTFromTif(refOut);
+
+            % First clean run to get a complete partialMode/ with per-frame
+            % .tif.json sidecars (so mode 2 is a no-op on the next resume).
+            yOCTProcessTiledScan(scanFolder, {outFile}, commonArgs{:}, 'resume', false);
+
+            % Simulate a crash mid-Step 3: delete the final BigTIFF and plant
+            % an orphan y0001.tif/ directory in the output folder where the
+            % slide file would be.
+            delete(outFile);
+            companion = [outFile '.fldr'];
+            slidePath = fullfile(companion, 'y0001.tif');
+            if exist(slidePath,'file'); delete(slidePath); end
+            mkdir(slidePath); % orphan directory where a file is expected
+
+            % Resume must sweep the orphan, rebuild the slide + BigTIFF,
+            % and produce output identical to the reference.
+            yOCTProcessTiledScan(scanFolder, {outFile}, commonArgs{:}, 'resume', true);
+            testCase.verifyTrue(exist(outFile,'file') == 2, ...
+                'Final BigTIFF must exist after resume');
+            testCase.verifyFalse(exist(slidePath,'dir') == 7, ...
+                'Orphan y####.tif/ directory must be removed');
+            [dataResume, ~] = yOCTFromTif(outFile);
+            testCase.verifyLessThan( ...
+                max(abs(double(dataResume(:)) - double(dataRef(:)))), 1e-6, ...
+                'Output must match the clean reference after orphan sweep');
+        end
+
+        function testResume_OrphanStageDirInPartialMode_IsCleaned(testCase)
+            % Same bug as above but the orphan y####.tif/ lives in partialMode/.
+            % Mode 1 resume sweeps it so mode 2 can re-stage that frame.
+            % Test that resume completes successfully and output matches a clean run.
+
+            [scanFolder, outFile] = testCase.makeResumeFixture('orphan_partial');
+            commonArgs = { ...
+                'focusPositionInImageZpix', 1, ...
+                'focusSigma', 1000, ...
+                'dispersionQuadraticTerm', 0, ...
+                'v', false};
+
+            % Reference: clean run
+            [~, refOut] = testCase.makeResumeFixture('orphan_partial_ref');
+            yOCTProcessTiledScan(scanFolder, {refOut}, commonArgs{:}, 'resume', false);
+            [dataRef, ~] = yOCTFromTif(refOut);
+
+            % Plant an orphan y0001.tif/ directory in partialMode/ BEFORE
+            % any run (so mode 2 will have to redo that frame).
+            companion = [outFile '.fldr'];
+            partialFolder = fullfile(companion, 'partialMode');
+            mkdir(partialFolder);
+            orphanPath = fullfile(partialFolder, 'y0001.tif');
+            mkdir(orphanPath);
+
+            yOCTProcessTiledScan(scanFolder, {outFile}, commonArgs{:}, 'resume', true);
+            testCase.verifyTrue(exist(outFile,'file') == 2, ...
+                'Final BigTIFF must exist after resume');
+            [dataResume, ~] = yOCTFromTif(outFile);
+            testCase.verifyLessThan( ...
+                max(abs(double(dataResume(:)) - double(dataRef(:)))), 1e-6, ...
+                'Output must match the clean reference after orphan sweep in partialMode');
+        end
     end
 
     methods (Access = private)
