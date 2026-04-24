@@ -68,6 +68,10 @@ addParameter(p,'applyPathLengthCorrection',true); %TODO(yonatan) shift this para
 % Output file resolution
 addParameter(p,'outputFilePixelSize_um',1,@(x)(isempty(x) || (isnumeric(x) && isscalar(x) && x>0)));
 
+% Safe stop/resume: if true, pick up where a previous run left off (skip frames
+% and slides already committed, reuse saved clim). Set false to force a fresh run.
+addParameter(p,'resume',true,@islogical);
+
 p.KeepUnmatched = true;
 if (~iscell(varargin{1}))
     parse(p,varargin{:});
@@ -234,8 +238,8 @@ if ~isempty(in.yPlanesOutputFolder) && in.howManyYPlanes > 0
     isSaveSomeYPlanes = true;
     yPlanesOutputFolder = awsModifyPathForCompetability([in.yPlanesOutputFolder '/']);
     
-    % Clear folder if it exists
-    if awsExist(yPlanesOutputFolder)
+    % On resume, keep existing debug snapshots; new ones will overwrite by name
+    if ~in.resume && awsExist(yPlanesOutputFolder)
         awsRmDir(yPlanesOutputFolder);
     end
     
@@ -253,12 +257,144 @@ imOutSize = [...
     length(dimOutput_mm.x.values) ...
     length(dimOutput_mm.y.values)];
 printStatsEveryyI = max(floor(length(dimOutput_mm.y.values)/20),1);
+
+% If the output already exists and no partial work remains, nothing to do.
+% Must be checked BEFORE yOCT2Tif mode 1 (which always creates partialMode/).
+if in.resume
+    % Locate where partialMode/ would be, matching yOCT2Tif's convention
+    allFinalFilesExist = true;
+    outputFolderForPartial = '';
+    for kOut = 1:length(outputPath)
+        op = outputPath{kOut};
+        [~,~,ext] = fileparts(op);
+        if ~isempty(ext)
+            % File output
+            if ~awsExist(op,'file')
+                allFinalFilesExist = false;
+            end
+            if isempty(outputFolderForPartial)
+                outputFolderForPartial = awsModifyPathForCompetability([op '.fldr/']);
+            end
+        else
+            % Folder output
+            folderPath = awsModifyPathForCompetability([op '/']);
+            metaPath = awsModifyPathForCompetability([folderPath 'TifMetadata.json']);
+            if ~awsExist(metaPath,'file')
+                allFinalFilesExist = false;
+            end
+            outputFolderForPartial = folderPath; % prefer folder over .fldr sibling
+        end
+    end
+    partialModePath = awsModifyPathForCompetability( ...
+        [outputFolderForPartial 'partialMode/']);
+    partialStillExists = awsExist(partialModePath,'dir');
+
+    if allFinalFilesExist && ~partialStillExists
+        warning('yOCTProcessTiledScan:outputAlreadyDone', ...
+            ['Output already exists and no partial work remains. Nothing to do.\n' ...
+            'To regenerate: delete the output files and re-run, ' ...
+            'or pass ''resume'', false to force a fresh run.']);
+        return;
+    end
+end
+
 ticBytes(gcp);
 if(v)
     fprintf('%s Stitching ...\n',datestr(datetime)); tt=tic();
 end
-whereAreMyFiles = yOCT2Tif([], outputPath, 'partialFileMode', 1); %Init
+whereAreMyFiles = yOCT2Tif([], outputPath, 'partialFileMode', 1, 'resume', in.resume); %Init
+
+% Guard against resuming with different inputs: save the current config and
+% compare against a previous run. Mismatch -> clear error, not silent corruption.
+configGuardPath = awsModifyPathForCompetability( ...
+    [whereAreMyFiles '/reconstructConfig.json']);
+newConfig = struct();
+newConfig.tiledScanInputFolder     = tiledScanInputFolder;
+newConfig.dispersionQuadraticTerm  = in.dispersionQuadraticTerm;
+newConfig.focusSigma               = in.focusSigma;
+newConfig.focusPositionInImageZpix = in.focusPositionInImageZpix;
+newConfig.cropZRange_mm            = in.cropZRange_mm;
+newConfig.outputFilePixelSize_um   = in.outputFilePixelSize_um;
+newConfig.applyPathLengthCorrection= in.applyPathLengthCorrection;
+newConfig.reconstructConfig        = reconstructConfig;
+
+if in.resume && awsExist(configGuardPath,'file')
+    try
+        prevConfig = awsReadJSON(configGuardPath);
+    catch
+        prevConfig = [];
+    end
+    if ~isempty(prevConfig)
+        mismatchLines = {};
+        fn = fieldnames(newConfig);
+        for k = 1:length(fn)
+            f = fn{k};
+            % Compare via JSON encoding: avoids false positives from floating-point
+            % round-trips through JSON and cell/struct type differences.
+            prevJson = ''; curJson = '';
+            try, prevJson = jsonencode(prevConfig.(f)); catch, end
+            try, curJson  = jsonencode(newConfig.(f));  catch, end
+            if ~isfield(prevConfig,f) || ~strcmp(prevJson, curJson)
+                prevStr = '<missing>';
+                if isfield(prevConfig,f)
+                    prevStr = yOCTProcessTiledScan_formatConfigValue(prevConfig.(f));
+                end
+                curStr = yOCTProcessTiledScan_formatConfigValue(newConfig.(f));
+                mismatchLines{end+1} = sprintf('    %s: previous=%s, current=%s', f, prevStr, curStr); %#ok<AGROW>
+            end
+        end
+        if ~isempty(mismatchLines)
+            msg = sprintf(['Cannot resume: the following inputs differ from the previous run:\n%s\n\n'...
+                'Partial data lives at:\n    %s\n\n'...
+                'Options to resolve:\n'...
+                '    1) Re-run with the previous input values.\n'...
+                '    2) Delete the partial folder above and re-run to start fresh.\n'...
+                '    3) Re-run passing ''resume'', false to force a fresh run.'], ...
+                strjoin(mismatchLines, newline), whereAreMyFiles);
+            error('yOCTProcessTiledScan:resumeConfigMismatch', '%s', msg);
+        end
+    end
+end
+% Always (re)write the guard to keep it in sync with the current inputs
+configInProgress = awsModifyPathForCompetability( ...
+    [whereAreMyFiles '/reconstructConfig_inProgress.json']);
+awsWriteJSON(newConfig, configInProgress);
+if awsIsAWSPath(configGuardPath)
+    awsCopyFileFolder(configInProgress, configGuardPath);
+    try, delete(configInProgress); catch, end
+else
+    if exist(configGuardPath,'file'), delete(configGuardPath); end
+    movefile(configInProgress, configGuardPath, 'f');
+end
+
+% Find frames already done (y####.tif.json present = frame complete)
+alreadyDoneYI = false(1,length(dimOutput_mm.y.values));
+if in.resume
+    for yI = 1:length(dimOutput_mm.y.values)
+        finalJsonPath = awsModifyPathForCompetability( ...
+            sprintf('%s/y%04d.tif.json', whereAreMyFiles, yI));
+        if awsExist(finalJsonPath,'file')
+            alreadyDoneYI(yI) = true;
+        end
+    end
+end
+numAlreadyDone = sum(alreadyDoneYI);
+if v && numAlreadyDone > 0
+    fprintf('%s Resume: %d / %d yI frames already committed, will be skipped.\n', ...
+        datestr(datetime), numAlreadyDone, length(dimOutput_mm.y.values));
+end
+
 parfor yI=1:length(dimOutput_mm.y.values) 
+    % Skip frames already done; re-check inside parfor in case of race
+    if alreadyDoneYI(yI)
+        continue;
+    end
+    finalJsonPath = awsModifyPathForCompetability( ...
+        sprintf('%s/y%04d.tif.json', whereAreMyFiles, yI));
+    if awsExist(finalJsonPath,'file')
+        continue;
+    end
+
     try
         % Create a container for all data
         stack = zeros(imOutSize(1:2)); %z,x,zStach
@@ -363,7 +499,7 @@ parfor yI=1:length(dimOutput_mm.y.values)
         
         % Save
         yOCT2Tif(mag2db(stackmean), outputPath, ...
-            'partialFileMode', 2, 'partialFileModeIndex', yI); 
+            'partialFileMode', 2, 'partialFileModeIndex', yI, 'resume', in.resume); 
         
         % Is it time to print statistics?
         if mod(yI,printStatsEveryyI)==0 && v
@@ -392,25 +528,28 @@ if (v)
     fprintf('%s Verifying all files are there ... ',datestr(datetime));
 end
 
-% Count how many files are in the library
-cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles);
-    
+% Count how many files are in the library. On resume, the helper only sees
+% staged (.getmeout) artifacts from this run; frames committed by previous
+% runs live as y####.tif.json directly in whereAreMyFiles, so add them back.
+cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles) + numAlreadyDone;
+
 if cnt ~= length(dimOutput_mm.y.values)
     % Some files are missing, print debug to help trubleshoot 
     fprintf('\nDebug Data:\n');
     fprintf('whereAreMyFiles = ''%s''\n',whereAreMyFiles);
     fprintf('Number of ds files: %d\n',cnt)
     
-    % Use AWS ls
+    % Use AWS ls. Match only per-frame jsons (y####.tif.json); exclude
+    % bookkeeping files like _clim.json and reconstructConfig.json.
     l = awsls(whereAreMyFiles);
-    isFileL = cellfun(@(x)(contains(lower(x),'.json')),l);
+    isFileL = cellfun(@(x)(~isempty(regexp(lower(x),'y\d+\.tif\.json$','once'))),l);
     cntL = sum(isFileL);
     fprintf('Number of awsls files: %d\n',cntL)
     
-    if (cntL ~= length(yAll))
+    if (cntL ~= length(dimOutput_mm.y.values))
         % Throw an error
         error('Please review "%s". We expect to have %d y planes but see only %d in the folder.\nI didn''t delete folder to allow you to debug.\nPlease remove by running awsRmDir(''%s''); when done.',...
-            whereAreMyFiles,length(yAll),cnt,whereAreMyFiles);
+            whereAreMyFiles,length(dimOutput_mm.y.values),cnt,whereAreMyFiles);
     else
         % This is probably a datastore issue
         warning('fileDatastore returned different number of files when compared to awsls. You might want to trubleshoot why this happend.\nFor background, see: %s',...
@@ -430,7 +569,17 @@ if (v)
 end
 
 % Get the main data out
-yOCT2Tif([], outputPath, 'metadata', dimOutput_mm, 'partialFileMode', 3);
+yOCT2Tif([], outputPath, 'metadata', dimOutput_mm, 'partialFileMode', 3, 'resume', in.resume);
+
+% Resume summary (same format as yOCTUnzipTiledScan)
+if v
+    nTotalYI = length(dimOutput_mm.y.values);
+    nNewYI   = nTotalYI - numAlreadyDone;
+    fprintf('\n%s Reconstruction Summary\n', datestr(datetime));
+    fprintf('%s   Total y planes:         %d\n', datestr(datetime), nTotalYI);
+    fprintf('%s   Already reconstructed:  %d\n', datestr(datetime), numAlreadyDone);
+    fprintf('%s   Newly reconstructed:    %d\n', datestr(datetime), nNewYI);
+end
 
 % Get saved y planes out
 if isSaveSomeYPlanes
@@ -450,7 +599,39 @@ function cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles)
 % MATLAB 2021a. Due to this bug, we have replaced all calls to 
 % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
 % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-ds = imageDatastore(whereAreMyFiles,'ReadFcn',@(x)(x),'FileExtensions','.getmeout','IncludeSubfolders',true); %Count all artifacts
-isFile = cellfun(@(x)(contains(lower(x),'.json')),ds.Files);
-cnt = sum(isFile);
+try
+    ds = imageDatastore(whereAreMyFiles,'ReadFcn',@(x)(x),'FileExtensions','.getmeout','IncludeSubfolders',true); %Count all artifacts
+    isFile = cellfun(@(x)(contains(lower(x),'.json')),ds.Files);
+    cnt = sum(isFile);
+catch
+    % No .getmeout staged files (e.g. full resume with no new work). Not an error.
+    cnt = 0;
+end
+
+
+function s = yOCTProcessTiledScan_formatConfigValue(v)
+% Format a config value as a short string for error messages
+if isnumeric(v) || islogical(v)
+    if isempty(v)
+        s = '[]';
+    elseif isscalar(v)
+        s = mat2str(v);
+    else
+        s = ['[' strjoin(arrayfun(@mat2str, v(:)', 'UniformOutput', false), ' ') ']'];
+    end
+elseif ischar(v)
+    s = ['"' v '"'];
+elseif iscell(v)
+    parts = cell(1, numel(v));
+    for iii = 1:numel(v)
+        parts{iii} = yOCTProcessTiledScan_formatConfigValue(v{iii});
+    end
+    s = ['{' strjoin(parts, ', ') '}'];
+else
+    try
+        s = jsonencode(v);
+    catch
+        s = '<unprintable>';
+    end
+end
 
