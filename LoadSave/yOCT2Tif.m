@@ -233,6 +233,10 @@ elseif mode == 1
             catch
                 % No staged artifacts to commit, or commit already done. Safe to ignore.
             end
+            % If MATLAB died after Mode 1 created the directory but before it finished
+            % writing inside it, a leftover directory named y####.tif/ remains.
+            % Remove those so mode 2 can re-write those frames cleanly.
+            yOCT2Tif_cleanOrphanStages(outputFilePaths{3});
         else
             % Make sure the partial folder exists for the upcoming mode 2 writes
             if ~awsIsAWSPath(outputFilePaths{3}) && ~exist(outputFilePaths{3},'dir')
@@ -281,6 +285,12 @@ elseif mode == 2
             awsRmFile(p);
         end
 
+        % If an orphan staging directory exists because Mode 1 was interrupted before
+        % writing .getmeout inside the uuid subfolder, nuke it so Mode 1 can start it fresh.
+        if in.resume && awsExist(p,'dir')
+            awsRmDir(p);
+        end
+
         bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
         
         % Save Tif stack file
@@ -319,7 +329,26 @@ else
     %   6. Remove partialMode only after the above are guaranteed on disk.
     
     % Step 1: commit anything left staged by MW1 in partialMode.
-    awsCopyFile_MW2(outputFilePaths{3});
+    try
+        awsCopyFile_MW2(outputFilePaths{3});
+    catch
+        % No staged artifacts (full resume with no new work). Safe to skip.
+    end
+
+    % Step 1b: Clean up the output folder from a previous interrupted run.
+    % Step 3 below also writes slides via Mode 1 (into the output folder). If MATLAB
+    % died mid-write, the output folder may contain y####.tif/ directories instead
+    % of y####.tif files. Mode 2 promotes any that finished writing; cleanOrphanStages
+    % removes the rest. Without this, Step 5 (BigTIFF build) would crash when
+    % imageDatastore encounters a directory where it expects a TIFF file.
+    if in.resume && awsExist(outputFilePaths{2},'dir')
+        try
+            awsCopyFile_MW2(outputFilePaths{2});
+        catch
+            % no staged artifacts here, safe to skip
+        end
+        yOCT2Tif_cleanOrphanStages(outputFilePaths{2});
+    end
 
     % Step 2: Resolve clim; reuse _clim.json if present so results are deterministic
     climCachePath = awsModifyPathForCompetability( ...
@@ -429,7 +458,11 @@ else
     end
 
     % Commit rewritten slides
-    awsCopyFile_MW2(outputFilePaths{2});
+    try
+        awsCopyFile_MW2(outputFilePaths{2});
+    catch
+        % No staged artifacts (full resume with all slides already committed).
+    end
 
     % Step 4: Write TifMetadata.json atomically
     metaJson = buildTiffVolumeMetadata(metadata,c);
@@ -565,4 +598,68 @@ else
     tagstruct.YResolution      = 1;
     tagstruct.ResolutionUnit   = Tiff.ResolutionUnit.None;
     tagstruct.ImageDescription = sprintf('ImageJ=1.53\nspacing=1.00\nimages=%d\n', totalFrames);
+end
+
+function yOCT2Tif_cleanOrphanStages(partialFolder)
+% Remove orphan staging directories left by an interrupted MW1 write.
+% After a clean stage, MW2 promotes the contents into a FILE named y####.tif
+% (or y####.tif.json). Anything still present as a DIRECTORY matching that
+% pattern means MW1 crashed before writing its .getmeout marker, so MW2 had
+% nothing to promote. We delete those dirs so the next parfor iteration
+% re-stages from scratch.
+
+fprintf('%s yOCT2Tif resume: scanning for orphan staging dirs in %s\n', ...
+    datestr(datetime), partialFolder);
+removed = {};
+failed = {};
+
+if awsIsAWSPath(partialFolder)
+    entries = awsls(partialFolder);
+    for k = 1:numel(entries)
+        name = entries{k};
+        % awsls returns folder entries with a trailing '/'; strip it for regex.
+        if endsWith(name,'/')
+            stripped = name(1:end-1);
+        else
+            continue; % not a directory, cannot be orphan stage
+        end
+        if ~isempty(regexp(stripped,'^y\d+\.tif(\.json)?$','once'))
+            target = [partialFolder '/' stripped];
+            try
+                awsRmDir(target);
+                removed{end+1} = stripped; %#ok<AGROW>
+            catch err
+                failed{end+1} = sprintf('%s (%s)', stripped, err.message); %#ok<AGROW>
+            end
+        end
+    end
+else
+    listing = dir(partialFolder);
+    for k = 1:numel(listing)
+        if ~listing(k).isdir; continue; end
+        name = listing(k).name;
+        if strcmp(name,'.') || strcmp(name,'..'); continue; end
+        if ~isempty(regexp(name,'^y\d+\.tif(\.json)?$','once'))
+            target = fullfile(partialFolder,name);
+            try
+                rmdir(target,'s');
+                removed{end+1} = name; %#ok<AGROW>
+            catch err
+                failed{end+1} = sprintf('%s (%s)', name, err.message); %#ok<AGROW>
+            end
+        end
+    end
+end
+
+if isempty(removed) && isempty(failed)
+    fprintf('%s yOCT2Tif resume: no orphan staging dirs found.\n', datestr(datetime));
+else
+    if ~isempty(removed)
+        fprintf('%s yOCT2Tif resume: removed %d orphan staging dir(s): %s\n', ...
+            datestr(datetime), numel(removed), strjoin(removed, ', '));
+    end
+    if ~isempty(failed)
+        fprintf(2,'%s yOCT2Tif resume: FAILED to remove %d orphan dir(s): %s\n', ...
+            datestr(datetime), numel(failed), strjoin(failed, ' | '));
+    end
 end

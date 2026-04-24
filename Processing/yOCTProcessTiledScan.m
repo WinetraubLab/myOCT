@@ -528,25 +528,28 @@ if (v)
     fprintf('%s Verifying all files are there ... ',datestr(datetime));
 end
 
-% Count how many files are in the library
-cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles);
-    
+% Count how many files are in the library. On resume, the helper only sees
+% staged (.getmeout) artifacts from this run; frames committed by previous
+% runs live as y####.tif.json directly in whereAreMyFiles, so add them back.
+cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles) + numAlreadyDone;
+
 if cnt ~= length(dimOutput_mm.y.values)
     % Some files are missing, print debug to help trubleshoot 
     fprintf('\nDebug Data:\n');
     fprintf('whereAreMyFiles = ''%s''\n',whereAreMyFiles);
     fprintf('Number of ds files: %d\n',cnt)
     
-    % Use AWS ls
+    % Use AWS ls. Match only per-frame jsons (y####.tif.json); exclude
+    % bookkeeping files like _clim.json and reconstructConfig.json.
     l = awsls(whereAreMyFiles);
-    isFileL = cellfun(@(x)(contains(lower(x),'.json')),l);
+    isFileL = cellfun(@(x)(~isempty(regexp(lower(x),'y\d+\.tif\.json$','once'))),l);
     cntL = sum(isFileL);
     fprintf('Number of awsls files: %d\n',cntL)
     
-    if (cntL ~= length(yAll))
+    if (cntL ~= length(dimOutput_mm.y.values))
         % Throw an error
         error('Please review "%s". We expect to have %d y planes but see only %d in the folder.\nI didn''t delete folder to allow you to debug.\nPlease remove by running awsRmDir(''%s''); when done.',...
-            whereAreMyFiles,length(yAll),cnt,whereAreMyFiles);
+            whereAreMyFiles,length(dimOutput_mm.y.values),cnt,whereAreMyFiles);
     else
         % This is probably a datastore issue
         warning('fileDatastore returned different number of files when compared to awsls. You might want to trubleshoot why this happend.\nFor background, see: %s',...
@@ -596,9 +599,14 @@ function cnt = yOCTProcessTiledScan_AuxCountHowManyYFiles(whereAreMyFiles)
 % MATLAB 2021a. Due to this bug, we have replaced all calls to 
 % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
 % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
-ds = imageDatastore(whereAreMyFiles,'ReadFcn',@(x)(x),'FileExtensions','.getmeout','IncludeSubfolders',true); %Count all artifacts
-isFile = cellfun(@(x)(contains(lower(x),'.json')),ds.Files);
-cnt = sum(isFile);
+try
+    ds = imageDatastore(whereAreMyFiles,'ReadFcn',@(x)(x),'FileExtensions','.getmeout','IncludeSubfolders',true); %Count all artifacts
+    isFile = cellfun(@(x)(contains(lower(x),'.json')),ds.Files);
+    cnt = sum(isFile);
+catch
+    % No .getmeout staged files (e.g. full resume with no new work). Not an error.
+    cnt = 0;
+end
 
 
 function s = yOCTProcessTiledScan_formatConfigValue(v)
