@@ -329,7 +329,12 @@ if in.resume && awsExist(configGuardPath,'file')
         fn = fieldnames(newConfig);
         for k = 1:length(fn)
             f = fn{k};
-            if ~isfield(prevConfig,f) || ~isequaln(prevConfig.(f), newConfig.(f))
+            % Compare via JSON encoding: avoids false positives from floating-point
+            % round-trips through JSON and cell/struct type differences.
+            prevJson = ''; curJson = '';
+            try, prevJson = jsonencode(prevConfig.(f)); catch, end
+            try, curJson  = jsonencode(newConfig.(f));  catch, end
+            if ~isfield(prevConfig,f) || ~strcmp(prevJson, curJson)
                 prevStr = '<missing>';
                 if isfield(prevConfig,f)
                     prevStr = yOCTProcessTiledScan_formatConfigValue(prevConfig.(f));
