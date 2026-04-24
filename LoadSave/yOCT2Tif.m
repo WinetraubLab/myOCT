@@ -61,6 +61,8 @@ addParameter(p,'clim',[])
 addParameter(p,'metadata',[])
 addParameter(p,'partialFileMode',0);
 addParameter(p,'partialFileModeIndex',[]);
+% If true, skip slides already committed and reuse saved clim (safe stop/resume)
+addParameter(p,'resume',false,@islogical);
 
 parse(p,varargin{:});
 in = p.Results;
@@ -223,19 +225,35 @@ if mode == 0
 %% Actual writing of data, partial file mode (initialization)
 elseif mode == 1
     
-    % If output a file, clear it before writing
-    if awsExist(outputFilePaths{1},'file') && isOutputFile
-        awsRmFile(outputFilePaths{1}); %Clear file
-    end
+    if in.resume
+        % Resume mode: preserve existing partial/output data.
+        if awsExist(outputFilePaths{3},'dir')
+            try
+                awsCopyFile_MW2(outputFilePaths{3});
+            catch
+                % No staged artifacts to commit, or commit already done. Safe to ignore.
+            end
+        else
+            % Make sure the partial folder exists for the upcoming mode 2 writes
+            if ~awsIsAWSPath(outputFilePaths{3}) && ~exist(outputFilePaths{3},'dir')
+                mkdir(outputFilePaths{3});
+            end
+        end
+    else
+        % If output a file, clear it before writing
+        if awsExist(outputFilePaths{1},'file') && isOutputFile
+            awsRmFile(outputFilePaths{1}); %Clear file
+        end
 
-    % Always outputing a folder, clear it
-    if awsExist(outputFilePaths{2},'dir')
-        awsRmDir(outputFilePaths{2}); %Clear dir
-    end
-    
-    % Clear the temporary folder as well
-    if awsExist(outputFilePaths{3},'dir')
-        awsRmDir(outputFilePaths{3});
+        % Always outputing a folder, clear it
+        if awsExist(outputFilePaths{2},'dir')
+            awsRmDir(outputFilePaths{2}); %Clear dir
+        end
+        
+        % Clear the temporary folder as well
+        if awsExist(outputFilePaths{3},'dir')
+            awsRmDir(outputFilePaths{3});
+        end
     end
     
     % Files should be in the folder
@@ -250,9 +268,14 @@ elseif mode == 2
     end
     
     for yI=1:size(data,3)
-        bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
-        
         p = yScanPath(outputFilePaths{3},in.partialFileModeIndex(yI));
+
+        % Skip frames already saved by a previous run (.json presence = complete)
+        if in.resume && awsExist([p '.json'],'file') && awsExist(p,'file')
+            continue;
+        end
+
+        bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
         
         % Save Tif stack file
         tn1 = [tempname '.tif'];
@@ -260,7 +283,7 @@ elseif mode == 2
         awsCopyFile_MW1(tn1,p); ...
         delete(tn1); % Cleanup   
     
-        % Save C as a temp json
+        % Save C as a temp json (written last: acts as the completion marker)
         tn2 = [tempname '.json'];
         a.c = c;
         awsWriteJSON(a,tn2);
@@ -273,8 +296,40 @@ elseif mode == 2
     
 %% Actual writing of data, partial file mode (finalization part)
 else
-    % Finish WM work
+    % Resume: The goal of this block is that every artifact produced here is either
+    % fully committed under its final name or absent. We NEVER leave behind a
+    % half-written file sharing the final name: an interrupted write stays
+    % under an .inProgress sibling name (or as MW1-staged .getmeout folders)
+    % so that a subsequent resume can redo only the steps that did not complete.
+    % Order of operations:
+    %   1. Commit MW1 staging in partialMode.
+    %   2. Resolve/persist a stable global clim via _clim.json in partialMode.
+    %      This prevents the clim used for rewriting slides from changing between
+    %      runs, which would otherwise produce a different final BigTIFF.
+    %   3. Rewrite each slide to the output folder, skipping slides whose final
+    %      name already exists (they were committed by a prior run).
+    %   4. Write TifMetadata.json atomically.
+    %   5. Build BigTIFF into an .inProgress sibling, then rename to final name once complete.
+    %   6. Remove partialMode only after the above are guaranteed on disk.
+    
+    % Step 1: commit anything left staged by MW1 in partialMode.
     awsCopyFile_MW2(outputFilePaths{3});
+
+    % Step 2: Resolve clim; reuse _clim.json if present so results are deterministic
+    climCachePath = awsModifyPathForCompetability( ...
+        [outputFilePaths{3} '/_clim.json']);
+    cachedClim = [];
+    if in.resume && awsExist(climCachePath,'file')
+        try
+            climStruct = awsReadJSON(climCachePath);
+            if isfield(climStruct,'c') && numel(climStruct.c) == 2
+                cachedClim = climStruct.c;
+            end
+        catch
+            % Corrupted cache, recompute
+            cachedClim = [];
+        end
+    end
 
     numberOfYPlanes=NaN;
     %for parforI=1:1
@@ -283,7 +338,7 @@ else
             % Make sure worker has the right credentials
             awsSetCredentials;
         end
-            
+
         %Get all the JSON files, so we can read c
         % Any fileDatastore request to AWS S3 is limited to 1000 files in 
         % MATLAB 2021a. Due to this bug, we have replaced all calls to 
@@ -291,102 +346,160 @@ else
         % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
         dsJsons = imageDatastore(outputFilePaths{3},'ReadFcn',@awsReadJSON, ...
             'FileExtensions','.json'); 
+        % Exclude bookkeeping files (_clim.json, reconstructConfig.json) from per-frame list
+        allJsonFiles = dsJsons.Files;
+        keep = true(size(allJsonFiles));
+        for k = 1:length(allJsonFiles)
+            [~,bn,~] = fileparts(allJsonFiles{k});
+            if startsWith(bn,'_') || strcmp(bn,'reconstructConfig') || strcmp(bn,'TifMetadata')
+                keep(k) = false;
+            end
+        end
+        dsJsons.Files = allJsonFiles(keep);
+
         cJsons = dsJsons.readall();
         cFrameMins = cellfun(@(x)(min(x.c)),cJsons);
         cFrameMaxs = cellfun(@(x)(max(x.c)),cJsons);
-        
+
         numberOfYPlanes(parforI) = length(cJsons);
-        cOut(parforI,:) = [min(cFrameMins) max(cFrameMaxs)];
+
+        if ~isempty(cachedClim)
+            cOut(parforI,:) = cachedClim(:)';
+        else
+            cOut(parforI,:) = [min(cFrameMins) max(cFrameMaxs)];
+        end
+
         if isempty(c) %Set the internal value
             cStack = cOut(parforI,:); % Use the value from the worker
         else
             cStack = c;
         end
 
-        % Rewrite individual slides with the same c boundray for all
+        % Persist clim cache atomically so a future resume reuses the same value
+        if isempty(cachedClim)
+            climInProgress = awsModifyPathForCompetability( ...
+                [outputFilePaths{3} '/_clim_inProgress.json']);
+            a = struct();
+            a.c = cStack;
+            awsWriteJSON(a, climInProgress);
+            if awsIsAWSPath(climCachePath)
+                awsCopyFileFolder(climInProgress, climCachePath);
+                try, delete(climInProgress); catch, end
+            else
+                if exist(climCachePath,'file'), delete(climCachePath); end
+                movefile(climInProgress, climCachePath, 'f');
+            end
+        end
+
+        % Step 3: Rewrite slides with unified clim; skip slides already committed
         for frameI = 1:numberOfYPlanes(parforI)
-            % Read frame
-            fpIn = yScanPath(outputFilePaths{3},frameI);
             fpOut = yScanPath(outputFilePaths{2},frameI);
-            
-            % Any fileDatastore request to AWS S3 is limited to 1000 files in 
-            % MATLAB 2021a. Due to this bug, we have replaced all calls to 
-            % fileDatastore with imageDatastore since the bug does not affect imageDatastore. 
+
+            if awsExist(fpOut,'file'); continue; end % already committed
+
+            fpIn = yScanPath(outputFilePaths{3},frameI);
+
+            % Any fileDatastore request to AWS S3 is limited to 1000 files in
+            % MATLAB 2021a. Due to this bug, we have replaced all calls to
+            % fileDatastore with imageDatastore since the bug does not affect imageDatastore.
             % 'https://www.mathworks.com/matlabcentral/answers/502559-filedatastore-request-to-aws-s3-limited-to-1000-files'
             ds = imageDatastore(fpIn,'readFcn',@imread);
             bits = ds.read();
-            
+
             % Write a new frame
             tn = [tempname '.tif'];
-            
-            data = yOCT2Tif_ConvertBitsData(bits,...
+
+            dataConverted = yOCT2Tif_ConvertBitsData(bits,...
                 [cFrameMins(frameI) cFrameMaxs(frameI)],true);
-            newBits = yOCT2Tif_ConvertBitsData(data,cStack,false);
+            newBits = yOCT2Tif_ConvertBitsData(dataConverted,cStack,false);
 
             imwrite(newBits,tn);
             awsCopyFile_MW1(tn,fpOut); %Matlab worker version of copy files
             delete(tn);
-        end 
+        end
     end %Run once but on a worker
     if isempty(c)
         c = cOut; % Use the value from the worker
     end
-    
-    % Remove partial tifs
-    awsRmDir(outputFilePaths{3});
 
-    % Finish up copying files
+    % Commit rewritten slides
     awsCopyFile_MW2(outputFilePaths{2});
-    
-    % Finish generating a folder by placing metadata
+
+    % Step 4: Write TifMetadata.json atomically
     metaJson = buildTiffVolumeMetadata(metadata,c);
-    awsWriteJSON(metaJson, ...
-                [outputFilePaths{2} '/TifMetadata.json']);
-    
-    % Generate a single file if required
-    % Instead of loading the entire volume into memory at once, we build
-    % the output TIFF slide by slide: read one frame, write it, discard it.
-    % This keeps memory usage at 1 slide instead of N slides.
+    metadataFinalPath = awsModifyPathForCompetability( ...
+        [outputFilePaths{2} '/TifMetadata.json']);
+    metadataInProgress = awsModifyPathForCompetability( ...
+        [outputFilePaths{2} '/TifMetadata_inProgress.json']);
+    awsWriteJSON(metaJson, metadataInProgress);
+    if awsIsAWSPath(metadataFinalPath)
+        awsCopyFileFolder(metadataInProgress, metadataFinalPath);
+        try, delete(metadataInProgress); catch, end
+    else
+        if exist(metadataFinalPath,'file'), delete(metadataFinalPath); end
+        movefile(metadataInProgress, metadataFinalPath, 'f');
+    end
+
+    % Step 5: Build BigTIFF atomically (_inProgress -> rename); skip if final already exists
     if isOutputFile
         metaJson = buildTiffVolumeMetadata(metadata, c);
 
-        % For local paths, write directly to the output to avoid filling
-        % the system temp drive with a multi GB BigTIFF.
-        % For AWS, write to a temp file first then upload.
-        if isAWS
-            tn = [tempname '.tif'];
-        else
-            tn = outputFilePaths{1};
-        end
-        t = Tiff(tn, 'w8');  % BigTIFF to support files > 4 GB
+        alreadyHaveFinal = in.resume && awsExist(outputFilePaths{1},'file');
 
-        for frameI = 1:numberOfYPlanes
-            % Read one slide from the folder
-            fpSlide = yScanPath(outputFilePaths{2}, frameI);
-            ds = imageDatastore(fpSlide, 'readFcn', @imread);
-            bits = ds.read();
-
-            if frameI > 1
-                t.writeDirectory();
+        if ~alreadyHaveFinal
+            % Write to _inProgress sibling; final name only appears after rename
+            if isAWS
+                tnLocal = [tempname '.tif'];
+                finalDest = outputFilePaths{1};
+            else
+                [finalFolder, finalBase, finalExt] = fileparts(outputFilePaths{1});
+                if isempty(finalFolder)
+                    finalFolder = pwd;
+                end
+                tnLocal = fullfile(finalFolder, [finalBase '_inProgress' finalExt]);
+                finalDest = outputFilePaths{1};
+                % Clear any stale _inProgress from a prior crash
+                if exist(tnLocal,'file')
+                    delete(tnLocal);
+                end
             end
 
-            tagstruct = buildTiffFrameTags(bits, metaJson, metadata, numberOfYPlanes);
-            t.setTag(tagstruct);
-            t.write(uint16(bits));
-        end
-        t.close();
+            t = Tiff(tnLocal, 'w8');  % BigTIFF to support files > 4 GB
 
-        % For AWS, copy the assembled file to the final destination
-        if isAWS
-            awsCopyFileFolder(tn, outputFilePaths{1});
-            delete(tn);
+            for frameI = 1:numberOfYPlanes
+                % Read one slide from the folder
+                fpSlide = yScanPath(outputFilePaths{2}, frameI);
+                ds = imageDatastore(fpSlide, 'readFcn', @imread);
+                bits = ds.read();
+
+                if frameI > 1
+                    t.writeDirectory();
+                end
+
+                tagstruct = buildTiffFrameTags(bits, metaJson, metadata, numberOfYPlanes);
+                t.setTag(tagstruct);
+                t.write(uint16(bits));
+            end
+            t.close();
+
+            % Atomic commit
+            if isAWS
+                awsCopyFileFolder(tnLocal, finalDest);
+                delete(tnLocal);
+            else
+                if exist(finalDest,'file'), delete(finalDest); end
+                movefile(tnLocal, finalDest, 'f');
+            end
         end
     end
-    
+
+    % Step 6: All artifacts committed, safe to remove partialMode
+    awsRmDir(outputFilePaths{3});
+
     % If output folder is not required, delete it
     if ~isOutputFolder
         awsRmDir(outputFilePaths{2});
-    end 
+    end
 end
 
 function p = yScanPath(outputFilePaths,yIndex)
