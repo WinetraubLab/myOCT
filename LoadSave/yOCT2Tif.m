@@ -278,7 +278,7 @@ elseif mode == 2
         % If a partial .tif exists without its .json (half-committed), delete it so
         % awsCopyFile_MW1 can create its staging subdirectory at that path
         if in.resume && awsExist(p,'file')
-            delete(p);
+            awsRmFile(p);
         end
 
         bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
