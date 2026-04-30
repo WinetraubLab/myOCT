@@ -34,8 +34,6 @@ function [reslicedVolume,xyzNew2Original,dimensions_n] = yOCTReslice(varargin)
 %       if running on the cloud as it will save the data transfer back and
 %       forth, and would output data directly to the cloud. outputFileOrFolder
 %       can be a path to a Tif file, or TifStack folder (see yOCT2Tif)
-%   - clearOutputFileOrFolderIfExists - default is true, if output file
-%       already exists, delete it before running.
 %   - verboose, set to true if more prints are required
 %
 % OUTPUTS:
@@ -96,11 +94,7 @@ else
             end
         end
         if ~isFile && awsExist(fp,'dir')
-            if ~in.clearOutputFileOrFolderIfExists
-                error('Output folder must not exist for this function to run properly: %s',outputFileOrFolder{i});
-            else
-                awsRmDir(fp);
-            end
+            error('Output folder must not exist for this function to run properly: %s',outputFileOrFolder{i});
         end
     end
     
