@@ -1,13 +1,18 @@
-% Prompt for a tif file or tif stack folder and run yOCTReslice on it.
-% This is meant as a quick verification script for path-based reslicing.
+% Prompt for a tif file or tif stack folder and reslice it.
+% This script keeps the chosen output path as-is and does not clear or
+% delete existing output files or folders.
 
 inputPath = input('Enter the path to a yOCT tif file or tif stack folder: ', 's');
 inputPath = strtrim(inputPath);
-inputPath = stripWrappingQuotes(inputPath);
+if numel(inputPath) >= 2 && ((inputPath(1) == '"' && inputPath(end) == '"') || (inputPath(1) == '''' && inputPath(end) == ''''))
+    inputPath = inputPath(2:end-1);
+end
 
-outputPath = input('Enter output file/folder (leave empty to keep in memory): ', 's');
+outputPath = input('Enter output file or folder path, or leave empty to keep the result in memory: ', 's');
 outputPath = strtrim(outputPath);
-outputPath = stripWrappingQuotes(outputPath);
+if numel(outputPath) >= 2 && ((outputPath(1) == '"' && outputPath(end) == '"') || (outputPath(1) == '''' && outputPath(end) == ''''))
+    outputPath = outputPath(2:end-1);
+end
 
 if isempty(inputPath)
     error('No input path provided.');
@@ -15,6 +20,10 @@ end
 
 if ~isfolder(inputPath) && ~isfile(inputPath)
     error('Path does not exist: %s', inputPath);
+end
+
+if ~isempty(outputPath) && (isfolder(outputPath) || isfile(outputPath))
+    error('Output path already exists. Choose a new output file or folder: %s', outputPath);
 end
 
 [~, dimensions] = yOCTFromTif(inputPath, 'isLoadMetadataOnly', true);
@@ -30,26 +39,18 @@ z1_n = dimensions.z.values;
 % Use the volume's native orientation so the output should match the input shape.
 resliceNormal = [0; 1; 0];
 
-if isempty(outputPath)
-    [reslicedVolume, xyzNew2Original, dimensions_n] = yOCTReslice(...
-        inputPath, ...
-        resliceNormal, ...
-        x1_n, ...
-        y1_n, ...
-        z1_n, ...
-        'dimensions', dimensions, ...
-        'verbose', true);
-else
-    [reslicedVolume, xyzNew2Original, dimensions_n] = yOCTReslice(...
-        inputPath, ...
-        resliceNormal, ...
-        x1_n, ...
-        y1_n, ...
-        z1_n, ...
-        'dimensions', dimensions, ...
-        'outputFileOrFolder', outputPath, ...
-        'verbose', true);
+resliceArgs = {'dimensions', dimensions, 'verbose', true, 'clearOutputFileOrFolderIfExists', false};
+if ~isempty(outputPath)
+    resliceArgs = [resliceArgs, {'outputFileOrFolder', outputPath}];
 end
+
+[reslicedVolume, xyzNew2Original, dimensions_n] = yOCTReslice(...
+    inputPath, ...
+    resliceNormal, ...
+    x1_n, ...
+    y1_n, ...
+    z1_n, ...
+    resliceArgs{:});
 
 fprintf('Reslice completed successfully.\n');
 fprintf('Input path: %s\n', inputPath);
@@ -63,15 +64,3 @@ fprintf('Output x/y/z lengths: %d / %d / %d\n', ...
 
 samplePoint = xyzNew2Original(0, 0, 0);
 fprintf('Center maps to original coordinates: [%g %g %g]\n', samplePoint(1), samplePoint(2), samplePoint(3));
-
-function s = stripWrappingQuotes(s)
-if isempty(s)
-    return;
-end
-
-if numel(s) >= 2
-    if (s(1) == '"' && s(end) == '"') || (s(1) == '''' && s(end) == '''')
-        s = s(2:end-1);
-    end
-end
-end
