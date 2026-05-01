@@ -3,9 +3,11 @@
 
 inputPath = input('Enter the path to a yOCT tif file or tif stack folder: ', 's');
 inputPath = strtrim(inputPath);
+inputPath = stripWrappingQuotes(inputPath);
 
 outputPath = input('Enter output file/folder (leave empty to keep in memory): ', 's');
 outputPath = strtrim(outputPath);
+outputPath = stripWrappingQuotes(outputPath);
 
 if isempty(inputPath)
     error('No input path provided.');
@@ -61,3 +63,15 @@ fprintf('Output x/y/z lengths: %d / %d / %d\n', ...
 
 samplePoint = xyzNew2Original(0, 0, 0);
 fprintf('Center maps to original coordinates: [%g %g %g]\n', samplePoint(1), samplePoint(2), samplePoint(3));
+
+function s = stripWrappingQuotes(s)
+if isempty(s)
+    return;
+end
+
+if numel(s) >= 2
+    if (s(1) == '"' && s(end) == '"') || (s(1) == '''' && s(end) == '''')
+        s = s(2:end-1);
+    end
+end
+end
