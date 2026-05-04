@@ -1,13 +1,14 @@
-function volumeOut = yOCTDownsizeVolume(volumePath, downsampleFactor)
-% This function downsamples a tif volume by taking every Nth sample.
-%
-% USAGE:
-%   volumeOut = yOCTDownsizeVolume(volumePath, downsampleFactor)
+function [] = yOCTDownsizeVolume(volumePath, outputPath, downsampleFactor)
+% This function downsamples a tif volume by taking every Nth sample and
+% saves the result to a new tif with updated metadata.
 %
 % INPUTS:
-%   volumePath - tif file or tif stack folder path
-%   downsampleFactor - scalar or vector with one factor per dimension
-%       default is 5
+%   volumePath      - tif file or tif stack folder path
+%   outputPath      - tif file or tif stack folder path to save output
+%   downsampleFactor - scalar or 3-element vector [z x y] (default: 5)
+%
+% OUTPUTS:
+%   none
 
 if ~exist('downsampleFactor','var') || isempty(downsampleFactor)
     downsampleFactor = 5;
@@ -17,12 +18,17 @@ if ~(ischar(volumePath) || isstring(volumePath))
     error('volumePath must be a tif file or tif folder path.');
 end
 
-volumeOut = downsizeFromTif(volumePath, downsampleFactor);
+if ~(ischar(outputPath) || isstring(outputPath))
+    error('outputPath must be a tif file or tif folder path.');
+end
+
+downsizeFromTif(volumePath, outputPath, downsampleFactor);
 
 end
 
-function volumeOut = downsizeFromTif(filepath, downsampleFactor)
+function [] = downsizeFromTif(filepath, outputPath, downsampleFactor)
 filepath = char(filepath);
+outputPath = char(outputPath);
 
 if isscalar(downsampleFactor)
     downsampleFactor = repmat(downsampleFactor, 1, 3);
@@ -47,31 +53,18 @@ if isstruct(metadata) && isfield(metadata,'x') && isfield(metadata,'y') && isfie
     yI = 1:downsampleFactor(3):ny;
     zI = 1:downsampleFactor(1):nz;
 
-    volumeOut = yOCTFromTif(filepath, 'xI', xI, 'yI', yI, 'zI', zI);
+    [volumeOut, ~, c] = yOCTFromTif(filepath, 'xI', xI, 'yI', yI, 'zI', zI);
+    metadataOut = metadata;
+    metadataOut.x.values = metadata.x.values(xI);
+    metadataOut.x.index = 1:length(xI);
+    metadataOut.y.values = metadata.y.values(yI);
+    metadataOut.y.index = 1:length(yI);
+    metadataOut.z.values = metadata.z.values(zI);
+    metadataOut.z.index = 1:length(zI);
+    yOCT2Tif(volumeOut, outputPath, 'metadata', metadataOut, 'clim', c);
 else
-    data = yOCTFromTif(filepath);
-    volumeOut = downsizeNumericVolume(data, downsampleFactor);
+    error('Missing metadata in tif header. Cannot update metadata for output.');
 end
 
 end
-
-function volumeOut = downsizeNumericVolume(volumeIn, downsampleFactor)
-if isscalar(downsampleFactor)
-    downsampleFactor = repmat(downsampleFactor, 1, ndims(volumeIn));
-end
-
-if numel(downsampleFactor) ~= ndims(volumeIn)
-    error('downsampleFactor must be scalar or match number of dimensions.');
-end
-
-if any(downsampleFactor < 1) || any(mod(downsampleFactor,1) ~= 0)
-    error('downsampleFactor must contain positive integers.');
-end
-
-idx = cell(1, ndims(volumeIn));
-for d = 1:ndims(volumeIn)
-    idx{d} = 1:downsampleFactor(d):size(volumeIn, d);
-end
-
-volumeOut = volumeIn(idx{:});
 
