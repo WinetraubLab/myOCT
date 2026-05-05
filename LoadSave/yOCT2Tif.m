@@ -28,6 +28,7 @@ function whereAreMyFiles = yOCT2Tif (varargin)
 %       maximum of the data
 %   'metadata' - i.e. dimention structure, to be saved alongside with the data
 %       metadata is only valid at partialFileMode = 0 or 3
+%   'maxbit' - maximum bit value (default: 2^16-1). Use 2^8-1 for 8-bit
 %   'partialFileMode' - can be 0 (not active), 1, 2 or 3. If partialFileMode
 %       is 2, please set partialFileModeIndex. See partial mode below.
 %       1 - initialize
@@ -59,6 +60,7 @@ addRequired(p,'filePath',@(x)(ischar(x) | iscell(x)));
 
 addParameter(p,'clim',[])
 addParameter(p,'metadata',[])
+addParameter(p,'maxbit',[])
 addParameter(p,'partialFileMode',0);
 addParameter(p,'partialFileModeIndex',[]);
 
@@ -68,6 +70,11 @@ data = in.data;
 filePath = in.filePath;
 c = in.clim;
 metadata = in.metadata;
+maxbit = in.maxbit;
+
+if isempty(maxbit)
+    maxbit = 2^16-1;
+end
 
 % Partial Mode checks
 mode = in.partialFileMode;
@@ -176,14 +183,14 @@ if mode == 0
     end
     
     % encode meta data
-    metaJson = buildTiffVolumeMetadata(metadata,c);
+    metaJson = buildTiffVolumeMetadata(metadata,c,maxbit);
     
     if isOutputFile
         t = Tiff(outputFilePaths{1}, 'w8');  % Open Tiff file as BigTIFF
     end
 
     for yI=1:size(data,3)
-        bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
+        bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false,maxbit);
         
         % Save file
         if isOutputFile
@@ -191,7 +198,7 @@ if mode == 0
                 t.writeDirectory();
             end
 
-            tagstruct = buildTiffFrameTags(bits, metaJson, metadata, size(data,3));
+            tagstruct = buildTiffFrameTags(bits, metaJson, metadata, size(data,3), maxbit);
             t.setTag(tagstruct);
             t.write(bits);
         end
@@ -250,7 +257,7 @@ elseif mode == 2
     end
     
     for yI=1:size(data,3)
-        bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false);
+        bits = yOCT2Tif_ConvertBitsData(data(:,:,yI),c,false,maxbit);
         
         p = yScanPath(outputFilePaths{3},in.partialFileModeIndex(yI));
         
@@ -320,8 +327,8 @@ else
             tn = [tempname '.tif'];
             
             data = yOCT2Tif_ConvertBitsData(bits,...
-                [cFrameMins(frameI) cFrameMaxs(frameI)],true);
-            newBits = yOCT2Tif_ConvertBitsData(data,cStack,false);
+                [cFrameMins(frameI) cFrameMaxs(frameI)],true,maxbit);
+            newBits = yOCT2Tif_ConvertBitsData(data,cStack,false,maxbit);
 
             imwrite(newBits,tn);
             awsCopyFile_MW1(tn,fpOut); %Matlab worker version of copy files
@@ -339,7 +346,7 @@ else
     awsCopyFile_MW2(outputFilePaths{2});
     
     % Finish generating a folder by placing metadata
-    metaJson = buildTiffVolumeMetadata(metadata,c);
+    metaJson = buildTiffVolumeMetadata(metadata,c,maxbit);
     awsWriteJSON(metaJson, ...
                 [outputFilePaths{2} '/TifMetadata.json']);
     
@@ -348,7 +355,7 @@ else
     % the output TIFF slide by slide: read one frame, write it, discard it.
     % This keeps memory usage at 1 slide instead of N slides.
     if isOutputFile
-        metaJson = buildTiffVolumeMetadata(metadata, c);
+        metaJson = buildTiffVolumeMetadata(metadata, c, maxbit);
 
         % For local paths, write directly to the output to avoid filling
         % the system temp drive with a multi GB BigTIFF.
@@ -370,9 +377,9 @@ else
                 t.writeDirectory();
             end
 
-            tagstruct = buildTiffFrameTags(bits, metaJson, metadata, numberOfYPlanes);
+            tagstruct = buildTiffFrameTags(bits, metaJson, metadata, numberOfYPlanes, maxbit);
             t.setTag(tagstruct);
-            t.write(uint16(bits));
+            t.write(bits);
         end
         t.close();
 
@@ -393,23 +400,28 @@ function p = yScanPath(outputFilePaths,yIndex)
 p = awsModifyPathForCompetability(... 
     sprintf('%s/y%04d.tif', outputFilePaths,yIndex));
 
-function metaJson = buildTiffVolumeMetadata(metadata,c)
+function metaJson = buildTiffVolumeMetadata(metadata,c,maxbit)
 %  This wrapper is called once per volume before the frame loop
 meta.metadata = metadata;
 meta.clim = c;
 meta.version = 3;
+meta.maxbit = maxbit;
 metaJson = meta;
 
 %% Build TIFF tags per frame (image dimensions, compression, ImageJ resolution)
 %  This wrapper is called once per frame inside the write loop
 %  It consumes the volume metadata produced by buildTiffVolumeMetadata
-function tagstruct = buildTiffFrameTags(bits, metaJson, metadata, totalFrames)
+function tagstruct = buildTiffFrameTags(bits, metaJson, metadata, totalFrames, maxbit)
 tagstruct.ImageLength         = size(bits, 1);
 tagstruct.ImageWidth          = size(bits, 2);
 tagstruct.Photometric         = Tiff.Photometric.MinIsBlack;
 tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
 tagstruct.SampleFormat        = Tiff.SampleFormat.UInt;
-tagstruct.BitsPerSample       = 16;
+if maxbit <= 2^8-1
+    tagstruct.BitsPerSample   = 8;
+else
+    tagstruct.BitsPerSample   = 16;
+end
 tagstruct.Compression         = Tiff.Compression.PackBits;
 tagstruct.SamplesPerPixel     = 1;
 tagstruct.RowsPerStrip        = size(bits, 1);

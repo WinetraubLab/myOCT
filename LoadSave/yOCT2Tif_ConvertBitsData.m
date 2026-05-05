@@ -16,6 +16,10 @@ if isInputBits
     out(in==0) = NaN;
 else
     % Data -> Bits
-    out = uint16((squeeze(in)-c(1))/(c(2)-c(1))*(maxbit-1))+1;
+    if maxbit <= 2^8-1
+        out = uint8((squeeze(in)-c(1))/(c(2)-c(1))*(maxbit-1))+1;
+    else
+        out = uint16((squeeze(in)-c(1))/(c(2)-c(1))*(maxbit-1))+1;
+    end
     out(isnan(in)) = 0; %NaN is reserved for 0
 end

@@ -277,7 +277,11 @@ else
         % Good version
         metaData = jsn.metadata;
         c = jsn.clim;
-        maxbit = []; %Latest version
+        if isfield(jsn,'maxbit') && ~isempty(jsn.maxbit)
+            maxbit = jsn.maxbit;
+        else
+            maxbit = []; %Latest version
+        end
     end
 end
 

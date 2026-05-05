@@ -1,10 +1,10 @@
 function [] = yOCTDownsizeVolume(volumePath, outputPath, downsampleFactor)
 % This function downsamples a tif volume by taking every Nth sample and
-% saves the result to a new tif with updated metadata.
+% saves the result to a new 8-bit tif with updated metadata.
 %
 % INPUTS:
 %   volumePath      - tif file or tif stack folder path
-%   outputPath      - tif file or tif stack folder path to save output
+%   outputPath      - tif file path to save output
 %   downsampleFactor - scalar or 3-element vector [z x y] (default: 5)
 %
 % OUTPUTS:
@@ -20,6 +20,11 @@ end
 
 if ~(ischar(outputPath) || isstring(outputPath))
     error('outputPath must be a tif file or tif folder path.');
+end
+
+[~,~,ext] = fileparts(char(outputPath));
+if isempty(ext)
+    error('outputPath must be a tif file path (not a folder).');
 end
 
 downsizeFromTif(volumePath, outputPath, downsampleFactor);
@@ -61,7 +66,7 @@ if isstruct(metadata) && isfield(metadata,'x') && isfield(metadata,'y') && isfie
     metadataOut.y.index = 1:length(yI);
     metadataOut.z.values = metadata.z.values(zI);
     metadataOut.z.index = 1:length(zI);
-    yOCT2Tif(volumeOut, outputPath, 'metadata', metadataOut, 'clim', c);
+    yOCT2Tif(volumeOut, outputPath, 'metadata', metadataOut, 'clim', c, 'maxbit', 2^8-1);
 else
     error('Missing metadata in tif header. Cannot update metadata for output.');
 end
