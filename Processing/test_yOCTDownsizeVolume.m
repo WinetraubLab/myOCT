@@ -31,12 +31,15 @@ classdef test_yOCTDownsizeVolume < matlab.unittest.TestCase
             % Create a small deterministic volume: (z,x,y)
             data = reshape(linspace(0, 1, 4 * 6 * 8), [4, 6, 8]);
 
-            meta.x.values = 1:6;
+            meta.x.values = (1:6) * 1e-6;
             meta.x.index = 1:6;
-            meta.y.values = 1:8;
+            meta.x.units = 'meters';
+            meta.y.values = (1:8) * 1e-6;
             meta.y.index = 1:8;
-            meta.z.values = 1:4;
+            meta.y.units = 'meters';
+            meta.z.values = (1:4) * 1e-6;
             meta.z.index = 1:4;
+            meta.z.units = 'meters';
 
             yOCT2Tif(data, testCase.InputFile, 'metadata', meta);
 
