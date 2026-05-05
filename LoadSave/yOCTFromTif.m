@@ -113,7 +113,11 @@ if (isInputFile)
     else    
         description = '';  % No MetaData available
     end
-    [c, metadata, maxbit] = intrpertDescription(description,filepath);
+    bitsPerSampleDefault = 8;
+    if isfield(info(1),'BitsPerSample') && ~isempty(info(1).BitsPerSample)
+        bitsPerSampleDefault = info(1).BitsPerSample;
+    end
+    [c, metadata, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault);
     
     if isempty(yI) || isCheckMetadata
         % Get avilable Ys
@@ -128,7 +132,8 @@ else
     % Read meta from JSON
     description = awsReadJSON([filepath '/TifMetadata.json']);
     
-    [c, metadata, maxbit] = intrpertDescription(description,filepath);
+    bitsPerSampleDefault = 8;
+    [c, metadata, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault);
     
     if isempty(yI) || isCheckMetadata
         % Get avilable Ys
@@ -144,8 +149,9 @@ else
 end 
 
 %No Scaling information, use default
+maxValue = 2^bitsPerSample-1;
 if isempty(c) || length(c)~=2
-    c(1) = maxbit;
+    c(1) = maxValue;
     c(2) = 0;
 end
 
@@ -236,7 +242,7 @@ for i=1:length(yI)
         data = zeros(size(bits,1),size(bits,2),length(yI),'single');
     end
     
-    data(:,:,i) = yOCT2Tif_ConvertBitsData(bits,c,true,maxbit); %Rescale to the original values
+    data(:,:,i) = yOCT2Tif_ConvertBitsData(bits,c,true,bitsPerSample); %Rescale to the original values
 end
     
 function out = copyFileLocally(filepath)
@@ -244,12 +250,12 @@ function out = copyFileLocally(filepath)
 out = [tempname '.tif'];
 copyfile(filepath,out);
 
-function [c, metaData, maxbit] = intrpertDescription(description,filepath)
+function [c, metaData, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault)
 
 if isempty(description)
     c = [];
     metaData = [];
-    maxbit = 2^8-1;
+    bitsPerSample = bitsPerSampleDefault;
     return;
 end
 
@@ -260,7 +266,7 @@ if (~isstruct(description) && description(1) ~= '{')
     c = sscanf(description,'min:%g,max:%g');
     isDepricatedVersion = true;
     metaData = [];
-    maxbit = 2^8-1;
+    bitsPerSample = bitsPerSampleDefault;
 else
     if ~isstruct(description)
         jsn = jsondecode(description);
@@ -272,15 +278,15 @@ else
         metaData = jsn.dim;
         c = jsn.c;
         isDepricatedVersion = true;
-        maxbit = 2^8-1;
+        bitsPerSample = bitsPerSampleDefault;
     elseif (jsn.version == 3)
         % Good version
         metaData = jsn.metadata;
         c = jsn.clim;
-        if isfield(jsn,'maxbit') && ~isempty(jsn.maxbit)
-            maxbit = jsn.maxbit;
+        if isfield(jsn,'bitsPerSample') && ~isempty(jsn.bitsPerSample)
+            bitsPerSample = jsn.bitsPerSample;
         else
-            maxbit = []; %Latest version
+            bitsPerSample = bitsPerSampleDefault;
         end
     end
 end

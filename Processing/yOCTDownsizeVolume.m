@@ -66,7 +66,7 @@ if isstruct(metadata) && isfield(metadata,'x') && isfield(metadata,'y') && isfie
     metadataOut.y.index = 1:length(yI);
     metadataOut.z.values = metadata.z.values(zI);
     metadataOut.z.index = 1:length(zI);
-    yOCT2Tif(volumeOut, outputPath, 'metadata', metadataOut, 'clim', c, 'maxbit', 2^8-1);
+    yOCT2Tif(volumeOut, outputPath, 'metadata', metadataOut, 'clim', c, 'bitsPerSample', 8);
 else
     error('Missing metadata in tif header. Cannot update metadata for output.');
 end
