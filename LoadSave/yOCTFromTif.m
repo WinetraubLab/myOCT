@@ -113,7 +113,7 @@ if (isInputFile)
     else    
         description = '';  % No MetaData available
     end
-    bitsPerSampleDefault = 8;
+    bitsPerSampleDefault = [];
     if isfield(info(1),'BitsPerSample') && ~isempty(info(1).BitsPerSample)
         bitsPerSampleDefault = info(1).BitsPerSample;
     end
@@ -132,8 +132,7 @@ else
     % Read meta from JSON
     description = awsReadJSON([filepath '/TifMetadata.json']);
     
-    bitsPerSampleDefault = 8;
-    [c, metadata, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault);
+    [c, metadata, bitsPerSample] = intrpertDescription(description,filepath,[]);
     
     if isempty(yI) || isCheckMetadata
         % Get avilable Ys
@@ -252,10 +251,14 @@ copyfile(filepath,out);
 
 function [c, metaData, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault)
 
+if ~exist('bitsPerSampleDefault','var')
+    bitsPerSampleDefault = [];
+end
+
 if isempty(description)
     c = [];
     metaData = [];
-    bitsPerSample = bitsPerSampleDefault;
+    bitsPerSample = 8;
     return;
 end
 
@@ -266,7 +269,7 @@ if (~isstruct(description) && description(1) ~= '{')
     c = sscanf(description,'min:%g,max:%g');
     isDepricatedVersion = true;
     metaData = [];
-    bitsPerSample = bitsPerSampleDefault;
+    bitsPerSample = 8;
 else
     if ~isstruct(description)
         jsn = jsondecode(description);
@@ -278,13 +281,13 @@ else
         metaData = jsn.dim;
         c = jsn.c;
         isDepricatedVersion = true;
-        bitsPerSample = bitsPerSampleDefault;
+        bitsPerSample = 8;
     elseif (jsn.version == 3)
         % Good version
         metaData = jsn.metadata;
         c = jsn.clim;
-        if isfield(jsn,'bitsPerSample') && ~isempty(jsn.bitsPerSample)
-            bitsPerSample = jsn.bitsPerSample;
+        if isempty(bitsPerSampleDefault)
+            bitsPerSample = 16;
         else
             bitsPerSample = bitsPerSampleDefault;
         end
@@ -302,6 +305,8 @@ if isDepricatedVersion && (isempty(timeOfLastWarningHappend) || ...
         'yOCT2Tif(data, filePath, ''metadata'', meta);'],filepath,filepath);
     
     timeOfLastWarningHappend = now;
+end
+
 end
 
 function im = imreadWrapper(imagePath, frameIndex, pixRegionX, pixRegionY)
@@ -326,3 +331,6 @@ if (size(im,3) ~= 1)
     end
     im = squeeze(im(:,:,1));
 end
+
+end
+

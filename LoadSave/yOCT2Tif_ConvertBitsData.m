@@ -9,6 +9,15 @@ if ~exist('bitsPerSample','var') || isempty(bitsPerSample)
     bitsPerSample = 16;
 end
 
+if bitsPerSample <= 8
+    outputClass = 'uint8';
+elseif bitsPerSample <= 16
+    outputClass = 'uint16';
+else
+    error('yOCT2Tif_ConvertBitsData:UnsupportedBits', ...
+        'bitsPerSample > 16 is not supported.');
+end
+
 maxValue = 2^bitsPerSample-1;
 
 %% Conversion
@@ -18,10 +27,6 @@ if isInputBits
     out(in==0) = NaN;
 else
     % Data -> Bits
-    if bitsPerSample <= 8
-        out = uint8((squeeze(in)-c(1))/(c(2)-c(1))*(maxValue-1))+1;
-    else
-        out = uint16((squeeze(in)-c(1))/(c(2)-c(1))*(maxValue-1))+1;
-    end
+    out = feval(outputClass, (squeeze(in)-c(1))/(c(2)-c(1))*(maxValue-1)) + 1;
     out(isnan(in)) = 0; %NaN is reserved for 0
 end
