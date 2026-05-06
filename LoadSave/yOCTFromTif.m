@@ -243,11 +243,15 @@ for i=1:length(yI)
     
     data(:,:,i) = yOCT2Tif_ConvertBitsData(bits,c,true,bitsPerSample); %Rescale to the original values
 end
-    
+
+end
+
 function out = copyFileLocally(filepath)
 %Copy filename to other temp name
 out = [tempname '.tif'];
 copyfile(filepath,out);
+
+end
 
 function [c, metaData, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault)
 
