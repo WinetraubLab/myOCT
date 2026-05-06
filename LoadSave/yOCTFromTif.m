@@ -52,10 +52,6 @@ else
     isAWS = false;
 end
 
-end
-
-end
-
 %% Is Tif Folder or File
 [~,~,f] = fileparts(filepath);
     
