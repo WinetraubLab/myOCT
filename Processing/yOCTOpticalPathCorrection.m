@@ -50,14 +50,26 @@ if strcmpi(inputScanDimensions.x.units, 'na') || ...
 end
 
 %% Extract optical path polynomial from opticalPathCorrectionOptions
+% galvoPhaseDelay_Asamples (N) compensates for the galvo's mechanical lag:
+% the physical beam position lags the commanded position by N A-scan
+% samples. The polynomial is calibrated at calibrationPixelSize_um, so the
+% net shift to apply at runtime is N*(dx - calibrationPixelSize_um).
+calibrationPixelSize_um = 1; % Pixel size used when fitting OpticalPathCorrectionPolynomial
+galvoPhaseDelay_Asamples = 0; % Default: no compensation (backwards compatible)
 if isstruct(opticalPathCorrectionOptions)
     OP_p = opticalPathCorrectionOptions.octProbe.OpticalPathCorrectionPolynomial;
     OP_p = OP_p(:)';
+    if isfield(opticalPathCorrectionOptions.octProbe, 'GalvoPhaseDelay_Asamples')
+        galvoPhaseDelay_Asamples = opticalPathCorrectionOptions.octProbe.GalvoPhaseDelay_Asamples;
+    end
 elseif isstring(opticalPathCorrectionOptions)
     inputVolumeFolder = awsModifyPathForCompetability([opticalPathCorrectionOptions '/']);
     json = awsReadJSON([inputVolumeFolder 'ScanInfo.json']);
     OP_p = json.octProbe.OpticalPathCorrectionPolynomial;
     OP_p = OP_p(:)';
+    if isfield(json.octProbe, 'GalvoPhaseDelay_Asamples')
+        galvoPhaseDelay_Asamples = json.octProbe.GalvoPhaseDelay_Asamples;
+    end
 elseif ismatrix(opticalPathCorrectionOptions)
     if not(isequal(size(opticalPathCorrectionOptions), [1,5])) && not(isequal(size(opticalPathCorrectionOptions), [5,1]))
         error('Optical path correction polynomial must have 5 terms')
@@ -73,15 +85,26 @@ correctedScan = zeros(size(inputScan));
 %% Change dimensions to microns units
 inputScanDimensions = yOCTChangeDimensionsStructureUnits(inputScanDimensions,'microns');
 
-%% Iterate through the inputScan volume and apply optical path correction to each individual scan 
+%% Compute galvo lag spatial shift (only along fast x-axis; y-axis is slow)
+xValues_um = inputScanDimensions.x.values;
+if length(xValues_um) > 1
+    dx_um = mean(diff(xValues_um));
+else
+    dx_um = calibrationPixelSize_um;
+end
+xShift_um = galvoPhaseDelay_Asamples * (dx_um - calibrationPixelSize_um);
+
+%% Iterate through the inputScan volume and apply optical path correction to each individual scan
 for i=1:size(inputScan,3)
-    
+
     % Extract B-scan from volume
     scan = squeeze(inputScan(:,:,i));
-    
+
     %Lens abberation / optical path correction
-    correction = @(x,y)(x*OP_p(1)+y*OP_p(2)+x.^2*OP_p(3)+y.^2*OP_p(4)+x.*y*OP_p(5)); %x,y are in microns
-    [xx,zz] = meshgrid(inputScanDimensions.x.values,inputScanDimensions.z.values); %um                
+    % Polynomial is evaluated at (x - xShift_um) to align it with the
+    % physical beam position rather than the commanded galvo position.
+    correction = @(x,y)((x-xShift_um)*OP_p(1)+y*OP_p(2)+(x-xShift_um).^2*OP_p(3)+y.^2*OP_p(4)+(x-xShift_um).*y*OP_p(5)); %x,y are in microns
+    [xx,zz] = meshgrid(inputScanDimensions.x.values,inputScanDimensions.z.values); %um
     scan_min = min(scan(:));
     scan = interp2(xx,zz,scan,xx,zz+correction(xx,inputScanDimensions.y.values(i)),'nearest');
     scan_nan = isnan(scan);
