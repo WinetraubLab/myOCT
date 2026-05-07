@@ -254,6 +254,9 @@ y_mm_col = y_mm(:);
 
 % Save OCT en-face PNG with no overlays
 rawPngPath = fullfile(temporaryFolder, sprintf('tissue_overview_%dum.png', round(pixelSize_um)));
+if ~exist(temporaryFolder, 'dir')
+    mkdir(temporaryFolder);
+end
 hRaw = figure('Visible', 'off', 'Position', [200 200 700 500]);
 imagesc(x_mm_row, y_mm_col, xySlice);
 colormap(gray);
@@ -482,7 +485,7 @@ rightGrid.ColumnWidth = {'1x'};
 rightGrid.Padding     = [4 4 4 4];
 rightGrid.RowSpacing  = 6;
 
-btnAccept = uibutton(rightGrid, 'Text', 'Accept', ...
+btnAccept = uibutton(rightGrid, 'Text', 'Accept Range', ...
     'ButtonPushedFcn', @(btn,evt) onAccept(), ...
     'BackgroundColor', [0.2 0.7 0.2], 'FontColor', [1 1 1], 'FontWeight', 'bold', 'FontSize', 16);
 btnAccept.Layout.Row = 1; btnAccept.Layout.Column = 1;
