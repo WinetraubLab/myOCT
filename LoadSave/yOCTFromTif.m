@@ -113,11 +113,7 @@ if (isInputFile)
     else    
         description = '';  % No MetaData available
     end
-    bitsPerSampleDefault = [];
-    if isfield(info(1),'BitsPerSample') && ~isempty(info(1).BitsPerSample)
-        bitsPerSampleDefault = info(1).BitsPerSample;
-    end
-    [c, metadata, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault);
+    [c, metadata, bitsPerSample] = intrpertDescription(description, info, filepath);
     
     if isempty(yI) || isCheckMetadata
         % Get avilable Ys
@@ -132,7 +128,7 @@ else
     % Read meta from JSON
     description = awsReadJSON([filepath '/TifMetadata.json']);
     
-    [c, metadata, bitsPerSample] = intrpertDescription(description,filepath,[]);
+    [c, metadata, bitsPerSample] = intrpertDescription(description, [], filepath);
     
     if isempty(yI) || isCheckMetadata
         % Get avilable Ys
@@ -253,10 +249,13 @@ copyfile(filepath,out);
 
 end
 
-function [c, metaData, bitsPerSample] = intrpertDescription(description,filepath,bitsPerSampleDefault)
+function [c, metaData, bitsPerSample] = intrpertDescription(description, info, filepath)
 
-if ~exist('bitsPerSampleDefault','var')
-    bitsPerSampleDefault = [];
+bitsPerSampleDefault = [];
+if exist('info','var') && ~isempty(info)
+    if isfield(info(1),'BitsPerSample') && ~isempty(info(1).BitsPerSample)
+        bitsPerSampleDefault = info(1).BitsPerSample;
+    end
 end
 
 if isempty(description)
