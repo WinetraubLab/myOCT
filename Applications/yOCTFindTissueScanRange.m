@@ -1,14 +1,14 @@
-function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm] = yOCTScanTissueOverview(varargin)
-% yOCTScanTissueOverview performs a low-resolution OCT overview scan, detects the tissue
-% footprint, and provides overview with suggested scan ranges.
+function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm] = yOCTFindTissueScanRange(varargin)
+% yOCTFindTissueScanRange performs a low-resolution OCT overview scan,
+% detects the tissue footprint, and returns tile-aligned scan ranges that
+% cover the tissue. A summary PNG of the accepted range is saved next to
+% the overview output for inspection.
 %
 % PIPELINE:
 %   1. Scan overview tiles at a fixed Z depth with yOCTScanTile
 %   2. Process scanned tiles to reconstruct volume with yOCTProcessTiledScan
 %   3. Load processed volume with yOCTFromTif and detect tissue surface with yOCTFindTissueSurface
 %   4. Detect tissue footprint and compute tile-aligned scan ranges
-%   5. Request user review for range refinement (if requestRefinement=true)
-%   6. Provide tissue overview with confirmed ranges as output
 %
 % NAME-VALUE INPUTS:
 %   Name                    Default     Description
@@ -29,9 +29,6 @@ function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm] = yOCTScanTissueO
 %   temporaryFolderPath     ./Overview  Root temp folder for overview files.
 %                                       If provided, files go to <temporaryFolderPath>\Overview\.
 %                                       Default: .\Overview\ (relative to working directory).
-%   requestRefinement       false       If true, ask the user to review and adjust the detected
-%                                       tissue range before accepting. If false, the auto-detected range
-%                                       is used directly.
 %   preloadedScanPath       ''          Optional preloaded data to skip scanning part of the pipeline.
 %   v                       false       Verbose mode.
 %
@@ -57,7 +54,6 @@ addParameter(p, 'focusPositionInImageZpix',  [],     @(x) isempty(x) || isnumeri
 addParameter(p, 'temporaryFolderPath',       '',     @ischar);
 addParameter(p, 'preloadedScanPath',         '',     @ischar);
 addParameter(p, 'v',                         false,  @islogical);
-addParameter(p, 'requestRefinement',         false,  @islogical);
 
 parse(p, varargin{:});
 in = p.Results;
@@ -73,7 +69,6 @@ focusSigma               = in.focusSigma;
 focusPositionInImageZpix = in.focusPositionInImageZpix;
 preloadedScanPath        = in.preloadedScanPath;
 v                        = in.v;
-requestRefinement        = in.requestRefinement;
 
 %% Validate inputs
 % Get hardware status
@@ -91,18 +86,18 @@ if ~isempty(preloadedScanPath)
         % Folder path needs dispersion and focus for yOCTProcessTiledScan to process
         analyzeFolderOnly = true;
         if isempty(dispersionQuadraticTerm)
-            error('yOCTScanTissueOverview:missingDispersion', ...
+            error('yOCTFindTissueScanRange:missingDispersion', ...
                 'dispersionQuadraticTerm is required when preloadedScanPath is a folder.');
         end
         if isempty(focusPositionInImageZpix)
-            error('yOCTScanTissueOverview:missingFocus', ...
+            error('yOCTFindTissueScanRange:missingFocus', ...
                 'focusPositionInImageZpix is required when preloadedScanPath is a folder.');
         end
     end
 else
     % No preloadedScanPath needs hardware scan to get data, unless skipHardware = true
     if skipHardware
-        warning('yOCTScanTissueOverview:noVolumeToAnalyze', ...
+        warning('yOCTFindTissueScanRange:noVolumeToAnalyze', ...
             '%s Overview scan skipped: skipHardware=true and no preloadedScanPath provided. No tissue volume to analyze.', ...
             datestr(now));
         xTissueRange_mm   = [];
@@ -110,17 +105,17 @@ else
         tissueCentroid_mm = [];
         return;
     end
-    % Validate everything before touching hardware
+    % Validate required scan parameters before touching hardware
     if isempty(octProbePath)
-        error('yOCTScanTissueOverview:missingOctProbePath', ...
+        error('yOCTFindTissueScanRange:missingOctProbePath', ...
             'octProbePath is required when preloadedScanPath is not set.');
     end
     if isempty(dispersionQuadraticTerm)
-        error('yOCTScanTissueOverview:missingDispersion', ...
+        error('yOCTFindTissueScanRange:missingDispersion', ...
             'dispersionQuadraticTerm is required when preloadedScanPath is not set. Measure it with yOCTScanGlassSlideToFindFocusAndDispersionQuadraticTerm.');
     end
     if isempty(focusPositionInImageZpix)
-        error('yOCTScanTissueOverview:missingFocus', ...
+        error('yOCTFindTissueScanRange:missingFocus', ...
             'focusPositionInImageZpix is required when preloadedScanPath is not set. Measure it with yOCTScanGlassSlideToFindFocusAndDispersionQuadraticTerm.');
     end
 end
@@ -189,7 +184,7 @@ end
 [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm] = i_analyzeVolumeAndGetRanges( ...
     overviewProcessedTif, analyzeTifOnly, preloadedScanPath, ...
     overviewZ_um, scanTileSize_mm, pixelSize_um, temporaryFolder, ...
-    xRange_mm, yRange_mm, requestRefinement, v);
+    xRange_mm, yRange_mm, v);
 
 end % main function
 
@@ -199,7 +194,7 @@ end % main function
 function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm] = i_analyzeVolumeAndGetRanges( ...
     overviewProcessedTif, analyzeTifOnly, preloadedScanPath, ...
     overviewZ_um, scanTileSize_mm, pixelSize_um, temporaryFolder, ...
-    xRange_mm, yRange_mm, requestRefinement, v)
+    xRange_mm, yRange_mm, v)
 
 % Load processed volume
 if v
@@ -242,7 +237,7 @@ pixelSize_mm = mean(diff(x_mm(:)));
 tissue_mask = i_detectTissueMask(surfacePosition_mm, pixelSize_mm, v);
 
 if ~any(tissue_mask(:))
-    error('yOCTScanTissueOverview:noTissueDetected', ...
+    error('yOCTFindTissueScanRange:noTissueDetected', ...
         'No tissue detected. Check scan range and tissue placement.');
 end
 
@@ -296,12 +291,12 @@ yOverflowL = yRange_mm(1) - yAutoRange_mm(1);
 yOverflowR = yAutoRange_mm(2) - yRange_mm(2);
 
 if max(xOverflowL, xOverflowR) > scanTileSize_mm
-    error('yOCTScanTissueOverview:rangeExceedsOverview', ...
+    error('yOCTFindTissueScanRange:rangeExceedsOverview', ...
         'X scan range [%.3f %.3f] exceeds overview boundary by more than one tile. Widen xRange_mm.', ...
         xAutoRange_mm(1), xAutoRange_mm(2));
 end
 if max(yOverflowL, yOverflowR) > scanTileSize_mm
-    error('yOCTScanTissueOverview:rangeExceedsOverview', ...
+    error('yOCTFindTissueScanRange:rangeExceedsOverview', ...
         'Y scan range [%.3f %.3f] exceeds overview boundary by more than one tile. Widen yRange_mm.', ...
         yAutoRange_mm(1), yAutoRange_mm(2));
 end
@@ -311,19 +306,9 @@ yAutoRange_mm = yAutoRange_mm + (max(0,yOverflowL) - max(0,yOverflowR));
 xAutoRange_mm = [max(xAutoRange_mm(1), xRange_mm(1)),  min(xAutoRange_mm(2), xRange_mm(2))];
 yAutoRange_mm = [max(yAutoRange_mm(1), yRange_mm(1)),  min(yAutoRange_mm(2), yRange_mm(2))];
 
-% Accept scan range (requestRefinement=true) or use auto directly (requestRefinement=false)
-if ~requestRefinement
-    xTissueRange_mm = xAutoRange_mm;
-    yTissueRange_mm = yAutoRange_mm;
-else
-    [xTissueRange_mm, yTissueRange_mm] = i_showOverviewUI( ...
-        surfacePosition_mm, x_mm_row, y_mm_col, ...
-        xySlice, tissue_mask, ...
-        tissueCentroid_mm, tissueWidth_mm, tissueHeight_mm, ...
-        xAutoRange_mm, yAutoRange_mm, ...
-        xRange_mm, yRange_mm, ...
-        scanTileSize_mm);
-end
+% Use the auto-detected, tile-aligned range as the accepted scan range
+xTissueRange_mm = xAutoRange_mm;
+yTissueRange_mm = yAutoRange_mm;
 
 % Show detected tissue overview and results
 i_showStaticOverviewFigure( ...
@@ -345,393 +330,6 @@ fprintf('  xOverall_mm = [%.2f  %.2f];\n', xTissueRange_mm(1), xTissueRange_mm(2
 fprintf('  yOverall_mm = [%.2f  %.2f];\n\n', yTissueRange_mm(1), yTissueRange_mm(2));
 
 end % i_analyzeVolumeAndGetRanges
-
-% Show user refinement window to review detected tissue and adjust scan range before accepting
-function [xTissueRange_mm, yTissueRange_mm] = i_showOverviewUI( ...
-    surfacePosition_mm, x_mm, y_mm, ...
-    xySlice, tissue_mask, ...
-    tissueCentroid_mm, tissueWidth_mm, tissueHeight_mm, ...
-    xAutoRange_mm, yAutoRange_mm, ...
-    overviewXRange_mm, overviewYRange_mm, ...
-    scanTileSize_mm)
-
-% State
-state.xRange         = xAutoRange_mm;
-state.yRange         = yAutoRange_mm;
-state.viewMode       = 'oct';   % 'oct' | 'heatmap' are optional modes
-state.accepted       = false;
-state.showTissueMask = true;
-state.outOfBounds    = false;   % true when accepted range exceeds overview scan area
-
-% Color limits
-validSurf = surfacePosition_mm(~isnan(surfacePosition_mm) & tissue_mask);
-if isempty(validSurf), validSurf = surfacePosition_mm(~isnan(surfacePosition_mm)); end
-if isempty(validSurf)
-    heatmapClim = [0 1];
-else
-    heatmapClim = prctile(validSurf, [2 98]);
-    if heatmapClim(1) >= heatmapClim(2), heatmapClim(2) = heatmapClim(1) + 0.001; end
-end
-octClim = prctile(xySlice(:), [1 99]);
-if octClim(1) >= octClim(2), octClim(2) = octClim(1) + 0.001; end
-
-% Figure
-fig = uifigure('Name', 'Tissue Overview - Review Scan Range', ...
-    'Position', [100 100 1100 840], ...
-    'CloseRequestFcn', @(src,evt) onClose(src));
-
-mainGrid = uigridlayout(fig, [4, 2]);
-mainGrid.RowHeight   = {'1x', '1x', 50, 230};
-mainGrid.ColumnWidth = {'1x', '1x'};
-
-axImage = uiaxes(mainGrid);
-axImage.Layout.Row = [1 2]; axImage.Layout.Column = 1;
-xlabel(axImage, 'X (mm)'); ylabel(axImage, 'Y (mm)');
-axis(axImage, 'equal'); axImage.XDir = 'normal'; axImage.YDir = 'normal';
-axImage.Interactions = [];
-
-axGrid = uiaxes(mainGrid);
-axGrid.Layout.Row = [1 2]; axGrid.Layout.Column = 2;
-xlabel(axGrid, 'X (mm)'); ylabel(axGrid, 'Y (mm)');
-title(axGrid, 'Proposed Tile Grid');
-axis(axGrid, 'equal'); axGrid.XDir = 'normal'; axGrid.YDir = 'normal';
-axGrid.Interactions = [];
-
-axLegend = uiaxes(mainGrid);
-axLegend.Layout.Row = 3; axLegend.Layout.Column = [1 2];
-axLegend.Visible = 'off';
-
-ctrlPanel = uipanel(mainGrid, 'Title', 'Controls');
-ctrlPanel.Layout.Row = 4; ctrlPanel.Layout.Column = [1 2];
-
-ctrlGrid = uigridlayout(ctrlPanel, [5 7]);
-ctrlGrid.RowHeight   = {32, 32, 32, 32, 36};
-ctrlGrid.ColumnWidth = {130, 90, 28, 90, '1x', 160, 130};
-ctrlGrid.Padding     = [8 6 8 6];
-ctrlGrid.RowSpacing  = 4;
-
-% Row 1: Preview label + dropdown
-lblPreview = uilabel(ctrlGrid, 'Text', 'Preview:', 'FontWeight', 'bold', 'HorizontalAlignment', 'right');
-lblPreview.Layout.Row = 1; lblPreview.Layout.Column = 1;
-ddView = uidropdown(ctrlGrid, ...
-    'Items', {'OCT en-face (XY)', 'Surface depth heatmap'}, ...
-    'Value', 'OCT en-face (XY)', ...
-    'ValueChangedFcn', @(dd,~) onViewChange(dd.Value));
-ddView.Layout.Row = 1; ddView.Layout.Column = [2 4];
-
-% Col 5: Current Range display - title row 1, X+Y tightly packed in rows 2-3
-lblFinalTitle = uilabel(ctrlGrid, 'Text', 'Current Range:', ...
-    'FontWeight', 'bold', 'HorizontalAlignment', 'right', 'FontSize', 15);
-lblFinalTitle.Layout.Row = 1; lblFinalTitle.Layout.Column = 5;
-
-finalRangePanel = uipanel(ctrlGrid, 'BorderType', 'none');
-finalRangePanel.Layout.Row = [2 3]; finalRangePanel.Layout.Column = 5;
-finalRangeGrid = uigridlayout(finalRangePanel, [2 1]);
-finalRangeGrid.RowHeight   = {'1x', '1x'};
-finalRangeGrid.ColumnWidth = {'1x'};
-finalRangeGrid.Padding     = [0 0 0 0];
-finalRangeGrid.RowSpacing  = 0;
-
-lblFinalX = uilabel(finalRangeGrid, 'Text', '', ...
-    'FontName', 'Courier New', 'FontSize', 15, 'FontWeight', 'bold', ...
-    'HorizontalAlignment', 'right', 'FontColor', [0.1 0.6 0.1]);
-lblFinalX.Layout.Row = 1; lblFinalX.Layout.Column = 1;
-
-lblFinalY = uilabel(finalRangeGrid, 'Text', '', ...
-    'FontName', 'Courier New', 'FontSize', 15, 'FontWeight', 'bold', ...
-    'HorizontalAlignment', 'right', 'FontColor', [0.1 0.6 0.1]);
-lblFinalY.Layout.Row = 2; lblFinalY.Layout.Column = 1;
-
-% Row 2: X range
-lblXRange = uilabel(ctrlGrid, 'Text', 'X range (mm):', 'HorizontalAlignment', 'right');
-lblXRange.Layout.Row = 2; lblXRange.Layout.Column = 1;
-efXMin = uieditfield(ctrlGrid, 'numeric', 'Value', xAutoRange_mm(1), ...
-    'ValueChangedFcn', @(ef,evt) onRangeEdit('xmin', ef.Value));
-efXMin.Layout.Row = 2; efXMin.Layout.Column = 2;
-lblXSep = uilabel(ctrlGrid, 'Text', 'to', 'HorizontalAlignment', 'center');
-lblXSep.Layout.Row = 2; lblXSep.Layout.Column = 3;
-efXMax = uieditfield(ctrlGrid, 'numeric', 'Value', xAutoRange_mm(2), ...
-    'ValueChangedFcn', @(ef,evt) onRangeEdit('xmax', ef.Value));
-efXMax.Layout.Row = 2; efXMax.Layout.Column = 4;
-
-% Row 3: Y range
-lblYRange = uilabel(ctrlGrid, 'Text', 'Y range (mm):', 'HorizontalAlignment', 'right');
-lblYRange.Layout.Row = 3; lblYRange.Layout.Column = 1;
-efYMin = uieditfield(ctrlGrid, 'numeric', 'Value', yAutoRange_mm(1), ...
-    'ValueChangedFcn', @(ef,evt) onRangeEdit('ymin', ef.Value));
-efYMin.Layout.Row = 3; efYMin.Layout.Column = 2;
-lblYSep = uilabel(ctrlGrid, 'Text', 'to', 'HorizontalAlignment', 'center');
-lblYSep.Layout.Row = 3; lblYSep.Layout.Column = 3;
-efYMax = uieditfield(ctrlGrid, 'numeric', 'Value', yAutoRange_mm(2), ...
-    'ValueChangedFcn', @(ef,evt) onRangeEdit('ymax', ef.Value));
-efYMax.Layout.Row = 3; efYMax.Layout.Column = 4;
-
-% Row 4: Info label (cols 1-5)
-lblInfo = uilabel(ctrlGrid, 'Text', '...', 'FontWeight', 'bold', 'HorizontalAlignment', 'left');
-lblInfo.Layout.Row = 4; lblInfo.Layout.Column = [1 5];
-
-% Row 5: Copy-paste bar (full width cols 1-5)
-efCopyPaste = uieditfield(ctrlGrid, 'text', 'Value', '', 'Editable', 'off', ...
-    'FontName', 'Courier New', 'FontSize', 13, ...
-    'Tooltip', 'Click then Ctrl+A, Ctrl+C to copy');
-efCopyPaste.Layout.Row = 5; efCopyPaste.Layout.Column = [1 5];
-
-% Right panel: Accept Range + Reset (col 6-7, rows 1-5)
-rightPanel = uipanel(ctrlGrid, 'BorderType', 'none');
-rightPanel.Layout.Row = [1 5]; rightPanel.Layout.Column = [6 7];
-rightGrid = uigridlayout(rightPanel, [2 1]);
-rightGrid.RowHeight   = {'1x', 32};
-rightGrid.ColumnWidth = {'1x'};
-rightGrid.Padding     = [4 4 4 4];
-rightGrid.RowSpacing  = 6;
-
-btnAccept = uibutton(rightGrid, 'Text', 'Accept Range', ...
-    'ButtonPushedFcn', @(btn,evt) onAccept(), ...
-    'BackgroundColor', [0.2 0.7 0.2], 'FontColor', [1 1 1], 'FontWeight', 'bold', 'FontSize', 16);
-btnAccept.Layout.Row = 1; btnAccept.Layout.Column = 1;
-
-btnReset = uibutton(rightGrid, 'Text', 'Reset', 'ButtonPushedFcn', @(btn,evt) onReset());
-btnReset.Layout.Row = 2; btnReset.Layout.Column = 1;
-
-redrawAll();
-
-try
-    uiwait(fig);
-catch
-    if isvalid(fig), delete(fig); end
-    error('yOCTScanTissueOverview:userInterrupted', ...
-        'Overview window interrupted. Re-run when ready.');
-end
-
-if ~isvalid(fig)
-    error('yOCTScanTissueOverview:windowClosedByUser', ...
-        'Overview window closed before accepting a range.');
-end
-
-xTissueRange_mm = state.xRange;
-yTissueRange_mm = state.yRange;
-delete(fig);
-
-    % Callbacks
-
-    function onViewChange(selectedItem)
-        if contains(selectedItem, 'heatmap', 'IgnoreCase', true)
-            state.viewMode = 'heatmap';
-        else
-            state.viewMode = 'oct';
-        end
-        redrawImagePanel();
-    end
-
-    function onRangeEdit(which, val)
-        % The edited end stays exactly as typed.
-        % The companion end moves the minimum amount so that span is a
-        % multiple of scanTileSize_mm (rounded to nearest tile multiple).
-        switch which
-            case 'xmin'
-                rawSpan = state.xRange(2) - val;
-                snappedSpan = max(scanTileSize_mm, round(rawSpan / scanTileSize_mm) * scanTileSize_mm);
-                newMax = round((val + snappedSpan) * 100) / 100;
-                state.xRange = [val, newMax];
-                efXMin.Value = val; efXMax.Value = newMax;
-            case 'xmax'
-                rawSpan = val - state.xRange(1);
-                snappedSpan = max(scanTileSize_mm, round(rawSpan / scanTileSize_mm) * scanTileSize_mm);
-                newMin = round((val - snappedSpan) * 100) / 100;
-                state.xRange = [newMin, val];
-                efXMin.Value = newMin; efXMax.Value = val;
-            case 'ymin'
-                rawSpan = state.yRange(2) - val;
-                snappedSpan = max(scanTileSize_mm, round(rawSpan / scanTileSize_mm) * scanTileSize_mm);
-                newMax = round((val + snappedSpan) * 100) / 100;
-                state.yRange = [val, newMax];
-                efYMin.Value = val; efYMax.Value = newMax;
-            case 'ymax'
-                rawSpan = val - state.yRange(1);
-                snappedSpan = max(scanTileSize_mm, round(rawSpan / scanTileSize_mm) * scanTileSize_mm);
-                newMin = round((val - snappedSpan) * 100) / 100;
-                state.yRange = [newMin, val];
-                efYMin.Value = newMin; efYMax.Value = val;
-        end
-
-        % Check if range exceeds overview scan boundary
-        state.outOfBounds = ...
-            state.xRange(1) < overviewXRange_mm(1) || state.xRange(2) > overviewXRange_mm(2) || ...
-            state.yRange(1) < overviewYRange_mm(1) || state.yRange(2) > overviewYRange_mm(2);
-
-        redrawAll();
-    end
-
-    function onLegendClick(~, evt)
-        if strcmp(evt.Target.DisplayName, 'Tissue mask')
-            state.showTissueMask = ~state.showTissueMask;
-            redrawImagePanel();
-        end
-    end
-
-    function onAccept()
-        state.accepted = true;
-        uiresume(fig);
-    end
-
-    function onReset()
-        state.xRange = xAutoRange_mm;
-        state.yRange = yAutoRange_mm;
-        state.outOfBounds = false;
-        efXMin.Value = xAutoRange_mm(1);
-        efXMax.Value = xAutoRange_mm(2);
-        efYMin.Value = yAutoRange_mm(1);
-        efYMax.Value = yAutoRange_mm(2);
-        redrawAll();
-    end
-
-    function onClose(src)
-        delete(src);
-    end
-
-    % Drawing helpers
-
-    function redrawAll()
-        redrawImagePanel();
-        redrawGridPanel();
-        redrawLegendPanel();
-        updateInfoLabel();
-    end
-
-    function redrawImagePanel()
-        cla(axImage);
-        hold(axImage, 'on');
-
-        if strcmp(state.viewMode, 'heatmap')
-            surfDisplay = surfacePosition_mm;
-            surfDisplay(isnan(surfDisplay)) = heatmapClim(1);
-            hImg = imagesc(axImage, x_mm, y_mm, surfDisplay);
-            set(hImg, 'AlphaData', 0.25 + 0.75*double(tissue_mask));
-            colormap(axImage, 'turbo');
-            clim(axImage, heatmapClim);
-            cb = colorbar(axImage);
-            cb.Label.String = 'Surface depth (mm)';
-            title(axImage, 'Surface heatmap (bright = detected tissue)');
-        else
-            imagesc(axImage, x_mm, y_mm, xySlice);
-            colormap(axImage, 'gray');
-            clim(axImage, octClim);
-            if state.showTissueMask
-                tissueMaskRGB = cat(3, zeros(size(tissue_mask)), ones(size(tissue_mask)), zeros(size(tissue_mask)));
-                hMaskImg = imagesc(axImage, x_mm, y_mm, tissueMaskRGB);
-                set(hMaskImg, 'AlphaData', 0.3*double(tissue_mask));
-            end
-            title(axImage, 'OCT en-face (XY) + Tissue Mask');
-        end
-
-        hMaskProxy = fill(axImage, NaN, NaN, [0 0.85 0], ...
-            'FaceAlpha', 0.3, 'EdgeColor', 'none', 'DisplayName', 'Tissue mask');
-        if ~state.showTissueMask, hMaskProxy.Visible = 'off'; end
-
-        xT = [xAutoRange_mm(1) xAutoRange_mm(2) xAutoRange_mm(2) xAutoRange_mm(1) xAutoRange_mm(1)];
-        yT = [yAutoRange_mm(1) yAutoRange_mm(1) yAutoRange_mm(2) yAutoRange_mm(2) yAutoRange_mm(1)];
-        plot(axImage, xT, yT, '--c', 'LineWidth', 1, 'DisplayName', 'Detected Range');
-
-        xR = [state.xRange(1) state.xRange(2) state.xRange(2) state.xRange(1) state.xRange(1)];
-        yR = [state.yRange(1) state.yRange(1) state.yRange(2) state.yRange(2) state.yRange(1)];
-        plot(axImage, xR, yR, '-y', 'LineWidth', 2.5, 'DisplayName', 'Current Range');
-        if state.outOfBounds
-            % Overlay red dots to signal out-of-bounds
-            plot(axImage, xR, yR, ':r', 'LineWidth', 2.5, 'HandleVisibility', 'off');
-        end
-
-        plot(axImage, 0, 0, 'r.', 'MarkerSize', 18, 'DisplayName', 'Stage Origin');
-        plot(axImage, tissueCentroid_mm(1), tissueCentroid_mm(2), 'm+', ...
-            'MarkerSize', 14, 'LineWidth', 2, 'DisplayName', 'Tissue Centroid');
-
-        legend(axImage, 'off');
-        axis(axImage, 'equal', 'tight');
-        xlim(axImage, overviewXRange_mm + [-0.1 0.1]);
-        ylim(axImage, overviewYRange_mm + [-0.1 0.1]);
-        hold(axImage, 'off');
-    end
-
-    function redrawGridPanel()
-        cla(axGrid);
-        hold(axGrid, 'on');
-
-        xEdges = state.xRange(1) : scanTileSize_mm : state.xRange(2);
-        yEdges = state.yRange(1) : scanTileSize_mm : state.yRange(2);
-
-        for xi = 1:length(xEdges)
-            plot(axGrid, [xEdges(xi) xEdges(xi)], state.yRange, '-', 'Color', [0.7 0.7 0.7], 'LineWidth', 0.5);
-        end
-        for yi = 1:length(yEdges)
-            plot(axGrid, state.xRange, [yEdges(yi) yEdges(yi)], '-', 'Color', [0.7 0.7 0.7], 'LineWidth', 0.5);
-        end
-
-        for xi = 1:length(xEdges)-1
-            for yi = 1:length(yEdges)-1
-                fill(axGrid, ...
-                    [xEdges(xi) xEdges(xi+1) xEdges(xi+1) xEdges(xi)], ...
-                    [yEdges(yi) yEdges(yi) yEdges(yi+1) yEdges(yi+1)], ...
-                    [0.75 0.85 1.0], 'EdgeColor', [0.5 0.5 0.8], 'LineWidth', 0.5);
-            end
-        end
-
-        xR = [state.xRange(1) state.xRange(2) state.xRange(2) state.xRange(1) state.xRange(1)];
-        yR = [state.yRange(1) state.yRange(1) state.yRange(2) state.yRange(2) state.yRange(1)];
-        xT = [xAutoRange_mm(1) xAutoRange_mm(2) xAutoRange_mm(2) xAutoRange_mm(1) xAutoRange_mm(1)];
-        yT = [yAutoRange_mm(1) yAutoRange_mm(1) yAutoRange_mm(2) yAutoRange_mm(2) yAutoRange_mm(1)];
-        plot(axGrid, xT, yT, '--c', 'LineWidth', 1);
-        plot(axGrid, xR, yR, '-y', 'LineWidth', 2.5);
-        plot(axGrid, 0, 0, 'r.', 'MarkerSize', 18);
-        plot(axGrid, tissueCentroid_mm(1), tissueCentroid_mm(2), 'm+', 'MarkerSize', 14, 'LineWidth', 2);
-        legend(axGrid, 'off');
-
-        axis(axGrid, 'equal', 'tight');
-        xlim(axGrid, overviewXRange_mm + [-0.1 0.1]);
-        ylim(axGrid, overviewYRange_mm + [-0.1 0.1]);
-        hold(axGrid, 'off');
-    end
-
-    function redrawLegendPanel()
-        cla(axLegend);
-        hold(axLegend, 'on');
-        hL1 = plot(axLegend, NaN, NaN, '--c', 'LineWidth', 1,   'DisplayName', 'Detected Range');
-        hL2 = plot(axLegend, NaN, NaN, '-y',  'LineWidth', 2.5, 'DisplayName', 'Current Range');
-        hLm = fill(axLegend, NaN, NaN, [0 0.85 0], 'FaceAlpha', 0.3, 'EdgeColor', 'none', 'DisplayName', 'Tissue Mask');
-        hL3 = plot(axLegend, NaN, NaN, 'r.', 'MarkerSize', 18, 'DisplayName', 'Stage Origin');
-        hL4 = plot(axLegend, NaN, NaN, 'm+', 'MarkerSize', 14, 'LineWidth', 2, 'DisplayName', ...
-            sprintf('Tissue Centroid (%.2f, %.2f)', tissueCentroid_mm(1), tissueCentroid_mm(2)));
-        hold(axLegend, 'off');
-        legend(axLegend, [hL1, hL2, hLm, hL3, hL4], 'Orientation', 'horizontal', 'Location', 'north', 'FontSize', 11);
-    end
-
-    function updateInfoLabel()
-        nTileX = round(diff(state.xRange) / scanTileSize_mm);
-        nTileY = round(diff(state.yRange) / scanTileSize_mm);
-        infoStr = sprintf( ...
-            'Tissue: %.2f x %.2f mm  |  Tile: %g mm  |  Tiles: %d x %d = %d  |  Scan: %.2f x %.2f mm', ...
-            tissueWidth_mm, tissueHeight_mm, scanTileSize_mm, ...
-            nTileX, nTileY, nTileX*nTileY, diff(state.xRange), diff(state.yRange));
-        lblFinalX.Text = sprintf('X = [%g  %g]', state.xRange(1), state.xRange(2));
-        lblFinalY.Text = sprintf('Y = [%g  %g]', state.yRange(1), state.yRange(2));
-        efCopyPaste.Value = sprintf('xOverall_mm = [%g %g];    yOverall_mm = [%g %g];', ...
-            state.xRange(1), state.xRange(2), state.yRange(1), state.yRange(2));
-        if state.outOfBounds
-            lblInfo.Text = ['WARNING: Range exceeds overview scan area. Lens may collide with the cassette!  |  ' infoStr];
-            lblInfo.FontColor    = [0.85 0 0];
-            lblFinalTitle.FontColor = [0.85 0 0];
-            lblFinalX.FontColor  = [0.85 0 0];
-            lblFinalY.FontColor  = [0.85 0 0];
-            btnAccept.BackgroundColor = [0.85 0.1 0.1];
-        else
-            lblInfo.Text = infoStr;
-            lblInfo.FontColor    = [0 0 0];
-            lblFinalTitle.FontColor = [0 0 0];
-            lblFinalX.FontColor  = [0.1 0.6 0.1];
-            lblFinalY.FontColor  = [0.1 0.6 0.1];
-            btnAccept.BackgroundColor = [0.2 0.7 0.2];
-        end
-    end
-
-end % i_showOverviewUI
 
 % Tissue detection
 function tissue_mask = i_detectTissueMask(surfacePosition_mm, pixelSize_mm, v)
@@ -772,7 +370,7 @@ if CC.NumObjects > 0
 end
 
 if ~any(tissue_mask(:))
-    warning('yOCTScanTissueOverview:noTissueAfterFiltering', ...
+    warning('yOCTFindTissueScanRange:noTissueAfterFiltering', ...
         'Tissue mask is empty. Try increasing DEPTH_FRACTION or reducing overviewZ_mm.');
 end
 
