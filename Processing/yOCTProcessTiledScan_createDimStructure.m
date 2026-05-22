@@ -58,6 +58,28 @@ dimOneTile.y.values(end) = [];
 dimOneTile.x.origin = "x=0 is under objective's principal";
 dimOneTile.y.origin = "y=0 is under objective's principal";
 
+%% Correct dimOneTile.x.values for galvo phase delay
+% At low pixel resolutions the galvo's mechanical inertia causes the
+% physical beam to lag the commanded position by N A-scan samples (N is
+% calibrated per probe as GalvoPhaseDelay_Asamples). The OCT records
+% commanded positions, so we rewrite x.values once here, at the single
+% source of truth for tile X coordinates, so that all downstream consumers
+% (optical path correction, tile stitching, surface detection, TIFF
+% metadata) see the corrected positions automatically.
+% Net shift is N*(pixelSize - calibrationPixelSize); zero at calibration
+% pixel size, so this is a no-op for legacy data and for high-resolution
+% scans calibrated at 1 um/pixel.
+calibrationPixelSize_um = 1; % Pixel size at which OpticalPathCorrectionPolynomial was fit
+galvoPhaseDelay_Asamples = 0; % Default: no correction (backwards compatible)
+if isfield(json,'octProbe') && isfield(json.octProbe, 'GalvoPhaseDelay_Asamples')
+    galvoPhaseDelay_Asamples = json.octProbe.GalvoPhaseDelay_Asamples;
+end
+if galvoPhaseDelay_Asamples ~= 0 && isfield(json,'pixelSize_um')
+    xCorrection_mm = galvoPhaseDelay_Asamples * ...
+        (json.pixelSize_um - calibrationPixelSize_um) * 1e-3;
+    dimOneTile.x.values = dimOneTile.x.values - xCorrection_mm;
+end
+
 %% Correct dimOneTile.z to adjust for focus position
 if ~exist('focusPositionInImageZpix','var') || any(isnan(focusPositionInImageZpix))
     % No adjustment because no focus info is provided
