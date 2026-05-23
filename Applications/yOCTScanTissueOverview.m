@@ -1,8 +1,7 @@
 function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm, tissueArea_mm2] = yOCTScanTissueOverview(varargin)
 % yOCTScanTissueOverview performs a low-resolution OCT overview scan,
 % detects the tissue footprint, and returns tile-aligned scan ranges that
-% cover the tissue. A summary PNG of the accepted range is saved next to
-% the overview output for inspection.
+% cover the tissue. Summary PNG is stored on the pwd folder.
 %
 % PIPELINE:
 %   1. Scan overview tiles at a fixed Z depth with yOCTScanTile
@@ -24,13 +23,18 @@ function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm, tissueArea_mm2] =
 %                                       Required for scan and folder modes; ignored for .tif mode.
 %   focusPositionInImageZpix []         Focus depth (pixels).
 %                                       Required for scan and folder modes; ignored for .tif mode.
-%   focusSigma              10          Z-stitching focus sigma (pixels).
+%   focusSigma              10          Z-stitching focus sigma (pixels). Objective-dependent:
+%                                         10x: 20 | 20x: 10 | 40x: 10 or 1
 %   -- Function-specific parameters ----------------------------------------------------------
 %   temporaryFolderPath     ./Overview  Root temp folder for overview files.
 %                                       If provided, files go to <temporaryFolderPath>\Overview\.
 %                                       Default: .\Overview\ (relative to working directory).
 %   preloadedScanPath       ''          Optional preloaded data to skip scanning part of the pipeline.
 %   v                       false       Verbose mode. When true, summary figures are also shown on screen.
+%
+% GENERATED FILES:
+%   tissue_overview_<N>um.png   OCT en-face XY slice overview image.
+%   tissue_ranges.png           Tissue mask, detected scan range, and tile grid figure image.
 %
 % OUTPUTS:
 %   xTissueRange_mm     [xMin xMax] X range covering detected tissue (mm)
@@ -293,14 +297,13 @@ end % main function
     if ~exist(temporaryFolder, 'dir')
         mkdir(temporaryFolder);
     end
-    rawPixelSize_um = round(pixelSize_mm * 1e3);
-    rawPngPath = fullfile(temporaryFolder, sprintf('tissue_overview_%dum.png', rawPixelSize_um));
+    rawPngPath = fullfile(temporaryFolder, 'tissue_overview.png');
     hRaw = figure('Visible', figureVisibility, 'Position', [200 200 700 500]);
     imagesc(x_mm_row, y_mm_col, xySlice);
     colormap(gray);
     axis equal tight;
     xlabel('X (mm)'); ylabel('Y (mm)');
-    title('Tissue Overview - OCT en-face (XY)');
+    title(sprintf('Tissue Overview - OCT en-face (XY) at %g µm/pixel', round(pixelSize_mm * 1e3)));
     saveas(hRaw, rawPngPath);
     if ~v, close(hRaw); end
 
@@ -349,7 +352,7 @@ end % main function
     saveScanRangeFigure( ...
         xTissueRange_mm, yTissueRange_mm, ...
         x_mm_row, y_mm_col, xySlice, tissue_mask, ...
-        tissueCentroid_mm, tissueArea_mm2, ...
+        tissueCentroid_mm, tissueArea_mm2, pixelSize_mm, ...
         xAutoRange_mm, yAutoRange_mm, ...
         overviewXRange_mm, overviewYRange_mm, ...
         scanTileSize_mm, ...
@@ -428,7 +431,7 @@ end % main function
     function saveScanRangeFigure( ...
         xTissueRange_mm, yTissueRange_mm, ...
         x_mm, y_mm, xySlice, tissue_mask, ...
-        tissueCentroid_mm, tissueArea_mm2, ...
+        tissueCentroid_mm, tissueArea_mm2, pixelSize_mm, ...
         xAutoRange_mm, yAutoRange_mm, ...
         overviewXRange_mm, overviewYRange_mm, ...
         scanTileSize_mm, ...
@@ -472,7 +475,7 @@ end % main function
     xlim(ax1, overviewXRange_mm + [-0.1 0.1]);
     ylim(ax1, overviewYRange_mm + [-0.1 0.1]);
     xlabel(ax1, 'X (mm)'); ylabel(ax1, 'Y (mm)');
-    title(ax1, sprintf('OCT en-face (XY)  |  tissue area: %.2f mm\xB2', tissueArea_mm2));
+    title(ax1, sprintf('OCT en-face (XY) at %g µm/pixel  |  tissue area: %.2f mm\xB2', round(pixelSize_mm * 1e3), tissueArea_mm2));
     hold(ax1, 'off');
 
     % Right: tile grid
