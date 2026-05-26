@@ -326,9 +326,13 @@ if in.resume && awsExist(configGuardPath,'file')
     end
     if ~isempty(prevConfig)
         mismatchLines = {};
+        % Paths (tiledScanInputFolder) are excluded from comparison: moving data
+        % to a different drive or PC changes the path but not the reconstruction.
+        fieldsToSkip = {'tiledScanInputFolder'};
         fn = fieldnames(newConfig);
         for k = 1:length(fn)
             f = fn{k};
+            if any(strcmp(f, fieldsToSkip)), continue; end
             % Compare via JSON encoding: avoids false positives from floating-point
             % round-trips through JSON and cell/struct type differences.
             prevJson = ''; curJson = '';
