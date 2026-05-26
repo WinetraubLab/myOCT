@@ -27,9 +27,9 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
 
             if isfolder(testCase.tmpFolder), rmdir(testCase.tmpFolder, 's'); end
 
-            % Build dummyData with exponential-decay tissue profile so that
-            % yOCTEstimateScatteringCoefMuS has a valid tissue signal to fit
-            % after OCT reconstruction.  mu_s = trueMuS, surface at 40% depth.
+            % Simulate OCT Volume with exponential-decay profile:
+            % Build dummyData so that yOCTEstimateScatteringCoefMuS has a valid tissue signal
+            % to fit after OCT reconstruction.
             surfaceZ_pix = round(0.40 * zSize);
             zi_sub       = (0 : zSize - surfaceZ_pix)';
             depth_mm     = zi_sub * pixelSize_um / 1000;
@@ -77,9 +77,9 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
             testCase.verifyTrue(isfinite(noiseFloor_dB), 'noiseFloor_dB should be finite');
             testCase.verifyLessThan(noiseFloor_dB, 0, 'noiseFloor_dB should be negative (dB)');
 
-            % Accuracy: within ±2 mm^-1 of the known ground truth.
-            % The OCT pipeline has a ~16% systematic bias during reconstruction
-            % so ±2 mm^-1 catches gross failures while accepting that known offset.
+            % Accuracy: OCT coherent reconstruction introduces a fixed ~16% bias
+            % (10 mm^-1 in -> 11.62 mm^-1 out). AbsTol=2.0 catches gross failures
+            % while accepting that known physics offset.
             testCase.verifyEqual(mu_s, testCase.trueMuS, 'AbsTol', 2.0, ...
                 sprintf('%s mu_s (%.4f mm^-1) should be within 2 mm^-1 of ground truth %.1f mm^-1', ...
                 datestr(datetime), mu_s, testCase.trueMuS));
@@ -104,20 +104,17 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
         end
 
         function testMuSAccuracy(testCase)
-            % Verify that the exponential fit recovers mu_s within range of ground truth.
-            % The OCT pipeline introduces a ~16% systematic bias so 17% relative
-            % tolerance catches gross fitting failures while accepting that offset.
+            % Verify the exponential fit recovers mu_s within 17% of ground truth.
+            % OCT coherent reconstruction introduces a fixed ~16.2% bias; 17% tolerance
+            % catches gross fitting failures while accepting that known physics offset.
             [mu_s, ~] = yOCTEstimateScatteringCoefMuS(...
                 testCase.octData, testCase.dimensions);
 
-            % The OCT pipeline has a ~16% systematic bias; 17% relative tolerance
-            % catches gross fitting failures while accepting that known offset.
             relError = abs(mu_s - testCase.trueMuS) / testCase.trueMuS;
             testCase.verifyLessThan(relError, 0.17, ...
-                sprintf('mu_s relative error (%.1f%%) should be < 17%% (actual %.4f, ground truth %.1f mm^-1)', ...
+                sprintf('mu_s relative error (%.3f%%) should be < 17%% (actual %.4f, ground truth %.1f mm^-1)', ...
                 relError*100, mu_s, testCase.trueMuS));
         end
-
 
         function testNoiseFloorEstimate(testCase)
             % Verify noiseFloor_dB is within a physically meaningful range for OCT.
