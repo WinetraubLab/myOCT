@@ -27,8 +27,15 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
 
             if isfolder(testCase.tmpFolder), rmdir(testCase.tmpFolder, 's'); end
 
-            % Simulate OCT volume
-            dummyData = ones(zSize, xSize, ySize);
+            % Build dummyData with exponential-decay tissue profile so that
+            % yOCTEstimateScatteringCoefMuS has a valid tissue signal to fit
+            % after OCT reconstruction.  mu_s = trueMuS, surface at 40% depth.
+            surfaceZ_pix = round(0.40 * zSize);
+            zi_sub       = (0 : zSize - surfaceZ_pix)';
+            depth_mm     = zi_sub * pixelSize_um / 1000;
+            signal_z     = 4000 * exp(-2 * testCase.trueMuS * depth_mm) + 0.01;
+            dummyData    = ones(zSize, xSize, ySize) * 0.01;
+            dummyData(surfaceZ_pix:end, :, :) = repmat(signal_z, [1, xSize, ySize]);
             yOCTSimulateTileScan(dummyData, testCase.tmpFolder, ...
                 'pixelSize_um',             pixelSize_um, ...
                 'zDepths',                  0, ...
@@ -110,6 +117,7 @@ classdef test_yOCTEstimateScatteringCoefMuS < matlab.unittest.TestCase
                 sprintf('mu_s relative error (%.1f%%) should be < 17%% (actual %.4f, ground truth %.1f mm^-1)', ...
                 relError*100, mu_s, testCase.trueMuS));
         end
+
 
         function testNoiseFloorEstimate(testCase)
             % Verify noiseFloor_dB is within a physically meaningful range for OCT.

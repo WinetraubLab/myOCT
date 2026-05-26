@@ -39,24 +39,6 @@ in = p.Results;
 data = in.data;
 pixelSize_um = in.pixelSize_um;
 
-%% Generate a synthetic tissue profile below the surface
-% Data from the surface onward uses a flat-surface + exponential-decay profile so that
-% yOCTEstimateScatteringCoefMuS can always analyse the reconstructed volume:
-mu_s_per_mm  = 10.0;   % tissue scattering coefficient, set at 10 mm^-1
-amplitude    = 4000;   % linear reflectivity at the surface
-noiseFloor   = 0.01;   % noise floor (~-40 dB)
-zSize        = size(data, 1);
-xSize        = size(data, 2);
-ySize        = size(data, 3);
-surfaceZ_pix = max(2, round(0.40 * zSize));  % tissue surface at 40% depth
-
-% Build tissue signal vector for pixels from the surface onward
-zi_sub   = (0 : zSize - surfaceZ_pix)';
-depth_mm = zi_sub * pixelSize_um / 1000;
-signal_z = amplitude * exp(-2 * mu_s_per_mm * depth_mm) + noiseFloor;
-data(surfaceZ_pix:end, :, :) = repmat(signal_z, [1, xSize, ySize]);
-varargin{1} = data;  % sync so downstream parameter lists use the modified data
-
 % There are two ways to define index of refraction, use
 % tissueRefractiveIndex instead of 'n'
 if isfield(in,'n')
