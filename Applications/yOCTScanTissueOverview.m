@@ -203,7 +203,7 @@ else
 end
 
 [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm, tissueArea_mm2] = detectTissueScanRange( ...
-    processedTifPath, overviewZ_um, scanTileSize_mm, temporaryFolder, v);
+    processedTifPath, overviewZ_um, scanTileSize_mm, xRange_mm, yRange_mm, temporaryFolder, v);
 
 end % main function
 
@@ -213,7 +213,7 @@ end % main function
     % tile-aligned scan range that covers it. Also saves two PNGs into
     % temporaryFolder: the raw en-face image and a summary with the accepted range.
     function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm, tissueArea_mm2] = detectTissueScanRange( ...
-        processedTifPath, overviewZ_um, scanTileSize_mm, temporaryFolder, v)
+        processedTifPath, overviewZ_um, scanTileSize_mm, xRange_mm, yRange_mm, temporaryFolder, v)
 
     figureVisibility = ternary(v, 'on', 'off');
 
@@ -308,9 +308,11 @@ end % main function
     if ~v, close(hRaw); end
 
     %% Compute tile-aligned scan range, clamped to the overview boundary
-    % Overview boundary comes from the loaded volume itself, not from the caller.
-    overviewXRange_mm = [min(x_mm_row), max(x_mm_row)];
-    overviewYRange_mm = [min(y_mm_col), max(y_mm_col)];
+    % Use the requested scan range as the boundary, not the actual
+    % pixel grid extent. The requested range is always a whole
+    % number of tiles; the pixel grid is not, and clamping to it breaks that.
+    overviewXRange_mm = xRange_mm;
+    overviewYRange_mm = yRange_mm;
 
     CENTROID_ROUND_MM = 0.05;
     cx_r = round(cx_mm / CENTROID_ROUND_MM) * CENTROID_ROUND_MM;
