@@ -308,9 +308,11 @@ end % main function
     if ~v, close(hRaw); end
 
     %% Compute tile-aligned scan range, clamped to the overview boundary
-    % Use the requested scan range as the boundary, not the actual
-    % pixel grid extent. The requested range is always a whole
-    % number of tiles; the pixel grid is not, and clamping to it breaks that.
+    % The reconstructed pixel grid ends slightly short of the requested range
+    % (e.g. 4.98 instead of 5.0 mm) due to pixel discretization. Clamping to
+    % that pixel extent would break tile alignment, which needs to be multiple of
+    % the FOV. Use the original requested range instead, which is guaranteed 
+    % to be a whole number of tiles:
     overviewXRange_mm = xRange_mm;
     overviewYRange_mm = yRange_mm;
 
