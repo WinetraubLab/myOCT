@@ -10,15 +10,16 @@ function p = yOCTGetProbeIniPath(magnification, scanHead, variant)
 %
 %   variant - (optional, default '') Additional calibration variant.
 %       Used when the same magnification + scanHead combination has
-%       multiple calibrations (for example 40x SUMMER/WINTER configurations).
+%       multiple calibrations (for example 40x and 20x SUMMER/WINTER configurations).
 %       Options: 'WINTER', 'SUMMER', or '' (when only one exists)
 %
 % EXAMPLES:
 %   p = yOCTGetProbeIniPath('10x', 'OCTG');
 %   p = yOCTGetProbeIniPath('10x', 'OCTP900');
-%   p = yOCTGetProbeIniPath('20x', 'OCTP900');
-%   p = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
+%   p = yOCTGetProbeIniPath('20x', 'OCTG', 'WINTER');
+%   p = yOCTGetProbeIniPath('20x', 'OCTP900', 'SUMMER');
 %   p = yOCTGetProbeIniPath('40x', 'OCTG', 'WINTER');
+%   p = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
 %
 % FILE NAMING CONVENTION:
 %   Probe Olympus - {magnification} - {scanHead} - {variant}.ini
