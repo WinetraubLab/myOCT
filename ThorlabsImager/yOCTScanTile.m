@@ -101,8 +101,12 @@ else
     objectiveWorkingDistance = Inf;
 end
 
-if (in.nBScanAvg > 1)
-    error('B Scan Averaging is not supported yet, it shifts the position of the scan');
+if (in.nBScanAvg > 1 && ~strcmpi(octSystemName, 'Gan632'))
+    % On Gan632 the Python SDK oversamples the slow axis and writes one B-scan
+    % per Spectral file plus Acquisition/SpeckleAveraging/SlowAxis in
+    % Header.xml, so MATLAB averages the repeats correctly. Other systems are
+    % not wired up for this yet (it shifts the position of the scan).
+    error('B Scan Averaging is only supported on Gan632 (it shifts the scan position on other systems).');
 end
 
 if length(in.xRange_mm) ~= 2
