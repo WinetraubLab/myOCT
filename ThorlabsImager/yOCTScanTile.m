@@ -101,8 +101,12 @@ else
     objectiveWorkingDistance = Inf;
 end
 
-if (in.nBScanAvg > 1)
-    error('B Scan Averaging is not supported yet, it shifts the position of the scan');
+if (in.nBScanAvg > 1 && ~any(strcmpi(octSystemName, {'Gan632', 'ganymede'})))
+    % Gan632 (Python SDK) and Ganymede (native DLL) both save one B-scan per
+    % Spectral file with the right ordering; for Ganymede we patch
+    % SpeckleAveraging/SlowAxis after the scan (see below) so MATLAB averages
+    % the repeats. Other systems are not wired up / validated for this yet.
+    error('B Scan Averaging is only supported on Gan632 and Ganymede.');
 end
 
 if length(in.xRange_mm) ~= 2
@@ -216,7 +220,15 @@ for scanI=1:length(in.scanOrder)
 	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
-    
+
+    % Ganymede's native metadata writer records SpeckleAveraging/SlowAxis = 1
+    % even when B-scan averaging was used (the averaged frames are already
+    % saved as separate Spectral files in the right order). Rewrite SlowAxis so
+    % MATLAB averages them on load. Gan632's Python SDK already writes this.
+    if in.nBScanAvg > 1 && ~strcmpi(octSystemName, 'Gan632')
+        yOCTSetBScanAveragingInHeader(s, in.nBScanAvg);
+    end
+
 end
 
 %% Finalize
