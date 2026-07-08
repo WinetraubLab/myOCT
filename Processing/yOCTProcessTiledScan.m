@@ -314,6 +314,15 @@ parfor yI=1:length(dimOutput_mm.y.values)
                 % Figure out what is the x,z position of each pixel in this file
                 x = dimFrame.x.values+xCenters(xxI);
                 z = dimFrame.z.values+zDepths(zzI);
+
+                % Correct for focus drift: re-center this tile on its own
+                % focus pixel so that the proper focus lands at absolute
+                % depth zDepths(zzI). For a constant focus (single value), this
+                % is a no-op because dimFrame.z.values is already 0 at the focus.
+                % so behavior is unchanged for the single focus position.
+                if ~isnan(focusPositionInImageZpix(zzI))
+                    z = z - dimFrame.z.values(round(focusPositionInImageZpix(zzI)));
+                end
                 
                 % Helps with interpolation problems
                 x(1) = x(1) - 1e-10; 
