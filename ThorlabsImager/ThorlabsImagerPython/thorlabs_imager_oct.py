@@ -282,15 +282,14 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         # MATLAB expects to find extracted files, not the .oct archive
         os.remove(oct_file_path)
 
-        # Split the concatenated Spectral0.data into individual B-scan files.
-        # With B-scan averaging the slow axis is oversampled, so there are
-        # nYPixels * nBScanAvg B-scans, and MATLAB expects ONE per file:
-        # Spectral0.data, Spectral1.data, ..., Spectral(nYPixels*nBScanAvg - 1).data
+        # MATLAB reads one B-scan per Spectral{i}.data file, but the SDK saves
+        # them concatenated in Spectral0.data. Cut them back into one file each.
+        # With B-scan averaging there are nYPixels * nBScanAvg B-scans (nBScanAvg
+        # repeats per Y position, Y-major order)
         _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels, nBScanAvg)
 
-        # Fix Header.xml metadata for MATLAB compatibility (also records the
-        # B-scan averaging count so MATLAB averages the repeats per Y position
-        # instead of laying them out side-by-side in X)
+        # Update Header.xml to the values MATLAB's reader expects, including the
+        # averaging count so MATLAB averages the nBScanAvg repeats of each Y
         _fix_header_xml_for_matlab(outputFolder, raw_data, _probe, nYPixels, nBScanAvg)
 
         # Clean up OCT file object and data buffers
@@ -465,19 +464,23 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
 def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int,
                                    nBScanAvg: int = 1) -> None:
     """
-    Split concatenated Spectral0.data into individual B-scan files for MATLAB compatibility.
+    Split the concatenated Spectral0.data into one file per B-scan.
+
+    MATLAB's reader loads each B-scan from its own file (Spectral0.data,
+    Spectral1.data, ...), but the SDK writes them all concatenated into
+    Spectral0.data. This cuts that file back into equal-sized pieces
 
     With B-scan averaging (nBScanAvg > 1) the slow axis is oversampled, so the
-    acquisition holds nYPixels * nBScanAvg B-scans, ordered Y-major / average-minor
-    (all averages of Y position 0, then all averages of Y position 1, ...). MATLAB's
-    reader (yOCTLoadInterfFromFile_ThorlabsData) expects exactly that ordering, one
-    B-scan per Spectral{i}.data file, with fileIndex = (y-1)*nBScanAvg + (avg-1).
-    Splitting in order therefore already lines up with what MATLAB indexes.
+    acquisition holds nYPixels * nBScanAvg B-scans in Y-major order (all repeats
+    of Y position 0, then all repeats of Y position 1, ...). Writing them out in
+    that same order matches MATLAB's indexing,
+    fileIndex = (y-1)*nBScanAvg + (avg-1), so each Y position's repeats are the
+    frames that get averaged together
 
         Args:
-            outputFolder (str): Output directory containing Header.xml and data/Spectral0.data
+            outputFolder (str): Output directory containing data/Spectral0.data
             nYPixels (int): Number of distinct Y positions (B-scans in the volume)
-            nXPixels (int): Number of A-scans per B-scan (kept for signature clarity)
+            nXPixels (int): A-scans per B-scan (unused; kept for signature clarity)
             nBScanAvg (int): Number of averaged B-scans acquired per Y position
         Returns:
             None
@@ -533,14 +536,17 @@ def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: i
 def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe,
                                nYPixels: int = None, nBScanAvg: int = 1) -> None:
     """
-    Fix Header.xml metadata for MATLAB compatibility.
+    Write Header.xml into the form MATLAB's reader expects.
 
-    Crucially for B-scan averaging: the Y dimension (Image/SizePixel/SizeY) must be
-    the number of DISTINCT Y positions (nYPixels), while the averaging count goes
-    into Acquisition/SpeckleAveraging/SlowAxis. That is what MATLAB's header reader
-    (yOCTLoadInterfFromFile_ThorlabsHeader) reads to know it should average the
-    nBScanAvg repeats per Y position instead of treating them as extra B-scans
-    (which is what produced the "N copies side-by-side in X" artifact).
+    The SDK's header does not match what yOCTLoadInterfFromFile needs, so we set
+    the per-B-scan dimensions (SizeX/SizeY/SizeZ, apodization and scan regions)
+    from the values measured on the split files
+
+    For B-scan averaging two fields matter:
+      - Image/SizePixel/SizeY                 = distinct Y positions (nYPixels)
+      - Acquisition/SpeckleAveraging/SlowAxis = nBScanAvg
+    MATLAB reads SlowAxis to know how many repeats to average per Y position; if
+    it were left at 1, the repeats would be treated as separate Y positions
 
         Args:
             outputFolder (str): Output directory containing Header.xml
@@ -624,8 +630,8 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe,
             if image_elem.get('Type') == 'Processed':
                 image_elem.set('Type', 'RawSpectra')
 
-        # Record B-scan averaging so MATLAB averages the repeats. MATLAB reads
-        # Acquisition/SpeckleAveraging/SlowAxis; create the nodes if missing.
+        # Set the averaging count MATLAB reads
+        # (Acquisition/SpeckleAveraging/SlowAxis), creating the nodes if missing.
         if navg > 1:
             acquisition_elem = root.find('.//Acquisition')
             if acquisition_elem is not None:

@@ -101,12 +101,12 @@ else
     objectiveWorkingDistance = Inf;
 end
 
-if (in.nBScanAvg > 1 && ~strcmpi(octSystemName, 'Gan632'))
-    % On Gan632 the Python SDK oversamples the slow axis and writes one B-scan
-    % per Spectral file plus Acquisition/SpeckleAveraging/SlowAxis in
-    % Header.xml, so MATLAB averages the repeats correctly. Other systems are
-    % not wired up for this yet (it shifts the position of the scan).
-    error('B Scan Averaging is only supported on Gan632 (it shifts the scan position on other systems).');
+if (in.nBScanAvg > 1 && ~any(strcmpi(octSystemName, {'Gan632', 'Ganymede'})))
+    % B-scan averaging saves nBScanAvg B-scans per Y position in Y-major order,
+    % which MATLAB averages on load once Acquisition/SpeckleAveraging/SlowAxis
+    % is set. Gan632 sets it in its Python SDK; Ganymede is patched after the
+    % scan by yOCTSetBScanAveragingInHeader. Other systems are not validated yet.
+    error('B Scan Averaging is only supported on Gan632 and Ganymede.');
 end
 
 if length(in.xRange_mm) ~= 2
