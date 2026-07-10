@@ -89,24 +89,19 @@ else
 
     if length(focusPositionInImageZpix) == 1 %#ok<ISCL>
         % Focus position is the same for all scans
-        dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix);
+        refFocusPix = focusPositionInImageZpix;
     else
-        % Each scan has a different focus position
-        if std(focusPositionInImageZpix) ~= 0
-            % The situation where each focusPositionInImageZpix has a
-            % differnt zDepth is not implemented yet. The problem is that
-            % for each dimOneTile, z.values are different as they have
-            % different focus correction. This is a problem. 
-            % To solve this, we could return an array of dimOneTile instead
-            % of one dimOneTile, where each dimOneTile corresponds to one
-            % zDepth. But this is a big refactor for yOCTProcessTiledScan.
-            % We are not ready to do that yet.
-            error('This is not implemented yet. See comment above');
-        end
-        
-        dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(focusPositionInImageZpix(1));
+        % Each scan may have a different focus position (focus drift, e.g.
+        % cleared tissue). We anchor z=0 of the template on the focus of the
+        % tile closest to the tissue interface (zDepth ~ 0). The per-tile
+        % focus drift itself is corrected in the main loop of
+        % yOCTProcessTiledScan, where each tile is re-centered on its own
+        % focus value before being placed in the output volume.
+        [~, refTileIndex] = min(abs(json.zDepths));
+        refFocusPix = focusPositionInImageZpix(refTileIndex);
     end
 
+    dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(round(refFocusPix));
     dimOneTile.z.origin = 'z=0 is focus position';
 end
 
