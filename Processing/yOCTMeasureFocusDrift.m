@@ -10,20 +10,21 @@ function focusPositionInImageZpix = yOCTMeasureFocusDrift( ...
 %
 % OPTIONAL PARAMETERS:
 %
-%   Parameter          Default
+%   Parameter               Default
 %
-%   'depthSpacing_um'   50      Starting at the tissue/coverslip interface
-%                               (stage z = 0), measure one tile every this
-%                               many microns of stage depth going deeper.
-%                               Shallower (negative Z, gel) scans are skipped.
-%                               Stop interactively once focus is not visible.
-%   'outputPath'        ''      Where to save results (drift figure + focus vector)
+%   'focusMeasureStep_um'   50      Starting at the tissue surface / coverslip
+%                                   interface (stage z = 0), measure the focus
+%                                   every this many microns on one B-scan of
+%                                   stage depth, going deeper. Shallower
+%                                   (negative Z, air) scans are skipped. User can
+%                                   stop measuring once the focus is not visible.
+%   'outputDirectory'        ''      Where to save results (drift figure + focus vector)
 %                               Three options:
 %                                 (empty)         : save in volumeOutputFolder
 %                                 'path/to/dir/'  : save in this dir given folder
 %                                 'path/to/name'  : use name as filename base
-%   'v'                 false   Verbose mode: prints progress and results and
-%                               keeps the drift figure open.
+%   'v'                     false   Verbose mode: prints progress and results,
+%                                   and keeps the drift figure open.
 %
 % OUTPUT:
 %   focusPositionInImageZpix:   1 x nDepths vector of focus pixels (one per zDepth scan
@@ -34,8 +35,8 @@ function focusPositionInImageZpix = yOCTMeasureFocusDrift( ...
 p = inputParser;
 addRequired(p, 'volumeOutputFolder', @ischar);
 addRequired(p, 'dispersionQuadraticTerm', @isnumeric);
-addParameter(p, 'depthSpacing_um', 50, @(x)(isnumeric(x) && isscalar(x) && x > 0));
-addParameter(p, 'outputPath', '', @ischar);
+addParameter(p, 'focusMeasureStep_um', 50, @(x)(isnumeric(x) && isscalar(x) && x > 0));
+addParameter(p, 'outputDirectory', '', @ischar);
 addParameter(p, 'v', false, @islogical);
 parse(p, volumeOutputFolder, dispersionQuadraticTerm, varargin{:});
 in = p.Results;
@@ -48,14 +49,14 @@ v                       = in.v;
 geom = loadScanGeometry(volumeOutputFolder);
 
 %% Choose which depths to measure (tissue surface/coverslip interface first, then deeper)
-depthsToMeasure = selectDepthsToMeasure(geom.zDepths_mm, in.depthSpacing_um);
+depthsToMeasure = selectDepthsToMeasure(geom.zDepths_mm, in.focusMeasureStep_um);
 
 %% Measure the focus on each requested tile
 measurements = measureFocus(geom, depthsToMeasure, dispersionQuadraticTerm, v);
 
 %% Compute the focus for every depth
 focusPositionInImageZpix = getFocusForAllDepths( ...
-    measurements, geom.zDepths_mm, in.outputPath, volumeOutputFolder, v);
+    measurements, geom.zDepths_mm, in.outputDirectory, volumeOutputFolder, v);
 
 end % yOCTMeasureFocusDrift
 
@@ -102,15 +103,15 @@ geom.yIInFileCenter = max(1, round(geom.nYInTile / 2));  % central Bscan
 end
 
 
-function measureSeq = selectDepthsToMeasure(zDepths_mm, depthSpacing_um)
+function measureSeq = selectDepthsToMeasure(zDepths_mm, focusMeasureStep_um)
 % Choose z-depth indices to measure: start at z = 0 (tissue surface/coverslip interface) and
-% step deeper every depthSpacing_um microns. Negative Z (gel) tiles are skipped:
+% step deeper every focusMeasureStep_um microns. Negative Z (gel) tiles are skipped:
 [~, refIdx] = min(abs(zDepths_mm));
 depthStep_mm = median(abs(diff(zDepths_mm)));
 if depthStep_mm <= 0
     stride = 1;
 else
-    stride = max(1, round((depthSpacing_um * 1e-3) / depthStep_mm));
+    stride = max(1, round((focusMeasureStep_um * 1e-3) / depthStep_mm));
 end
 candidateIdx = find(zDepths_mm >= zDepths_mm(refIdx) - 1e-9);
 [~, cOrder] = sort(zDepths_mm(candidateIdx));
@@ -280,7 +281,7 @@ end
 
 
 function focusPositionInImageZpix = getFocusForAllDepths( ...
-    measurements, zDepths_mm, outputPath, volumeOutputFolder, v)
+    measurements, zDepths_mm, outputDirectory, volumeOutputFolder, v)
 % Turn the accepted selections into (1) a per-tile table and (2) a focus pixel for
 % every z-depth (linear interp, extrapolated at the ends). The vector is what
 % yOCTProcessTiledScan consumes. Errors if nothing was chosen; prints the
@@ -318,17 +319,17 @@ if v
     disp(focusTable);
 end
 
-generateFocusDiagnostic(outputPath, volumeOutputFolder, focusTable, ...
+generateFocusDiagnostic(outputDirectory, volumeOutputFolder, focusTable, ...
     focusPositionInImageZpix, zDepths_mm, v);
 end
 
 
-function generateFocusDiagnostic(outputPath, volumeOutputFolder, focusTable, ...
+function generateFocusDiagnostic(outputDirectory, volumeOutputFolder, focusTable, ...
     focusPositionInImageZpix, zDepths_mm, v)
 % Ggenerate the focus vector + table to file and the drift figure to .png. Resolves
 % the output paths here (the only place that needs them). When v=true the drift
 % figure stays open and the saved paths are printed; otherwise it is closed:
-[matPath, figPath] = resolveOutputPaths(outputPath, volumeOutputFolder);
+[matPath, figPath] = resolveOutputPaths(outputDirectory, volumeOutputFolder);
 
 save(matPath, 'focusTable', 'focusPositionInImageZpix', 'zDepths_mm');
 
@@ -344,22 +345,22 @@ end
 end
 
 
-function [matPath, figPath] = resolveOutputPaths(outputPath, defaultFolder)
-% Resolve where to save the files from a user-supplied outputPath
+function [matPath, figPath] = resolveOutputPaths(outputDirectory, defaultFolder)
+% Resolve where to save the files from a user-supplied outputDirectory:
 %   (empty)        : save in defaultFolder with the default filename
 %   'path/to/dir/' : save in that folder with the default filename
 %   'path/to/name' : use as file base: name.mat, name.png
 DEFAULT_NAME = 'zChosenFocusPositions';
-if isempty(outputPath)
+if isempty(outputDirectory)
     matPath = [defaultFolder DEFAULT_NAME '.mat'];
     figPath = [defaultFolder DEFAULT_NAME '.png'];
-elseif outputPath(end) == '/' || outputPath(end) == '\' || isfolder(outputPath)
-    folder = awsModifyPathForCompetability([outputPath '/']);
+elseif outputDirectory(end) == '/' || outputDirectory(end) == '\' || isfolder(outputDirectory)
+    folder = awsModifyPathForCompetability([outputDirectory '/']);
     matPath = [folder DEFAULT_NAME '.mat'];
     figPath = [folder DEFAULT_NAME '.png'];
 else
-    matPath = [outputPath '.mat'];
-    figPath = [outputPath '.png'];
+    matPath = [outputDirectory '.mat'];
+    figPath = [outputDirectory '.png'];
 end
 end
 
