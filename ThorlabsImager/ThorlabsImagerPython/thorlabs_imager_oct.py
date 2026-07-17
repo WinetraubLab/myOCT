@@ -265,8 +265,7 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         acquisition_started = True
 
         # Drain the acquisition one B-scan at a time. Files are written in
-        # arrival order, Spectral{(y-1)*nBScanAvg + (avg-1)}.data, which is the
-        # same layout the ACQ_ORDER_ALL splitter produced for MATLAB:
+        # arrival order, Spectral{(y-1)*nBScanAvg + (avg-1)}.data:
         for bscan_idx in range(total_bscans):
             _device.acquisition.get_raw_data(buffer=raw_data)
             if raw_data.lost_frames:
