@@ -213,9 +213,8 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
     
     try:
         # Set B-scan averaging on probe and processing
-        if nBScanAvg > 1:
-            _probe.properties.set_oversampling_slow_axis(nBScanAvg)
-            _processing.properties.set_bscan_avg(nBScanAvg)
+        _probe.properties.set_oversampling_slow_axis(nBScanAvg)
+        _processing.properties.set_bscan_avg(nBScanAvg)
         
         # Create volume scan pattern
         scan_pattern = _probe.scan_pattern.create_volume_pattern(
