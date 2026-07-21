@@ -126,6 +126,23 @@ for i = 1:totalFolders
     end
 end
 
+%% Record B-scan averaging in tile headers (Ganymede only)
+% Ganymede always saves SlowAxis = 1 in Header.xml, even with B-scan
+% averaging on, so we fix it here (once the header is available)
+if isfield(json, 'nBScanAvg') && json.nBScanAvg > 1 && ...
+        isfield(json, 'octSystem') && strcmpi(json.octSystem, 'ganymede')
+    foldersToFix = [alreadyUnzipped successfullyUnzipped];
+    for i = 1:length(foldersToFix)
+        tileHeaderPath = awsModifyPathForCompetability(...
+            [tiledScanInputFolder foldersToFix{i} '/Header.xml']);
+        setBScanAveragingInHeader(tileHeaderPath, json.nBScanAvg);
+    end
+    if v && ~isempty(foldersToFix)
+        fprintf('%s Set SlowAxis=%d (B-scan averaging) in %d tile headers\n', ...
+            datestr(datetime), json.nBScanAvg, length(foldersToFix));
+    end
+end
+
 %% Prepare output structure
 results = struct();
 results.alreadyUnzipped = alreadyUnzipped;
@@ -159,6 +176,59 @@ if ~isempty(failedToUnzip)
     end
     warningMsg = [warningMsg newline newline];  % Add spacing at the end
     warning('yOCTUnzipTiledScan:FailedToUnzip', '%s', warningMsg);
+end
+
+end
+
+function setBScanAveragingInHeader(headerPath, nBScanAvg)
+% Record the B-scan averaging count in a tile's Header.xml
+% (Acquisition/SpeckleAveraging/SlowAxis) so MATLAB averages the repeats
+% on load. headerPath can be local or on AWS. Safe to run more than once.
+
+if nBScanAvg < 1 || mod(nBScanAvg,1) ~= 0
+    error('nBScanAvg must be a positive integer, got %g.', nBScanAvg);
+end
+
+% Read header text. Use imageDatastore so both local and AWS paths work
+% (same pattern as yOCTLoadInterfFromFile_ThorlabsHeader).
+ds = imageDatastore(headerPath, 'ReadFcn', @fileread, 'FileExtensions', '.xml');
+txt = ds.read();
+
+% Rewrite the (single) SlowAxis element inside SpeckleAveraging. Match any
+% current integer value so the function is re-runnable
+newTxt = regexprep(txt, '<SlowAxis>\s*\d+\s*</SlowAxis>', ...
+    sprintf('<SlowAxis>%d</SlowAxis>', nBScanAvg), 'once');
+
+if strcmp(newTxt, txt)
+    if ~isempty(regexp(txt, sprintf('<SlowAxis>\\s*%d\\s*</SlowAxis>', nBScanAvg), 'once'))
+        % Already set to the requested value: nothing to do.
+        return;
+    end
+    % Warn rather than error so the scan can still be processed (it will
+    % just load unaveraged). A Ganymede header normally always contains
+    % this tag, so reaching this point means the header is non-standard.
+    warning('yOCTUnzipTiledScan:noSlowAxisTag', ...
+        'No <SlowAxis> tag found in "%s"; header left unchanged.', headerPath);
+    return;
+end
+
+% Write back as raw bytes so the Windows paths/percent signs in the header
+% are preserved verbatim (no fprintf escape interpretation). For AWS paths,
+% write to a local temp file first and upload (same pattern as awsWriteJSON).
+if awsIsAWSPath(headerPath)
+    localPath = [tempname '.xml'];
+else
+    localPath = headerPath;
+end
+fid = fopen(localPath, 'w');
+if fid < 0
+    error('Could not open "%s" for writing.', localPath);
+end
+fwrite(fid, newTxt, 'char');
+fclose(fid);
+if awsIsAWSPath(headerPath)
+    awsCopyFileFolder(localPath, headerPath);
+    delete(localPath);
 end
 
 end
