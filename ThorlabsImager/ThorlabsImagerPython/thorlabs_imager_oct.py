@@ -209,13 +209,13 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
     scan_pattern = None
     raw_data = None
     oct_file = None
+    frames = None
     acquisition_started = False
     
     try:
         # Set B-scan averaging on probe and processing
-        if nBScanAvg > 1:
-            _probe.properties.set_oversampling_slow_axis(nBScanAvg)
-            _processing.properties.set_bscan_avg(nBScanAvg)
+        _probe.properties.set_oversampling_slow_axis(nBScanAvg)
+        _processing.properties.set_bscan_avg(nBScanAvg)
         
         # Create volume scan pattern
         scan_pattern = _probe.scan_pattern.create_volume_pattern(
@@ -224,7 +224,7 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
             rangeY_mm,  # range Y in mm
             nYPixels,   # B-scans in volume
             pt.ApodizationType.EACH_BSCAN,  # Apodization type
-            pt.AcquisitionOrder.ACQ_ORDER_ALL  # Acquisition order
+            pt.AcquisitionOrder.FRAME_BY_FRAME  # Acquisition order
         )
         
         # Apply center offset (shift scan pattern to center position)
@@ -234,27 +234,55 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         if rotationAngle_deg != 0:
             scan_pattern.rotate(rotationAngle_deg * 3.14159265359 / 180.0)  # Convert to radians
         
-        # Allocate data buffers
+        # Ask the SDK whether the acquisition fits in memory, so
+        # an oversized request fails here with a clear message instead of a
+        # cryptic Matrox error mid-acquisition:
+        try:
+            required_bytes = scan_pattern.memory_requirements(
+                _device, pt.AcqType.ASYNC_FINITE)
+            if not scan_pattern.check_available_memory_for_raw_data(_device, 0):
+                raise MemoryError(
+                    f"SDK reports insufficient memory for this scan pattern "
+                    f"({required_bytes / 2**30:.1f} GiB required; "
+                    f"nYPixels={nYPixels}, nBScanAvg={nBScanAvg}).")
+        except MemoryError:
+            raise
+        except Exception:
+            pass
+
+        # With slow-axis oversampling the acquisition delivers
+        # nYPixels * nBScanAvg B-scans (the repeats of each Y position arrive consecutively)
+        total_bscans = int(nYPixels) * int(max(1, nBScanAvg))
+        oct_file = OCTFile(filetype=pt.FileFormat.OCITY)
+
+        # Reusable receive buffer, refilled by every get_raw_data call
         raw_data = RawData()
-        
+        frames = []
+
         # Start acquisition
         time_start = time.time()
         _device.acquisition.start(scan_pattern, pt.AcqType.ASYNC_FINITE)
         acquisition_started = True
-        
-        # Get raw data from acquisition
-        _device.acquisition.get_raw_data(buffer=raw_data)
-        
+
+        # Drain the acquisition one B-scan at a time. Files are written in
+        # arrival order, Spectral{(y-1)*nBScanAvg + (avg-1)}.data:
+        for bscan_idx in range(total_bscans):
+            _device.acquisition.get_raw_data(buffer=raw_data)
+            if raw_data.lost_frames:
+                # A lost frame would leave a hole in this tile, and reading on
+                # would eventually block forever waiting for frames that never arrive:
+                raise RuntimeError(
+                    f"Acquisition lost {raw_data.lost_frames} frame(s) at "
+                    f"B-scan {bscan_idx + 1}/{total_bscans}; this tile is "
+                    f"incomplete. Failing the tile so MATLAB rescans it.")
+            frame_copy = raw_data.clone()
+            oct_file.add_data(frame_copy, f"data\\Spectral{bscan_idx}.data")
+            frames.append(frame_copy)
+
         # Stop acquisition
         _device.acquisition.stop()
         acquisition_started = False
         time_end = time.time()
-        
-        # Create OCT file with proper metadata 
-        oct_file = OCTFile(filetype=pt.FileFormat.OCITY)
-
-        # Add raw data to OCT file
-        oct_file.add_data(raw_data, "data\\Spectral0.data")
 
         # Save calibration files: Chirp and Offset
         oct_file.save_calibration(_processing, 0)
@@ -281,47 +309,29 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
         # Delete the .oct file after extraction to avoid duplication
         # MATLAB expects to find extracted files, not the .oct archive
         os.remove(oct_file_path)
+        _fix_header_xml_for_matlab(outputFolder, raw_data, _probe, nYPixels, nBScanAvg)
 
-        # Split the concatenated Spectral0.data into individual B-scan files
-        # MATLAB expects Spectral0.data, Spectral1.data, ..., Spectral(N-1).data
-        _split_spectral_files_by_bscan(outputFolder, nYPixels, nXPixels)
-
-        # Fix Header.xml metadata for MATLAB compatibility
-        _fix_header_xml_for_matlab(outputFolder, raw_data, _probe)
-
-        # Clean up OCT file object and data buffers
-        del oct_file
-        del raw_data
-        del scan_pattern
+        # Drop our references to the SDK objects; the finally block below
+        # forces the actual native free.
         oct_file = None
         raw_data = None
         scan_pattern = None
-        
-    except Exception as e:
+        frames = None
+
+    except Exception:
         # Ensure acquisition is stopped if it was started
         if acquisition_started:
             try:
                 _device.acquisition.stop()
             except Exception:
                 pass  # Best effort
-        
-        # Clean up partially created objects
-        if oct_file is not None:
-            try:
-                del oct_file
-            except Exception:
-                pass
-        if raw_data is not None:
-            try:
-                del raw_data
-            except Exception:
-                pass
-        if scan_pattern is not None:
-            try:
-                del scan_pattern
-            except Exception:
-                pass
-        
+
+        # Drop references so the finally block can free the buffers
+        oct_file = None
+        raw_data = None
+        scan_pattern = None
+        frames = None
+
         # Clean up output folder on error
         if os.path.exists(outputFolder):
             try:
@@ -329,6 +339,11 @@ def yOCTScan3DVolume(centerX_mm: float, centerY_mm: float,
             except Exception:
                 pass  # Best effort
         raise
+
+    finally:
+        # oct_file/raw_data/scan_pattern reference each other in cycle, so normal
+        # cleanup won't free them. Force cleanup here to avoid Matrox errors.
+        gc.collect()
 
     
 # ============================================================================
@@ -458,102 +473,46 @@ def _apply_probe_config_to_probe(probe, config: dict) -> None:
             pass  # Could not set ApoVoltageY
 
 
-def _split_spectral_files_by_bscan(outputFolder: str, nYPixels: int, nXPixels: int) -> None:
+def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe,
+                               nYPixels: int = None, nBScanAvg: int = 1) -> None:
     """
-    Split concatenated Spectral0.data into individual B-scan files for MATLAB compatibility.
-        Args:
-            outputFolder (str): Output directory containing Header.xml and data/Spectral0.data
-            nYPixels (int): Number of B-scans in the volume
-            nXPixels (int): Number of pixels in the X direction
-        Returns:
-            None 
-""" 
-    import xml.etree.ElementTree as ET
-    
-    header_path = os.path.join(outputFolder, 'Header.xml')
-    data_folder = os.path.join(outputFolder, 'data')
-    spectral_concat_path = os.path.join(data_folder, 'Spectral0.data')
-    
-    if not os.path.exists(header_path) or not os.path.exists(spectral_concat_path):
-        return
-    
-    try:
-        tree = ET.parse(header_path)
-        root = tree.getroot()
-        
-        # Get dimensions from XML
-        size_z = None
-        size_x = None
-        for datafile_elem in root.findall('.//DataFile[@Type="Raw"]'):
-            size_z = int(datafile_elem.get('SizeZ', 0)) if datafile_elem.get('SizeZ') else None
-            size_x = int(datafile_elem.get('SizeX', 0)) if datafile_elem.get('SizeX') else None
-        
-        size_y = nYPixels
-        for size_elem in root.findall('.//SizePixel/SizeY'):
-            if size_elem.text:
-                size_y = int(float(size_elem.text))
-        
-        if not size_z or not size_x or not size_y:
-            return
-        
-        # Rename concatenated file temporarily
-        spectral_temp_path = os.path.join(data_folder, 'Spectral_temp.data')
-        os.rename(spectral_concat_path, spectral_temp_path)
-        
-        # Read concatenated data
-        with open(spectral_temp_path, 'rb') as f:
-            concat_data = f.read()
-        
-        # Calculate bytes per B-scan
-        total_bytes = len(concat_data)
-        bytes_per_bscan = total_bytes // size_y
-        
-        # Split into individual files
-        for bscan_idx in range(size_y):
-            start_byte = bscan_idx * bytes_per_bscan
-            end_byte = start_byte + bytes_per_bscan
-            bscan_data = concat_data[start_byte:end_byte]
-            
-            output_filename = f'Spectral{bscan_idx}.data'
-            output_path = os.path.join(data_folder, output_filename)
-            
-            with open(output_path, 'wb') as f:
-                f.write(bscan_data)
-        
-        # Remove temporary file
-        os.remove(spectral_temp_path)
-        
-    except Exception as e:
-        # If splitting fails, restore original file
-        if os.path.exists(spectral_temp_path):
-            os.rename(spectral_temp_path, spectral_concat_path)
+    Write Header.xml into the form MATLAB's reader expects.
 
+    The SDK's header does not match what yOCTLoadInterfFromFile needs, so we set
+    the per-B-scan dimensions (SizeX/SizeY/SizeZ, apodization and scan regions)
+    from the values measured on the per B-scan Spectral{i}.data files
 
-def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> None:
-    """
-    Fix Header.xml metadata for MATLAB compatibility.
+    For B-scan averaging two fields matter:
+      - Image/SizePixel/SizeY                 = distinct Y positions (nYPixels)
+      - Acquisition/SpeckleAveraging/SlowAxis = nBScanAvg
+    MATLAB reads SlowAxis to know how many repeats to average per Y position; if
+    it were left at 1, the repeats would be treated as separate Y positions
+
         Args:
-            outputFolder (str): Output directory containing Header.xml  
+            outputFolder (str): Output directory containing Header.xml
             raw_data (RawData): Raw data object from the scan
+            nYPixels (int): Number of distinct Y positions (B-scans in the volume)
+            nBScanAvg (int): Number of averaged B-scans per Y position
         Returns:
             None
     """
     import xml.etree.ElementTree as ET
-    
+
     header_path = os.path.join(outputFolder, 'Header.xml')
     if not os.path.exists(header_path):
         return
-    
+
+    navg = max(1, int(nBScanAvg))
+
     try:
         tree = ET.parse(header_path)
         root = tree.getroot()
-        
+
         # Get dimensions from raw_data
         data_shape = raw_data.shape
         size_z = data_shape[0]  # Spectral points
         total_x = data_shape[1]  # Total width
-        size_y = data_shape[2] if len(data_shape) > 2 else 1  # B-scans
-        
+
         # Get apodization size
         apo_size = 25  # Default
         try:
@@ -562,29 +521,35 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
                 apo_size = int(actual_apo_elem.text)
         except:
             pass
-        
-        # Calculate sizes from split files
+
+        # Single-B-scan width from one file. Each Spectral{i}.data holds
+        # exactly one B-scan, so this is the true width.
         spectral_0_path = os.path.join(outputFolder, 'data', 'Spectral0.data')
         if os.path.exists(spectral_0_path):
             file_size_bytes = os.path.getsize(spectral_0_path)
             elements_per_file = file_size_bytes // 2  # 2 bytes per uint16
-            width_per_bscan = elements_per_file // size_z
-            interf_size = width_per_bscan
+            interf_size = elements_per_file // size_z
         else:
-            width_per_bscan = total_x // size_y if size_y > 0 else total_x
-            interf_size = width_per_bscan
-        
-        # Count actual B-scans
+            interf_size = total_x
+
+        # Count the split B-scan files. Total = (Y positions) * (averages), so the
+        # number of distinct Y positions is that divided by the averaging count.
         data_folder = os.path.join(outputFolder, 'data')
         actual_bscans = 0
         if os.path.exists(data_folder):
-            spectral_files = [f for f in os.listdir(data_folder) 
+            spectral_files = [f for f in os.listdir(data_folder)
                             if f.startswith('Spectral') and f.endswith('.data')]
             actual_bscans = len(spectral_files)
-        
-        final_size_y = actual_bscans if actual_bscans > 0 else size_y
+
+        if actual_bscans > 0:
+            final_size_y = actual_bscans // navg
+        elif nYPixels is not None:
+            final_size_y = int(nYPixels)
+        else:
+            final_size_y = 1
+
         actual_interf_size = interf_size - apo_size
-        
+
         # Update XML metadata
         for datafile_elem in root.findall('.//DataFile[@Type="Raw"]'):
             datafile_elem.set('SizeZ', str(size_z))
@@ -594,18 +559,31 @@ def _fix_header_xml_for_matlab(outputFolder: str, raw_data: RawData, probe) -> N
             datafile_elem.set('ApoRegionStart0', '0')
             datafile_elem.set('ScanRegionStart0', str(apo_size))
             datafile_elem.set('ScanRegionEnd0', str(interf_size))
-        
+
         for sizex_elem in root.findall('.//Image/SizePixel/SizeX'):
             sizex_elem.text = str(actual_interf_size)
-        
+
         for sizey_elem in root.findall('.//Image/SizePixel/SizeY'):
             sizey_elem.text = str(final_size_y)
-        
+
         for image_elem in root.findall('.//Image'):
             if image_elem.get('Type') == 'Processed':
                 image_elem.set('Type', 'RawSpectra')
-        
+
+        # Set the averaging count MATLAB reads
+        # (Acquisition/SpeckleAveraging/SlowAxis), creating the nodes if missing.
+        if navg > 1:
+            acquisition_elem = root.find('.//Acquisition')
+            if acquisition_elem is not None:
+                speckle_elem = acquisition_elem.find('SpeckleAveraging')
+                if speckle_elem is None:
+                    speckle_elem = ET.SubElement(acquisition_elem, 'SpeckleAveraging')
+                slowaxis_elem = speckle_elem.find('SlowAxis')
+                if slowaxis_elem is None:
+                    slowaxis_elem = ET.SubElement(speckle_elem, 'SlowAxis')
+                slowaxis_elem.text = str(navg)
+
         tree.write(header_path, encoding='utf-8', xml_declaration=True)
-        
+
     except:
         pass  # If fixing fails, continue anyway
