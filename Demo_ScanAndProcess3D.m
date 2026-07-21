@@ -37,6 +37,11 @@ output_folder = '\';
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
 
+% Set to true to manually measure focus drift (a per-depth focus) before processing.)
+% Useful when the focus shifts with depth, e.g. a water objective imaging into
+% cleared tissue. When true it overrides focusPositionInImageZpix below:
+measureFocusDrift = false;
+
 %% Load hardware
 yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipScanning, ...
     'octProbePath', octProbePath, 'v', true);
@@ -97,6 +102,14 @@ scanParameters = yOCTScanTile (...
 
 %% Cleanup for next run
 yOCTHardware('teardown');
+
+%% Measure focus drift (optional)
+% Dispersion is known and the volume is on disk, so we can now click the focus
+% on sampled tiles to get a per-depth focus vector before reconstruction.
+if measureFocusDrift
+    focusPositionInImageZpix = yOCTMeasureFocusDrift( ...
+        volumeOutputFolder, dispersionQuadraticTerm, 'v', true);
+end
 
 %% Process the scan
 fprintf('%s Processing\n',datestr(datetime));
