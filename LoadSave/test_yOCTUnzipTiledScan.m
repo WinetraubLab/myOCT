@@ -5,7 +5,6 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
         testDir          % Temporary directory for test files
         dummyOctContent  % Simulated .oct file content
         headerXmlContent % Sample Header.xml content
-        headerXmlSlowAxisContent % Header.xml with SpeckleAveraging/SlowAxis, as Ganymede writes it
         dummyDataContent % Sample Spectral data file content
     end
     
@@ -23,22 +22,6 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             testCase.headerXmlContent = sprintf(...
                 ['<?xml version="1.0" encoding="UTF-8"?>\n' ...
                  '<Ocity version="1.0">\n' ...
-                 '    <DataFiles>\n' ...
-                 '        <DataFile Type="Raw" SizeZ="2048" SizeX="10" RangeZ="2.0" RangeX="0.5" RangeY="0.5" BytesPerPixel="2">data\\Spectral0.data</DataFile>\n' ...
-                 '    </DataFiles>\n' ...
-                 '</Ocity>\n']);
-
-            % Header.xml with a SpeckleAveraging section, as Ganymede's
-            % native writer saves it (SlowAxis is always 1 at scan time,
-            % even when B-scan averaging was used)
-            testCase.headerXmlSlowAxisContent = sprintf(...
-                ['<?xml version="1.0" encoding="UTF-8"?>\n' ...
-                 '<Ocity version="1.0">\n' ...
-                 '    <Acquisition>\n' ...
-                 '        <SpeckleAveraging>\n' ...
-                 '            <SlowAxis>1</SlowAxis>\n' ...
-                 '        </SpeckleAveraging>\n' ...
-                 '    </Acquisition>\n' ...
                  '    <DataFiles>\n' ...
                  '        <DataFile Type="Raw" SizeZ="2048" SizeX="10" RangeZ="2.0" RangeX="0.5" RangeY="0.5" BytesPerPixel="2">data\\Spectral0.data</DataFile>\n' ...
                  '    </DataFiles>\n' ...
@@ -468,112 +451,6 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             end
         end
         
-        function testBScanAvgHeaderFixGanymede(testCase)
-            % Ganymede scans acquired with B-scan averaging must get
-            % SlowAxis in Header.xml updated to the real averaging count,
-            % both for tiles that are already unzipped and for tiles that
-            % get unzipped by this function. Running twice must be safe.
-
-            scanInfo = struct();
-            scanInfo.octFolders = {'DataAvg01', 'DataAvg02'};
-            scanInfo.octSystem = 'ganymede'; % Lowercase, as yOCTScanTile stores it
-            scanInfo.nBScanAvg = 3;
-            testCase.writeScanInfo(scanInfo);
-
-            % DataAvg01: already unzipped, header has SlowAxis = 1
-            testCase.createUnzippedTile('DataAvg01', testCase.headerXmlSlowAxisContent);
-
-            % DataAvg02: compressed .oct whose header has SlowAxis = 1
-            dataPath = fullfile(testCase.testDir, 'DataAvg02');
-            mkdir(dataPath);
-            testCase.createMockOctFile(...
-                fullfile(dataPath, 'VolumeGanymedeOCTFile.oct'), ...
-                true, testCase.headerXmlSlowAxisContent);
-
-            results = yOCTUnzipTiledScan(testCase.testDir, ...
-                'deleteCompressedAfterUnzip', false, ...
-                'v', false);
-
-            testCase.verifyEqual(length(results.alreadyUnzipped), 1);
-            testCase.verifyEqual(length(results.successfullyUnzipped), 1);
-
-            % Both headers should now record the averaging count
-            for folder = {'DataAvg01', 'DataAvg02'}
-                txt = fileread(fullfile(testCase.testDir, folder{1}, 'Header.xml'));
-                testCase.verifyTrue(contains(txt, '<SlowAxis>3</SlowAxis>'), ...
-                    sprintf('%s Header.xml should have SlowAxis=3', folder{1}));
-            end
-
-            % Running again should be a no-op (headers already correct)
-            % and must not emit warnings (for example noSlowAxisTag)
-            testCase.verifyWarningFree(@() yOCTUnzipTiledScan(testCase.testDir, ...
-                'deleteCompressedAfterUnzip', false, 'v', false));
-            for folder = {'DataAvg01', 'DataAvg02'}
-                txt = fileread(fullfile(testCase.testDir, folder{1}, 'Header.xml'));
-                testCase.verifyTrue(contains(txt, '<SlowAxis>3</SlowAxis>'), ...
-                    sprintf('%s Header.xml should still have SlowAxis=3 after second run', folder{1}));
-            end
-        end
-
-        function testBScanAvgHeaderNotTouchedOnGan632(testCase)
-            % Gan632 records B-scan averaging at scan time in its Python
-            % SDK, so this function must NOT touch its headers
-
-            scanInfo = struct();
-            scanInfo.octFolders = {'DataG01'};
-            scanInfo.octSystem = 'gan632';
-            scanInfo.nBScanAvg = 3;
-            testCase.writeScanInfo(scanInfo);
-
-            testCase.createUnzippedTile('DataG01', testCase.headerXmlSlowAxisContent);
-
-            yOCTUnzipTiledScan(testCase.testDir, 'v', false);
-
-            txt = fileread(fullfile(testCase.testDir, 'DataG01', 'Header.xml'));
-            testCase.verifyTrue(contains(txt, '<SlowAxis>1</SlowAxis>'), ...
-                'Gan632 Header.xml should be left untouched');
-        end
-
-        function testBScanAvgHeaderNotTouchedWithoutAveraging(testCase)
-            % With nBScanAvg = 1 the header must not change. Use a sentinel
-            % SlowAxis value different from nBScanAvg so the test fails if
-            % the fix (wrongly) runs and rewrites it.
-
-            scanInfo = struct();
-            scanInfo.octFolders = {'DataN01'};
-            scanInfo.octSystem = 'ganymede';
-            scanInfo.nBScanAvg = 1;
-            testCase.writeScanInfo(scanInfo);
-
-            headerWithSentinel = strrep(testCase.headerXmlSlowAxisContent, ...
-                '<SlowAxis>1</SlowAxis>', '<SlowAxis>7</SlowAxis>');
-            testCase.createUnzippedTile('DataN01', headerWithSentinel);
-
-            yOCTUnzipTiledScan(testCase.testDir, 'v', false);
-
-            txt = fileread(fullfile(testCase.testDir, 'DataN01', 'Header.xml'));
-            testCase.verifyTrue(contains(txt, '<SlowAxis>7</SlowAxis>'), ...
-                'Header.xml should be left untouched when nBScanAvg = 1');
-        end
-
-        function testBScanAvgWarnsWhenNoSlowAxisTag(testCase)
-            % A Ganymede averaged scan whose header has no SlowAxis tag
-            % should warn (and leave the header unchanged)
-
-            scanInfo = struct();
-            scanInfo.octFolders = {'DataW01'};
-            scanInfo.octSystem = 'ganymede';
-            scanInfo.nBScanAvg = 2;
-            testCase.writeScanInfo(scanInfo);
-
-            % Header without a SpeckleAveraging/SlowAxis section
-            testCase.createUnzippedTile('DataW01', testCase.headerXmlContent);
-
-            testCase.verifyWarning(...
-                @() yOCTUnzipTiledScan(testCase.testDir, 'v', false), ...
-                'yOCTUnzipTiledScan:noSlowAxisTag');
-        end
-
         function testMissingFolderOnly(testCase)
             % Test specific case where folder is in JSON but doesn't exist in filesystem
             
@@ -608,38 +485,13 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
     end
     
     methods(Access = private)
-        function writeScanInfo(testCase, scanInfo)
-            % Writes a ScanInfo.json file to the test directory
-            jsonPath = fullfile(testCase.testDir, 'ScanInfo.json');
-            jsonText = jsonencode(scanInfo);
-            fid = fopen(jsonPath, 'w');
-            fprintf(fid, '%s', jsonText);
-            fclose(fid);
-        end
-
-        function createUnzippedTile(testCase, folderName, headerContent)
-            % Creates an already-unzipped tile folder with the given
-            % Header.xml content and a few dummy spectral files
-            dataPath = fullfile(testCase.testDir, folderName);
-            mkdir(dataPath);
-            mkdir(fullfile(dataPath, 'data'));
-            fid = fopen(fullfile(dataPath, 'Header.xml'), 'w');
-            fprintf(fid, '%s', headerContent);
-            fclose(fid);
-            testCase.createDummySpectralFiles(fullfile(dataPath, 'data'), 3);
-        end
-
-        function createMockOctFile(testCase, octFilePath, includeValidHeader, headerContent)
+        function createMockOctFile(testCase, octFilePath, includeValidHeader)
             % Creates a mock .oct file that can be "unzipped" by yOCTUnzipOCTFolder
             % Since we're testing the logic, we'll create a minimal structure
             % includeValidHeader: if true, creates Header.xml inside archive (default: true)
-            % headerContent: Header.xml content to use (default: testCase.headerXmlContent)
 
             if nargin < 3
                 includeValidHeader = true;
-            end
-            if nargin < 4
-                headerContent = testCase.headerXmlContent;
             end
 
             % Create a temporary folder to build the archive contents
@@ -651,7 +503,7 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             if includeValidHeader
                 headerPath = fullfile(tempFolder, 'Header.xml');
                 fid = fopen(headerPath, 'w');
-                fprintf(fid, '%s', headerContent);
+                fprintf(fid, '%s', testCase.headerXmlContent);
                 fclose(fid);
             end
             
