@@ -489,16 +489,16 @@ classdef test_yOCTUnzipTiledScan < matlab.unittest.TestCase
             % Creates a mock .oct file that can be "unzipped" by yOCTUnzipOCTFolder
             % Since we're testing the logic, we'll create a minimal structure
             % includeValidHeader: if true, creates Header.xml inside archive (default: true)
-
+            
             if nargin < 3
                 includeValidHeader = true;
             end
-
+            
             % Create a temporary folder to build the archive contents
             tempFolder = fullfile(tempdir, ['oct_temp_' datestr(now, 'yyyymmdd_HHMMSS_FFF')]);
             mkdir(tempFolder);
             mkdir(fullfile(tempFolder, 'data'));
-
+            
             % Create Header.xml if requested
             if includeValidHeader
                 headerPath = fullfile(tempFolder, 'Header.xml');
