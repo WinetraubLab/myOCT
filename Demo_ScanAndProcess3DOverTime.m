@@ -28,6 +28,7 @@ zToScan_mm = unique([-100 (-30:scanZJump_um:400), 0])*1e-3; %[mm]
 focusSigma = 10; % When stitching along Z axis (multiple focus points), what is the size of each focus in z [pixels]. OBJECTIVE_DEPENDENT: for 10x use 20, for 20x use 15, for 40x use 10 or 1
 % Other scanning parameters
 tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
+nBScanAvg = 1; % Number of B-scans to average at each position (1 = no averaging). >1 only on Gan632 and Ganymede.
 
 % Where to save scan files
 outputFolder = 'temp/';
@@ -127,6 +128,7 @@ for scanI = 1:length(scanTimeIntervals_min)
         'xOffset',   0, ...
         'yOffset',   0, ... 
         'zDepths',   zToScan_mm, ... [mm]
+        'nBScanAvg', nBScanAvg, ...
         'v',true  ...
         );
 	

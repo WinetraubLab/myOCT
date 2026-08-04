@@ -10,5 +10,6 @@ yOCTScanTile(...
     'nYPixels',10,  ... %Number of pixels along the y direction
     'xCenters' ,[0 1], ...[mm] center of scan
     'yCenters' ,[0 1], ...[mm] center of scan
-    'zDepts', [0 0.1] ...[mm]
+    'zDepts', [0 0.1], ...[mm]
+    'nBScanAvg', 1 ...
 );

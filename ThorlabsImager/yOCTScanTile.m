@@ -104,8 +104,9 @@ end
 if (in.nBScanAvg > 1 && ~any(strcmpi(octSystemName, {'Gan632', 'Ganymede'})))
     % B-scan averaging saves nBScanAvg B-scans per Y position in Y-major order,
     % which MATLAB averages on load once Acquisition/SpeckleAveraging/SlowAxis
-    % is set. Gan632 sets it in its Python SDK; Ganymede is patched after the
-    % scan by yOCTSetBScanAveragingInHeader. Other systems are not validated yet.
+    % is set. Gan632 sets it in its Python SDK; Ganymede sets it in the native
+    % ThorlabsImager DLL before saving the .oct file. Other systems are not validated yet.
+    
     error('B Scan Averaging is only supported on Gan632 and Ganymede.');
 end
 
@@ -220,7 +221,7 @@ for scanI=1:length(in.scanOrder)
 	if in.unzipOCTFile
 		yOCTUnzipOCTFolder(strcat(s,'VolumeGanymedeOCTFile.oct'), s,true);
 	end
-    
+
 end
 
 %% Finalize
