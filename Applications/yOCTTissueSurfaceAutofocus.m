@@ -19,7 +19,6 @@ function [surfacePosition_mm, x_mm, y_mm] = yOCTTissueSurfaceAutofocus(varargin)
 %   moveTissueToFocus: When set to true, it will move the Z stage automatically when the surface is out of focus.
 %       When set to false, it will not move stage, but will notify user how to move stage back to focus.
 %       Default is true. If skipHardware is set to true (via yOCTHardwareLibSetUp) then moveTissueToFocus is forced to false.
-%   nBScanAvg: Number of B-scans to average at each position. Default: 1.
 %   v: Verbose mode for debugging purposes and visualization default is 
 %       false.
 % OUTPUTS:
@@ -44,7 +43,6 @@ addParameter(p,'assertInFocusAcceptableRange_mm',0.025);
 addParameter(p,'roiToAssertFocus_mm',[], @(z) isempty(z) || ...
          (isnumeric(z) && numel(z)==4 && all(z(3:4)>0)));
 addParameter(p,'moveTissueToFocus',true,@islogical);
-addParameter(p,'nBScanAvg',1,@isnumeric); % Number of B-scans to average at each position
 addParameter(p,'v',false);
 
 parse(p,varargin{:});
@@ -57,7 +55,6 @@ octProbeFOV_mm          = in.octProbeFOV_mm;
 octProbePath            = in.octProbePath;
 dispersionQuadraticTerm = in.dispersionQuadraticTerm;
 temporaryFolder         = in.temporaryFolder;
-nBScanAvg               = in.nBScanAvg;
 v                       = in.v;
 roi_mm                  = in.roiToAssertFocus_mm;
 acceptableRange_mm      = in.assertInFocusAcceptableRange_mm;
@@ -109,7 +106,6 @@ yOCTScanTile (...
     'octProbeFOV_mm',  octProbeFOV_mm, ...
     'octProbePath',    octProbePath, ...
     'pixelSize_um',    pixelSize_um, ...
-    'nBScanAvg',       nBScanAvg, ...
     'v',               v  ...
     );
 

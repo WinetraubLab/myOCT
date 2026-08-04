@@ -18,7 +18,6 @@ function [xTissueRange_mm, yTissueRange_mm, tissueCentroid_mm, tissueArea_mm2] =
 %   pixelSize_um            20          XY pixel resolution for overview (µm).
 %   scanTileSize_mm         0.5         FOV of each overview tile (mm).
 %   tissueRefractiveIndex   1.33        Tissue refractive index.
-%   nBScanAvg               1           Number of B-scans to average at each position.
 %   -- Processing parameters ----------------------------------------------------------
 %   dispersionQuadraticTerm []          Dispersion compensation [nm2/rad].
 %                                       Required for scan and folder modes; ignored for .tif mode.
@@ -52,7 +51,6 @@ addParameter(p, 'yRange_mm',                 [-3 3], @(x) isnumeric(x) && numel(
 addParameter(p, 'pixelSize_um',              20,     @(x) isnumeric(x) && isscalar(x) && x>0);
 addParameter(p, 'scanTileSize_mm',           0.5,    @(x) isnumeric(x) && isscalar(x) && x>0);
 addParameter(p, 'tissueRefractiveIndex',     1.33,   @isnumeric);
-addParameter(p, 'nBScanAvg',                 1,      @isnumeric); % Number of B-scans to average at each position
 % -- Processing parameters -----------------------------------------------------
 addParameter(p, 'dispersionQuadraticTerm',   [],     @(x) isempty(x) || isnumeric(x));
 addParameter(p, 'focusSigma',                10,     @isnumeric);
@@ -71,7 +69,6 @@ xRange_mm                = in.xRange_mm;
 yRange_mm                = in.yRange_mm;
 pixelSize_um             = in.pixelSize_um;
 scanTileSize_mm          = in.scanTileSize_mm;
-nBScanAvg                = in.nBScanAvg;
 dispersionQuadraticTerm  = in.dispersionQuadraticTerm;
 focusSigma               = in.focusSigma;
 focusPositionInImageZpix = in.focusPositionInImageZpix;
@@ -168,7 +165,6 @@ if ~analyzeTifOnly && ~analyzeFolderOnly
             'zDepths',               overviewZ_um * 1e-3, ...
             'tissueRefractiveIndex', in.tissueRefractiveIndex, ...
             'octProbeFOV_mm',        scanTileSize_mm, ...
-            'nBScanAvg',             nBScanAvg, ...
             'unzipOCTFile',          true, ...
             'v',                     v);
     else
