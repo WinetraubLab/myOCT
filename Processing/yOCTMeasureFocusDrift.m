@@ -484,7 +484,7 @@ if numel(zStage_mm) >= 2
         + fitDiagnostics.intercept_pix;
     fitDrift_um = (fitPix - focusTable.focusMeasured_pix(1)) * dz_um;
     plot(zLine_um, fitDrift_um, '-', 'Color', [0.85 0.2 0.2], 'LineWidth', 1.5);
-    legendEntries{end+1} = 'Robust physical fit';
+    legendEntries{end+1} = 'Physical fit (outlier clicks excluded)';
     legend(legendEntries, 'Location', 'northwest');
 
     switch fitDiagnostics.driftRegime
