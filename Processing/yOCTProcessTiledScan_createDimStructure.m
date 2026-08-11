@@ -101,6 +101,9 @@ else
         refFocusPix = focusPositionInImageZpix(refTileIndex);
     end
 
+    assert(round(refFocusPix) >= 1 && round(refFocusPix) <= length(dimOneTile.z.values), ...
+        'Focus position %.1f pix is outside the image (1..%d z pixels). Check focusPositionInImageZpix.', ...
+        refFocusPix, length(dimOneTile.z.values));
     dimOneTile.z.values = dimOneTile.z.values - dimOneTile.z.values(round(refFocusPix));
     dimOneTile.z.origin = 'z=0 is focus position';
 end
