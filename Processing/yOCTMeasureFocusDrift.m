@@ -1,5 +1,5 @@
-function focusPositionInImageZpix = yOCTMeasureFocusDrift( ...
-    volumeOutputFolder, dispersionQuadraticTerm, varargin)
+function [focusPositionInImageZpix, tissueRI, driftSlope] = ...
+    yOCTMeasureFocusDrift(volumeOutputFolder, dispersionQuadraticTerm, varargin)
 % Measure focus drift across a z-stack caused by refractive index mismatch
 % (e.g. water objective imaging into cleared tissue). Manually click the
 % focus on sampled tiles; returns a per-depth focus vector for yOCTProcessTiledScan.
@@ -13,23 +13,11 @@ function focusPositionInImageZpix = yOCTMeasureFocusDrift( ...
 %   Parameter               Default
 %
 %   'firstMeasureDepth_um'  50      First stage depth to measure, in microns
-%                                   INSIDE the tissue. Do not start at z = 0:
-%                                   there the focus sits on top of the bright
-%                                   coverslip reflection and the two are
-%                                   indistinguishable, so clicks land on the
-%                                   coverslip and corrupt the fit. 50 um is
-%                                   where focus and coverslip have separated
-%                                   by ~4x focusSigma for the common case
-%                                   (focusSigma = 10 pix, ~1.27 um z pixel);
-%                                   for a 10x objective (focusSigma ~ 20)
-%                                   consider ~100. The focus at z <= 0 is
-%                                   recovered by the fit (it extrapolates
-%                                   back better than a click on the
-%                                   coverslip measures it).
+%                                   INSIDE the tissue. The focus is not visible in the gel above 
+%                                   the tissue, so we skip z ~ 0.
 %   'focusMeasureStep_um'   50      Measure the focus every this many microns
-%                                   of stage depth, going deeper. User can
-%                                   stop measuring once the focus is not visible.
-%   'outputDirectory'        ''      Where to save results (drift figure + focus vector)
+%                                   of stage depth, going deeper.
+%   'outputDirectory'        ''     Where to save results (drift figure + focus vector)
 %                               Three options:
 %                                 (empty)         : save in volumeOutputFolder
 %                                 'path/to/dir/'  : save in this dir given folder
@@ -37,20 +25,18 @@ function focusPositionInImageZpix = yOCTMeasureFocusDrift( ...
 %   'v'                     false   Verbose mode: prints progress and results,
 %                                   and keeps the drift figure open.
 %
-% OUTPUT:
+% OUTPUTS:
 %   focusPositionInImageZpix:   1 x nDepths vector of focus pixels (one per zDepth scan
 %                               in ScanInfo.json). Pass straight to yOCTProcessTiledScan
 %                               as 'focusPositionInImageZpix'.
-%
-% HOW THE VECTOR IS COMPUTED:
-%   The clicks are fitted with a physically-constrained robust line
-%   (see yOCTMeasureFocusDrift_fitDrift): focus drift vs stage depth is
-%   linear with slope (ns^2-ni^2)/(ni*na) which is always >= 0, clicks that
-%   land on fixed structures instead of the focus are rejected as outliers,
-%   and the line is evaluated at every zDepth of the scan (held flat for
-%   z <= 0, where the focus is in the immersion medium and does not drift).
-%   The saved .mat also contains the fit diagnostics (implied tissue index,
-%   rejected clicks, extrapolation uncertainty).
+%   tissueRI:                   Tissue refractive index, measured from how fast
+%                               the focus drifts (faster drift = denser tissue),
+%                               using the water above the sample (1.33) as the
+%                               known reference. Independent of the RI typed at
+%                               scan time. NaN when the clicks were not physical.
+%   driftSlope:                 Focus drift slope, unitless (um moved in the image
+%                               per um of stage depth). 0 = no drift (e.g. water);
+%                               larger = higher tissue index (clearing proxy).
 
 %% Parse inputs
 p = inputParser;
@@ -77,9 +63,11 @@ depthsToMeasure = selectDepthsToMeasure(geom.zDepths_mm, ...
 %% Measure the focus on each requested tile
 measurements = measureFocus(geom, depthsToMeasure, dispersionQuadraticTerm, v);
 
-%% Compute the focus for every depth (robust physically-constrained fit)
-focusPositionInImageZpix = getFocusForAllDepths( ...
+%% Compute the focus for every depth
+[focusPositionInImageZpix, fitDiagnostics] = getFocusForAllDepths( ...
     measurements, geom, in.outputDirectory, volumeOutputFolder, v);
+tissueRI   = fitDiagnostics.tissueRI;
+driftSlope = fitDiagnostics.driftSlope;
 
 end % yOCTMeasureFocusDrift
 
@@ -188,15 +176,19 @@ hFig = figure('Name', 'Choose Focus Positions', 'NumberTitle', 'off', ...
     'Color', 'w', 'Units', 'normalized', 'Position', [0.15 0.12 0.62 0.78]);
 h = createDiagnosticControls(hFig, geom.xCenters);
 
-acceptedIdx      = [];
-acceptedFocusPix = [];
-acceptedFocusZmm = [];
+nMeasure = numel(depthsToMeasure);
+
+% One slot per selected depth; NaN = not measured. Re-accepting a depth
+% overwrites its slot, "Skip depth" clears it:
+slotFocusPix = nan(1, nMeasure);
+slotFocusZmm = nan(1, nMeasure);
 
 % The X tile and Bscan the user settles on carry over to the next depth selection:
 currentXTileI   = geom.xi0;
 currentYIInFile = geom.yIInFileCenter;
 
-for k = 1:numel(depthsToMeasure)
+k = 1;
+while k <= nMeasure
     zi = depthsToMeasure(k);
     zt = geom.zDepths_mm(zi);
 
@@ -208,17 +200,22 @@ for k = 1:numel(depthsToMeasure)
             geom.xCenters(geom.xi0), geom.yCenter0);
         if isempty(folderPath)
             warning('No tile found for zDepth %.4f mm. Skipping.', zt);
+            k = k + 1;
             continue;
         end
         currentXTileI = geom.xi0;
     end
 
     % Assemble the per-tile state, hand it and wait for the user to choose:
+    measured = ~isnan(slotFocusPix);
     cursor = struct('folderPath', folderPath, ...
         'xTileI', currentXTileI, 'yIInFile', currentYIInFile, ...
-        'zt', zt, 'k', k, 'nMeasure', numel(depthsToMeasure), ...
-        'predPix', predictFocusPix(geom, geom.zDepths_mm(acceptedIdx), acceptedFocusPix, zt));
+        'zt', zt, 'k', k, 'nMeasure', nMeasure, ...
+        'prevClickPix', slotFocusPix(k), 'prevClickZmm', slotFocusZmm(k), ...
+        'predPix', predictFocusPix(geom, ...
+            geom.zDepths_mm(depthsToMeasure(measured)), slotFocusPix(measured), zt));
     guidata(hFig, initTileState(geom, h, dispersionQuadraticTerm, cursor));
+    set(h.hDepthLabel, 'String', sprintf('Depth %d / %d', k, nMeasure));
 
     renderTileBScan(hFig);
     uiwait(hFig);
@@ -235,35 +232,56 @@ for k = 1:numel(depthsToMeasure)
     if strcmp(state.action, 'stop')
         break;
     end
+    if strcmp(state.action, 'prevDepth') || strcmp(state.action, 'nextDepth')
+        % Navigate without recording: the depth we are leaving keeps
+        % whatever it had (only Accept and Skip modify a depth's slot).
+        if strcmp(state.action, 'prevDepth')
+            k = max(1, k - 1);
+        else
+            k = min(nMeasure, k + 1);
+        end
+        continue;
+    end
     if strcmp(state.action, 'skip')
         % Focus not visible at this depth: leave it out of the fit and move
-        % on. The fit still assigns this depth a focus from the line, same
-        % as the unmeasured depths above firstMeasureDepth_um.
+        % on (clears the stored click if this depth had one). The fit still
+        % assigns this depth a focus from the line, same as the unmeasured
+        % depths above firstMeasureDepth_um.
+        slotFocusPix(k) = NaN;
+        slotFocusZmm(k) = NaN;
         if v
             fprintf('%s Depth %.3f mm skipped by user (focus not visible)\n', ...
                 datestr(datetime), zt);
         end
+        measured = ~isnan(slotFocusPix);
+        updateDriftReadout(h.hDriftText, geom, ...
+            geom.zDepths_mm(depthsToMeasure(measured)), slotFocusPix(measured));
+        k = k + 1;
         continue;
     end
     if isnan(state.clickZpix)
         warning('No focus click registered for tile %d; skipping.', zi);
+        k = k + 1;
         continue;
     end
 
-    acceptedIdx(end + 1)      = zi;               %#ok<AGROW>
-    acceptedFocusPix(end + 1) = state.clickZpix;  %#ok<AGROW>
-    acceptedFocusZmm(end + 1) = state.clickZmm;   %#ok<AGROW>
+    slotFocusPix(k) = state.clickZpix;  % re-accepting a depth replaces its click
+    slotFocusZmm(k) = state.clickZmm;
 
-    updateDriftReadout(h.hDriftText, geom, geom.zDepths_mm(acceptedIdx), ...
-        acceptedFocusPix);
+    measured = ~isnan(slotFocusPix);
+    updateDriftReadout(h.hDriftText, geom, ...
+        geom.zDepths_mm(depthsToMeasure(measured)), slotFocusPix(measured));
+    k = k + 1;
 end
 
 if ishandle(hFig)
     close(hFig);
 end
 
-measurements = struct('idx', acceptedIdx(:), ...
-    'focusPix', acceptedFocusPix(:), 'focusZmm', acceptedFocusZmm(:));
+measured = ~isnan(slotFocusPix);
+measuredIdx = depthsToMeasure(measured);
+measurements = struct('idx', measuredIdx(:), ...
+    'focusPix', slotFocusPix(measured).', 'focusZmm', slotFocusZmm(measured).');
 end
 
 
@@ -292,10 +310,9 @@ state.predPix  = cursor.predPix;
 
 state.titleStr = sprintf(['Depth %d of %d   (stage z = %.3f mm)\n' ...
     'Click the FOCUS then "Accept focus & Next".   ' ...
-    'If you cannot see it: try another B-scan or X tile, "Skip depth" to keep ' ...
+    'If you cannot see it: try another B-scan or "Skip depth" to keep ' ...
     'going without this one, or "Stop measuring here".\n' ...
-    'Tip: the focus is the bright BAND that stays near the same depth between tiles; ' ...
-    'tissue features and the coverslip stream upward through it.'], ...
+    'Tip: the focus is the bright BAND that stays near the same depth in the X axis. '], ...
     cursor.k, cursor.nMeasure, cursor.zt);
 
 state.hAx         = h.hAx;
@@ -304,12 +321,14 @@ state.hContrast   = h.hContrast;
 state.hBScanLabel = h.hBScanLabel;
 state.hXTileLabel = h.hXTileLabel;
 
-% Per-tile working values, filled in later:
+% Per-tile working values. clickZpix/Zmm are preloaded with the stored
+% click when this depth was already measured (NaN otherwise), so revisiting
+% a depth shows its click and Accept keeps it unless the user re-clicks:
 state.dimFrame   = [];
 state.baseLo     = 0;
 state.baseHi     = 1;
-state.clickZpix  = NaN;
-state.clickZmm   = NaN;
+state.clickZpix  = cursor.prevClickPix;
+state.clickZmm   = cursor.prevClickZmm;
 state.hFocusLine = [];
 state.action     = '';
 end
@@ -351,15 +370,15 @@ if n >= 2
     end
     switch d.driftRegime
         case 'no-measurable-drift'
-            nsTxt = sprintf('~%.2f (no measurable drift)', d.impliedTissueN);
+            nsTxt = sprintf('~%.2f (no measurable drift)', d.tissueRI);
         case 'suspicious-structure-clicks'
             nsTxt = 'not physical (clicks on a structure?)';
         otherwise
-            nsTxt = sprintf('%.3f', d.impliedTissueN);
+            nsTxt = sprintf('%.3f', d.tissueRI);
     end
     set(hDriftText, 'String', sprintf( ...
-        'Clicked points: %d (%d rejected)\nDrift slope: %.3f um/um\nImplied tissue n: %s', ...
-        n, numel(d.rejectedIdx), d.slope_umPerUm, nsTxt));
+        'Clicked points: %d (%d rejected)\nDrift slope: %.3f um/um\nTissue RI: %s', ...
+        n, numel(d.rejectedIdx), d.driftSlope, nsTxt));
 else
     set(hDriftText, 'String', sprintf( ...
         'Clicked points: %d\n(need >= 2 for slope)', n));
@@ -367,12 +386,13 @@ end
 end
 
 
-function focusPositionInImageZpix = getFocusForAllDepths( ...
+function [focusPositionInImageZpix, fitDiagnostics] = getFocusForAllDepths( ...
     measurements, geom, outputDirectory, volumeOutputFolder, v)
 % Turn the accepted selections into (1) a per-tile table and (2) a focus pixel
 % for every z-depth via the physically-constrained robust fit (see
 % yOCTMeasureFocusDrift_fitDrift). The vector is what yOCTProcessTiledScan
-% consumes. Errors if nothing was chosen; prints the table when verbose.
+% consumes; fitDiagnostics carries the measured drift slope and implied
+% tissue index. Errors if nothing was chosen; prints the table when verbose.
 if isempty(measurements.idx)
     error(['No focus measurements were recorded. The focus was not ' ...
         'visible/clickable on any tile.']);
@@ -489,18 +509,22 @@ if numel(zStage_mm) >= 2
 
     switch fitDiagnostics.driftRegime
         case 'no-measurable-drift'
-            nsTxt = sprintf('~%.2f (no measurable drift)', fitDiagnostics.impliedTissueN);
+            nsTxt = sprintf('~%.2f (no measurable drift)', fitDiagnostics.tissueRI);
         case 'suspicious-structure-clicks'
             nsTxt = 'not physical (structure clicks?)';
         otherwise
-            nsTxt = sprintf('%.3f', fitDiagnostics.impliedTissueN);
+            nsTxt = sprintf('%.3f', fitDiagnostics.tissueRI);
     end
     clampTxt = '';
     if fitDiagnostics.wasSlopeClamped
         clampTxt = '  [slope clamped to physical range]';
     end
-    subtitle(sprintf('Drift slope = %.4f um/um, implied tissue n = %s%s', ...
-        fitDiagnostics.slope_umPerUm, nsTxt, clampTxt));
+    r2Txt = '';
+    if ~isnan(fitDiagnostics.r2)
+        r2Txt = sprintf(',  R^2 = %.3f', fitDiagnostics.r2);
+    end
+    subtitle(sprintf('Drift slope = %.4f um/um, Tissue RI = %s%s%s', ...
+        fitDiagnostics.driftSlope, nsTxt, r2Txt, clampTxt));
 end
 hold off;
 end
@@ -541,26 +565,36 @@ uicontrol(hFig, 'Style', 'pushbutton', 'Units', 'normalized', ...
     'FontSize', 11, 'Callback', @onStop);
 
 uicontrol(hFig, 'Style', 'pushbutton', 'Units', 'normalized', ...
-    'Position', [0.10 0.095 0.095 0.05], 'String', '< B-scan', ...
+    'Position', [0.10 0.095 0.085 0.05], 'String', '< B-scan', ...
     'FontSize', 10, 'Callback', {@onOtherBScan, -1});
 h.hBScanLabel = uicontrol(hFig, 'Style', 'text', 'Units', 'normalized', ...
-    'Position', [0.20 0.095 0.125 0.04], 'String', 'B-scan', ...
+    'Position', [0.19 0.095 0.09 0.04], 'String', 'B-scan', ...
     'HorizontalAlignment', 'center', 'BackgroundColor', 'w', 'FontSize', 9);
 uicontrol(hFig, 'Style', 'pushbutton', 'Units', 'normalized', ...
-    'Position', [0.33 0.095 0.095 0.05], 'String', 'B-scan >', ...
+    'Position', [0.285 0.095 0.085 0.05], 'String', 'B-scan >', ...
     'FontSize', 10, 'Callback', {@onOtherBScan, +1});
 
 xTileEnable = 'on';
 if length(xCenters) <= 1; xTileEnable = 'off'; end
 uicontrol(hFig, 'Style', 'pushbutton', 'Units', 'normalized', ...
-    'Position', [0.50 0.095 0.095 0.05], 'String', '< X tile', ...
+    'Position', [0.40 0.095 0.085 0.05], 'String', '< X tile', ...
     'FontSize', 10, 'Enable', xTileEnable, 'Callback', {@onOtherXTile, -1});
 h.hXTileLabel = uicontrol(hFig, 'Style', 'text', 'Units', 'normalized', ...
-    'Position', [0.60 0.095 0.125 0.04], 'String', 'X tile', ...
+    'Position', [0.49 0.095 0.09 0.04], 'String', 'X tile', ...
     'HorizontalAlignment', 'center', 'BackgroundColor', 'w', 'FontSize', 9);
 uicontrol(hFig, 'Style', 'pushbutton', 'Units', 'normalized', ...
-    'Position', [0.73 0.095 0.095 0.05], 'String', 'X tile >', ...
+    'Position', [0.585 0.095 0.085 0.05], 'String', 'X tile >', ...
     'FontSize', 10, 'Enable', xTileEnable, 'Callback', {@onOtherXTile, +1});
+
+uicontrol(hFig, 'Style', 'pushbutton', 'Units', 'normalized', ...
+    'Position', [0.70 0.095 0.085 0.05], 'String', '< Depth', ...
+    'FontSize', 10, 'Callback', {@onOtherDepth, -1});
+h.hDepthLabel = uicontrol(hFig, 'Style', 'text', 'Units', 'normalized', ...
+    'Position', [0.79 0.095 0.09 0.04], 'String', 'Depth', ...
+    'HorizontalAlignment', 'center', 'BackgroundColor', 'w', 'FontSize', 9);
+uicontrol(hFig, 'Style', 'pushbutton', 'Units', 'normalized', ...
+    'Position', [0.885 0.095 0.085 0.05], 'String', 'Depth >', ...
+    'FontSize', 10, 'Callback', {@onOtherDepth, +1});
 end
 
 
@@ -701,6 +735,22 @@ end
 
 guidata(hFig, st);
 onAdjustDisplay(st.hBright, []);
+end
+
+
+function onOtherDepth(src, ~, delta)
+% Navigate to the previous/next measured depth. Unlike B-scan/X-tile
+% navigation this cannot re-render in place: the main loop owns the depth
+% cursor and must load a different tile, so resume it with the direction:
+hFig = ancestor(src, 'figure');
+st = guidata(hFig);
+if delta < 0
+    st.action = 'prevDepth';
+else
+    st.action = 'nextDepth';
+end
+guidata(hFig, st);
+uiresume(hFig);
 end
 
 

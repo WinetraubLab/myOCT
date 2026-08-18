@@ -1,42 +1,16 @@
 function [focusPositionInImageZpix, fitDiagnostics] = yOCTMeasureFocusDrift_fitDrift( ...
     zClickedStage_mm, focusClicked_pix, zAllDepths_mm, zPixelSize_um, nZPixels, varargin)
-% Fit a physically-constrained line to clicked focus positions and return a
-% focus pixel for every z-depth in the scan. This is the math core of
-% yOCTMeasureFocusDrift: it has no GUI, no files and no hardware, so it can
-% be tested automatically (see test_yOCTMeasureFocusDrift_fitDrift).
-%
-% WHY A LINE, AND WHY THE SLOPE IS BOUNDED (the physics):
-%   Between tiles the stage moves the sample up by s. With an immersion
-%   medium of index ni (water, 1.33) and tissue of index ns, paraxial Snell
-%   refraction puts the focus at geometric depth s*ns/ni below the
-%   tissue interface, and the OCT image displays optical path length divided
-%   by the reconstruction index na (see yOCTInterfToScanCpx_getZ). Combining
-%   the two, the focus pixel is LINEAR in stage z with slope
-%       m = (ns^2 - ni^2) / (ni * na)    [um in image / um of stage]
-%   Tissue never has an index below water, so ns >= ni and therefore m >= 0:
-%   as the stage goes deeper the focus can only stay put or move deeper in
-%   the image, never up. Cleared tissue tops out around ns ~ 1.55, so m is
-%   bounded above as well. In contrast, any FIXED structure (coverslip,
-%   fiber, bright nucleus) moves in the image with slope -ni/na
-%   (~ -0.89..-0.95 um/um depending on na): opposite direction and
-%   typically 3..5x larger in magnitude (more for weakly cleared tissue).
-%   A click on a structure instead of on the focus therefore shows up as a large
-%   negative-going outlier, which the robust fit + physical bounds below are
-%   designed to identify and reject.
-%
-%   For stage z <= 0 the focus sits in the immersion medium above the
-%   tissue, where there is no index mismatch and hence no drift, so the
-%   fitted line is held flat at its z = 0 value (hinge at z = 0).
+% Math core of yOCTMeasureFocusDrift: fit a line to the clicked focus
+% positions and return a focus pixel for every z-depth of the scan.
 %
 % INPUTS:
-%   zClickedStage_mm - stage z position of each accepted click [mm]
+%   zClickedStage_mm - stage z of each accepted click [mm]
 %   focusClicked_pix - clicked focus pixel for each click (1-based)
-%   zAllDepths_mm    - z-depths at which to evaluate the fit, usually the
-%                      zDepths list of ScanInfo.json [mm]
+%   zAllDepths_mm    - depths at which to evaluate the fit [mm]
 %   zPixelSize_um    - size of one image z pixel [um in medium]
 %   nZPixels         - number of z pixels in one tile image
 %
-% OPTIONAL NAME-VALUE PAIRS:
+% OPTIONAL PARAMETERS:
 %   Parameter                   Default  Notes
 %   tissueRefractiveIndex       1.4      na used by the reconstruction
 %   immersionRefractiveIndex    1.33     ni between objective and sample
@@ -44,26 +18,25 @@ function [focusPositionInImageZpix, fitDiagnostics] = yOCTMeasureFocusDrift_fitD
 %   v                           false    print a human-readable summary
 %
 % OUTPUTS:
-%   focusPositionInImageZpix - 1 x length(zAllDepths_mm) rounded focus pixel
-%       for every depth. Guaranteed inside [1, nZPixels] and non-decreasing.
-%   fitDiagnostics - struct with fields:
-%       slopeMeasured_pixPerUm - robust slope before physical clamping
-%       slopeUsed_pixPerUm     - slope actually used (after clamping)
-%       slope_umPerUm          - slopeUsed in um(image)/um(stage)
-%       intercept_pix          - fitted focus pixel at stage z = 0
-%       impliedTissueN         - ns implied by the measured slope. Equals ni
-%                                when the slope is zero within noise; NaN
-%                                only when the slope is so negative that
-%                                clicks must have tracked a fixed structure
-%       keptIdx, rejectedIdx   - indices into the input click list
-%       rejectedReason         - cellstr, one reason per rejected click
-%       wasSlopeClamped        - true if the slope hit a physical bound
-%       driftRegime            - 'normal' | 'no-measurable-drift' |
-%                                'clamped-to-max' | 'suspicious-structure-clicks'
-%       seSlope_pixPerUm       - standard error of the measured slope
-%       seAtDepth_pix          - 1 x nDepths standard error of the line
-%       maxMeasuredZ_mm        - deepest accepted click
-%       messages               - cellstr of summary/warning lines
+%   focusPositionInImageZpix - focus pixel for every depth.
+%   fitDiagnostics - struct, grouped by what each field is for:
+%
+%       driftSlope    - drift slope (unitless: um in image per um of stage)
+%       tissueRI      - tissue RI measured from the slope; NaN when the
+%                       clicks were not physical
+%       intercept_pix - focus pixel at stage z = 0
+%
+%       driftRegime   - The verdict (one word saying how to read the numbers):
+%                       'normal'                     trust them
+%                       'no-measurable-drift'        flat within noise (water?)
+%                       'clamped-to-max'             slope hit the physical cap
+%                       'suspicious-structure-clicks'  clicks tracked a fixed
+%                                                      structure; re-measure
+%
+%       r2            - how tightly the clicks hug the line (1 = perfect)
+%
+%       Which chosen indixes were used:
+%         keptIdx, rejectedIdx, rejectedReason
 
 %% Parse inputs
 p = inputParser;
@@ -171,6 +144,7 @@ end
 % negative in about half of all runs. That is NOT a sign of bad clicks; only
 % a slope significantly below zero is.
 nKept = numel(keptLocal);
+r2 = NaN;
 if nKept >= 3
     rMeasured = pix(keptLocal) - (slopeMeasured * z(keptLocal) + intercept);
     sigmaResMeasured = sqrt(sum(rMeasured.^2) / (nKept - 2));
@@ -180,6 +154,14 @@ if nKept >= 3
         seSlope_pixPerUm = sigmaResMeasured / sqrt(0.91 * SxxKept);
     else
         seSlope_pixPerUm = NaN;
+    end
+    % R^2 (goodness of fit): fraction of the clicks' vertical spread that the
+    % line accounts for. Describes scatter around the fit, NOT correctness of
+    % the answer - a wrong model can still score high (use the +/- errors for
+    % certainty).
+    ssTot = sum((pix(keptLocal) - mean(pix(keptLocal))).^2);
+    if ssTot > 0
+        r2 = 1 - sum(rMeasured.^2) / ssTot;
     end
 else
     seSlope_pixPerUm = NaN;
@@ -242,9 +224,17 @@ end
 % them, i.e. clicks that tracked a fixed structure.
 nsSquared = ni^2 + (slopeMeasured * dz_um) * ni * na;
 if strcmp(driftRegime, 'suspicious-structure-clicks')
-    impliedTissueN = NaN;
+    tissueRI = NaN;
 else
-    impliedTissueN = sqrt(max(nsSquared, ni^2));
+    tissueRI = sqrt(max(nsSquared, ni^2));
+end
+
+% 1-sigma uncertainty of the implied index, propagated from the slope
+% uncertainty: ns = sqrt(ni^2 + m*ni*na)  =>  sigma_ns = sigma_m*ni*na/(2*ns)
+if ~isnan(tissueRI) && ~isnan(seSlope_pixPerUm) && tissueRI > 0
+    seTissueRI = (seSlope_pixPerUm * dz_um) * ni * na / (2 * tissueRI);
+else
+    seTissueRI = NaN;
 end
 
 %% Reasons for the rejected clicks (for the user, in physical terms)
@@ -313,25 +303,33 @@ end
 fitDiagnostics = struct();
 fitDiagnostics.slopeMeasured_pixPerUm = slopeMeasured;
 fitDiagnostics.slopeUsed_pixPerUm = slopeUsed;
-fitDiagnostics.slope_umPerUm = slopeUsed * dz_um;
+fitDiagnostics.driftSlope = slopeUsed * dz_um;
 fitDiagnostics.intercept_pix = intercept;
-fitDiagnostics.impliedTissueN = impliedTissueN;
+fitDiagnostics.tissueRI = tissueRI;
 fitDiagnostics.keptIdx = useI(keptLocal);
 fitDiagnostics.rejectedIdx = useI(rejectedLocal);
 fitDiagnostics.rejectedReason = rejectedReason;
 fitDiagnostics.wasSlopeClamped = wasSlopeClamped;
 fitDiagnostics.driftRegime = driftRegime;
 fitDiagnostics.seSlope_pixPerUm = seSlope_pixPerUm;
+fitDiagnostics.seTissueRI = seTissueRI;
+fitDiagnostics.r2 = r2;
 fitDiagnostics.seAtDepth_pix = seAtDepth_pix;
 fitDiagnostics.maxMeasuredZ_mm = maxMeasuredZ_mm;
 fitDiagnostics.zPixelSize_um = dz_um;
 fitDiagnostics.messages = msgs;
 
 if in.v
-    fprintf('Focus drift fit: slope = %.3f um/um (%.1f pix/mm)', ...
-        fitDiagnostics.slope_umPerUm, slopeUsed * 1e3);
-    if ~isnan(impliedTissueN)
-        fprintf(', implied tissue n = %.3f', impliedTissueN);
+    fprintf('Focus drift fit: slope = %.3f', fitDiagnostics.driftSlope);
+    if ~isnan(seSlope_pixPerUm)
+        fprintf(' +/- %.3f', seSlope_pixPerUm * dz_um);
+    end
+    fprintf(' um/um (%.1f pix/mm)', slopeUsed * 1e3);
+    if ~isnan(tissueRI)
+        fprintf(', tissue RI = %.3f', tissueRI);
+        if ~isnan(seTissueRI)
+            fprintf(' +/- %.3f', seTissueRI);
+        end
     end
     fprintf('. Kept %d of %d clicks.\n', nKept, n);
     for k = 1:numel(msgs)
