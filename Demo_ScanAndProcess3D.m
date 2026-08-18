@@ -106,9 +106,13 @@ yOCTHardware('teardown');
 %% Measure focus drift (optional)
 % Dispersion is known and the volume is on disk, so we can now click the focus
 % on sampled tiles to get a per-depth focus vector before reconstruction.
+% Also returns the tissue refractive index measured from the drift and the
+% drift slope (um/um), indicators of how cleared the tissue is.
 if measureFocusDrift
-    focusPositionInImageZpix = yOCTMeasureFocusDrift( ...
+    [focusPositionInImageZpix, tissueRI, driftSlope] = yOCTMeasureFocusDrift( ...
         volumeOutputFolder, dispersionQuadraticTerm, 'v', true);
+    fprintf('%s Focus drift measured: tissue RI = %.3f, drift slope = %.4f um/um\n', ...
+        datestr(datetime), tissueRI, driftSlope);
 end
 
 %% Process the scan
