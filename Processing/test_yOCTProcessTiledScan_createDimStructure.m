@@ -90,37 +90,45 @@ classdef test_yOCTProcessTiledScan_createDimStructure < matlab.unittest.TestCase
             % At low resolution the galvo lag in microns is large. This
             % test uses the real calibrated value for the 20x OCTG probe:
             % N = 15.5 samples at 20 um/pixel => shift = 15.5*(20-1)*1e-3
-            % = 0.2945 mm. It checks three things:
-            %   1. dimOneTile.x.values shifted by exactly 0.2945 mm.
-            %   2. dimOutput.x.values (the full-volume grid) inherited the
-            %      same shift so tile stitching is also correct.
-            %   3. The spacing between adjacent x values did NOT change:
-            %      a constant shift must never affect pixel size.
+            % = 0.2945 mm. New scans are centered at acquisition:
+            % yOCTScanTile moves the commanded center by the shift and
+            % records it in ScanInfo.json, so processing must NOT shift
+            % x.values again. Legacy scans (no correction field in
+            % ScanInfo.json) must still get the old post-processing shift.
 
             pixelSize_um = 20;
             N = 15.5;
             testCase.simulateScan(24, pixelSize_um, N);
             testCase.addTeardown(@() testCase.cleanup());
 
-            [dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(testCase.TestFolder);
             json = awsReadJSON([testCase.TestFolder 'ScanInfo.json']);
-
             calibrationPixelSize_um = 1;
             expectedShift_mm = N * (pixelSize_um - calibrationPixelSize_um) * 1e-3;
             uncorrected = testCase.uncorrectedXFromJson(json);
-            expected = uncorrected - expectedShift_mm;
 
-            testCase.verifyEqual(dimOneTile.x.values, expected, ...
+            % New scan: correction was applied at acquisition and recorded.
+            testCase.verifyEqual(json.galvoPhaseDelayXOffsetCorrection_mm, expectedShift_mm, ...
                 'AbsTol', 1e-9, ...
-                'Per-tile X must shift by N*(dx-1)*1e-3 mm');
+                'ScanInfo.json must record the acquisition-time correction');
 
-            % Global output X inherits the same shift (single-tile test).
-            testCase.verifyEqual(dimOutput.x.values(1) - uncorrected(1), -expectedShift_mm, ...
+            [dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(testCase.TestFolder);
+            testCase.verifyEqual(dimOneTile.x.values, uncorrected, ...
                 'AbsTol', 1e-9, ...
-                'Global output X must inherit the correction');
+                'New scans are centered at acquisition, x must not shift');
+            testCase.verifyEqual(dimOutput.x.values(1), uncorrected(1), ...
+                'AbsTol', 1e-9, ...
+                'Global output X must not shift either');
 
-            % Constant subtraction must not change pixel spacing.
-            testCase.verifyEqual(diff(dimOneTile.x.values), diff(uncorrected), ...
+            % Legacy scan: remove the acquisition field, old shift must apply.
+            json = rmfield(json, 'galvoPhaseDelayXOffsetCorrection_mm');
+            awsWriteJSON(json, [testCase.TestFolder 'ScanInfo.json']);
+            [dimOneTileLegacy, ~] = yOCTProcessTiledScan_createDimStructure(testCase.TestFolder);
+            testCase.verifyEqual(dimOneTileLegacy.x.values, uncorrected - expectedShift_mm, ...
+                'AbsTol', 1e-9, ...
+                'Legacy scans must shift by N*(dx-1)*1e-3 mm');
+
+            % Constant shift must not change pixel spacing.
+            testCase.verifyEqual(diff(dimOneTileLegacy.x.values), diff(uncorrected), ...
                 'AbsTol', 1e-12, 'Pixel spacing must be unchanged');
         end
 
