@@ -93,6 +93,25 @@ if ischar(outputPath)
     outputPath = {outputPath};
 end
 
+% Protect existing outputs from accidental overwrite. If an output already
+% exists, rename the old one to <name>_2 (or _3, ...). The new result is
+% still saved to the requested path (local paths only).
+for i=1:length(outputPath)
+    existingPath = regexprep(outputPath{i}, '[/\\]+$', ''); % drop trailing slash
+    if ~awsIsAWSPath(existingPath) && (exist(existingPath,'file') || exist(existingPath,'dir'))
+        [backupFolder, backupName, backupExt] = fileparts(existingPath);
+        k = 2;
+        backupPath = fullfile(backupFolder, sprintf('%s_%d%s', backupName, k, backupExt));
+        while exist(backupPath,'file') || exist(backupPath,'dir')
+            k = k + 1;
+            backupPath = fullfile(backupFolder, sprintf('%s_%d%s', backupName, k, backupExt));
+        end
+        movefile(existingPath, backupPath);
+        fprintf('%s Output %s already exists, old one renamed to %s\n', ...
+            datestr(datetime), existingPath, backupPath);
+    end
+end
+
 % Set credentials
 if any(cellfun(@(x)(awsIsAWSPath(x)),outputPath))
     % Any of the output folders is on the cloud
