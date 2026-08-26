@@ -103,6 +103,17 @@ yOCTHardware('teardown');
 %% Process the scan
 fprintf('%s Processing\n',datestr(datetime));
 outputTiffFile = [output_folder '/Image.tiff'];
+
+% If a previous output exists, rename it to <name>_old_<date> before processing.
+if exist(outputTiffFile, 'file')
+    [backupFolder, backupName, backupExt] = fileparts(outputTiffFile);
+    backupPath = fullfile(backupFolder, sprintf('%s_old_%s%s', ...
+        backupName, datestr(now,'yyyy-mm-dd_HH-MM-SS'), backupExt));
+    movefile(outputTiffFile, backupPath);
+    fprintf('%s Output %s already exists, old one renamed to %s\n', ...
+        datestr(datetime), outputTiffFile, backupPath);
+end
+
 yOCTProcessTiledScan(...
     volumeOutputFolder, ... Input
     {outputTiffFile},... Save only Tiff file as folder will be generated after smoothing
