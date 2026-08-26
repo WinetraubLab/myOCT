@@ -113,7 +113,7 @@ if (isInputFile)
     else    
         description = '';  % No MetaData available
     end
-    [c, metadata, maxbit] = intrpertDescription(description,filepath);
+    [c, metadata, bitsPerSample] = intrpertDescription(description, info, filepath);
     
     if isempty(yI) || isCheckMetadata
         % Get avilable Ys
@@ -128,7 +128,7 @@ else
     % Read meta from JSON
     description = awsReadJSON([filepath '/TifMetadata.json']);
     
-    [c, metadata, maxbit] = intrpertDescription(description,filepath);
+    [c, metadata, bitsPerSample] = intrpertDescription(description, [], filepath);
     
     if isempty(yI) || isCheckMetadata
         % Get avilable Ys
@@ -144,8 +144,9 @@ else
 end 
 
 %No Scaling information, use default
+maxValue = 2^bitsPerSample-1;
 if isempty(c) || length(c)~=2
-    c(1) = maxbit;
+    c(1) = maxValue;
     c(2) = 0;
 end
 
@@ -236,20 +237,31 @@ for i=1:length(yI)
         data = zeros(size(bits,1),size(bits,2),length(yI),'single');
     end
     
-    data(:,:,i) = yOCT2Tif_ConvertBitsData(bits,c,true,maxbit); %Rescale to the original values
+    data(:,:,i) = yOCT2Tif_ConvertBitsData(bits,c,true,bitsPerSample); %Rescale to the original values
 end
-    
+
+end
+
 function out = copyFileLocally(filepath)
 %Copy filename to other temp name
 out = [tempname '.tif'];
 copyfile(filepath,out);
 
-function [c, metaData, maxbit] = intrpertDescription(description,filepath)
+end
+
+function [c, metaData, bitsPerSample] = intrpertDescription(description, info, filepath)
+
+bitsPerSampleDefault = [];
+if exist('info','var') && ~isempty(info)
+    if isfield(info(1),'BitsPerSample') && ~isempty(info(1).BitsPerSample)
+        bitsPerSampleDefault = info(1).BitsPerSample;
+    end
+end
 
 if isempty(description)
     c = [];
     metaData = [];
-    maxbit = 2^8-1;
+    bitsPerSample = 8;
     return;
 end
 
@@ -260,7 +272,7 @@ if (~isstruct(description) && description(1) ~= '{')
     c = sscanf(description,'min:%g,max:%g');
     isDepricatedVersion = true;
     metaData = [];
-    maxbit = 2^8-1;
+    bitsPerSample = 8;
 else
     if ~isstruct(description)
         jsn = jsondecode(description);
@@ -272,12 +284,16 @@ else
         metaData = jsn.dim;
         c = jsn.c;
         isDepricatedVersion = true;
-        maxbit = 2^8-1;
+        bitsPerSample = 8;
     elseif (jsn.version == 3)
         % Good version
         metaData = jsn.metadata;
         c = jsn.clim;
-        maxbit = []; %Latest version
+        if isempty(bitsPerSampleDefault)
+            bitsPerSample = 16;
+        else
+            bitsPerSample = bitsPerSampleDefault;
+        end
     end
 end
 
@@ -292,6 +308,8 @@ if isDepricatedVersion && (isempty(timeOfLastWarningHappend) || ...
         'yOCT2Tif(data, filePath, ''metadata'', meta);'],filepath,filepath);
     
     timeOfLastWarningHappend = now;
+end
+
 end
 
 function im = imreadWrapper(imagePath, frameIndex, pixRegionX, pixRegionY)
@@ -316,3 +334,8 @@ if (size(im,3) ~= 1)
     end
     im = squeeze(im(:,:,1));
 end
+
+end
+
+end
+
