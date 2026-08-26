@@ -126,9 +126,22 @@ end
 [in.xCenters_mm, in.yCenters_mm, in.tileRangeX_mm, in.tileRangeY_mm] = ...
     yOCTScanTile_XYRangeToCenters(in.xRange_mm, in.yRange_mm, in.octProbeFOV_mm);
 
+% Galvo phase delay: the galvo mirror lags behind the commanded position,
+% so the scanned area lands shifted in X. The shift grows with pixel size
+% (N*(pixelSize-1um), zero at the 1um/pix calibration). Move the commanded
+% center by the same amount to cancel it. Saved in ScanInfo.json so
+% processing knows the scan is already centered.
+calibrationPixelSize_um = 1; % Pixel size at which DynamicOffsetX and GalvoPhaseDelay_Asamples were calibrated
+if isfield(in.octProbe, 'GalvoPhaseDelay_Asamples')
+    in.galvoPhaseDelayXOffsetCorrection_mm = in.octProbe.GalvoPhaseDelay_Asamples * ...
+        (in.pixelSize_um - calibrationPixelSize_um) * 1e-3;
+else
+    in.galvoPhaseDelayXOffsetCorrection_mm = 0;
+end
+
 % Check scan is within probe's limits
 if ( ...
-    ((in.xOffset+in.octProbe.DynamicOffsetX + in.tileRangeX_mm*in.octProbe.DynamicFactorX) > in.octProbe.RangeMaxX ) || ...
+    ((in.xOffset+in.octProbe.DynamicOffsetX + in.galvoPhaseDelayXOffsetCorrection_mm + in.tileRangeX_mm*in.octProbe.DynamicFactorX) > in.octProbe.RangeMaxX ) || ...
     ((in.yOffset + in.tileRangeY_mm > in.octProbe.RangeMaxY )) ...
     )
     error('Tring to scan outside lens range');
@@ -187,7 +200,7 @@ end
 mkdir(octFolder);
 
 %% Compute scan centers and ranges
-centerX_mm = in.xOffset + in.octProbe.DynamicOffsetX;
+centerX_mm = in.xOffset + in.octProbe.DynamicOffsetX + in.galvoPhaseDelayXOffsetCorrection_mm;
 centerY_mm = in.yOffset;
 rangeX_mm = in.tileRangeX_mm * in.octProbe.DynamicFactorX;
 rangeY_mm = in.tileRangeY_mm;

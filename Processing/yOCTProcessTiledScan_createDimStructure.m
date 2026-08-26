@@ -66,18 +66,20 @@ dimOneTile.y.origin = "y=0 is under objective's principal";
 % source of truth for tile X coordinates, so that all downstream consumers
 % (optical path correction, tile stitching, surface detection, TIFF
 % metadata) see the corrected positions automatically.
-% Net shift is N*(pixelSize - calibrationPixelSize); zero at calibration
-% pixel size, so this is a no-op for legacy data and for high-resolution
-% scans calibrated at 1 um/pixel.
-calibrationPixelSize_um = 1; % Pixel size at which OpticalPathCorrectionPolynomial was fit
-galvoPhaseDelay_Asamples = 0; % Default: no correction (backwards compatible)
-if isfield(json,'octProbe') && isfield(json.octProbe, 'GalvoPhaseDelay_Asamples')
-    galvoPhaseDelay_Asamples = json.octProbe.GalvoPhaseDelay_Asamples;
-end
-if galvoPhaseDelay_Asamples ~= 0 && isfield(json,'pixelSize_um')
-    xCorrection_mm = galvoPhaseDelay_Asamples * ...
-        (json.pixelSize_um - calibrationPixelSize_um) * 1e-3;
-    dimOneTile.x.values = dimOneTile.x.values - xCorrection_mm;
+% Net shift is N*(pixelSize - calibrationPixelSize); zero at 1um/pix.
+% Only runs for old scans: new scans are already centered at acquisition
+% (yOCTScanTile saves galvoPhaseDelayXOffsetCorrection_mm in ScanInfo.json).
+if ~isfield(json, 'galvoPhaseDelayXOffsetCorrection_mm')
+    calibrationPixelSize_um = 1; % Pixel size at which OpticalPathCorrectionPolynomial was fit
+    galvoPhaseDelay_Asamples = 0; % Default: no correction (backwards compatible)
+    if isfield(json,'octProbe') && isfield(json.octProbe, 'GalvoPhaseDelay_Asamples')
+        galvoPhaseDelay_Asamples = json.octProbe.GalvoPhaseDelay_Asamples;
+    end
+    if galvoPhaseDelay_Asamples ~= 0 && isfield(json,'pixelSize_um')
+        xCorrection_mm = galvoPhaseDelay_Asamples * ...
+            (json.pixelSize_um - calibrationPixelSize_um) * 1e-3;
+        dimOneTile.x.values = dimOneTile.x.values - xCorrection_mm;
+    end
 end
 
 %% Correct dimOneTile.z to adjust for focus position
