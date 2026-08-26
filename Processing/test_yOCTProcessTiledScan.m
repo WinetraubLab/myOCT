@@ -336,5 +336,32 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             testCase.verifyGreaterThan(length(dimHalf.z.values), length(dimFull.z.values) * 0.3, ...
                 'Partial overlap should have at least 30% of Z pixels (approximately half)');
         end
+
+        function testInputFolderTrailingSlash(testCase)
+            % Verify the input folder is read the same with and without a trailing slash (/)
+            testCase.setupCropSimulation();
+
+            folderWithSlash = testCase.CropTestFolder;
+            folderNoSlash = folderWithSlash(1:(end-1));
+
+            yOCTProcessTiledScan(folderWithSlash, {'slash_yes.tif'}, ...
+                testCase.CropTestCommonParams{:}, 'outputFilePixelSize_um', []);
+            [dataWithSlash, dimWithSlash] = yOCTFromTif('slash_yes.tif');
+            testCase.addTeardown(@() delete('slash_yes.tif'));
+
+            yOCTProcessTiledScan(folderNoSlash, {'slash_no.tif'}, ...
+                testCase.CropTestCommonParams{:}, 'outputFilePixelSize_um', []);
+            [dataNoSlash, dimNoSlash] = yOCTFromTif('slash_no.tif');
+            testCase.addTeardown(@() delete('slash_no.tif'));
+
+            % Both paths point at the same folder, so both outputs match:
+            testCase.verifyEqual(size(dataNoSlash), size(dataWithSlash), ...
+                'Output size should not depend on a trailing slash');
+            testCase.verifyEqual(dataNoSlash, dataWithSlash, ...
+                'Output data should not depend on a trailing slash');
+            testCase.verifyEqual(dimNoSlash.z.values, dimWithSlash.z.values, ...
+                'AbsTol', 1e-9, ...
+                'Z values should not depend on a trailing slash');
+        end
     end
 end
