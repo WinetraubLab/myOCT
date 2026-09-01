@@ -106,6 +106,35 @@ end
 %% Load configuration file & set parameters
 json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
 
+focusPositionInImageZpix = in.focusPositionInImageZpix;
+% If the focus position is the same for all volumes, create a vector that
+% stores the focus position for each volume. This is mainly to enable
+% compatbility with the upgraded yOCTFindFocus which returns a focus value
+% for each volume
+if length(in.focusPositionInImageZpix) == 1 %#ok<ISCL>
+    focusPositionInImageZpix = in.focusPositionInImageZpix * ones(1, length(json.zDepths));
+end
+focusSigma = in.focusSigma;
+
+% Fail fast on an invalid focus vector, before any expensive work (unzip,
+% data loading). A bad vector (e.g. an over-extrapolated focus drift
+% measurement) would otherwise crash deep inside the parfor loop with a
+% cryptic indexing error after a long wait.
+if length(focusPositionInImageZpix) ~= length(json.zDepths)
+    error('yOCTProcessTiledScan:invalidFocusVector', ...
+        ['focusPositionInImageZpix has %d values but the scan has %d zDepths. ' ...
+        'Provide one focus value per zDepth (or a single scalar for all).'], ...
+        length(focusPositionInImageZpix), length(json.zDepths));
+end
+badFocusI = find(~isnan(focusPositionInImageZpix) & round(focusPositionInImageZpix) < 1, 1);
+if ~isempty(badFocusI)
+    error('yOCTProcessTiledScan:invalidFocusVector', ...
+        ['focusPositionInImageZpix(%d) = %.1f (zDepth %.3f mm) is not a valid pixel index: ' ...
+        'focus positions must be >= 1 pixel. This usually means the focus vector was ' ...
+        'extrapolated out of the image; re-run the focus measurement (yOCTMeasureFocusDrift).'], ...
+        badFocusI, focusPositionInImageZpix(badFocusI), json.zDepths(badFocusI));
+end
+
 %% Unzip compressed .oct files if they exist in the data folder
 unzipResults = yOCTUnzipTiledScan(tiledScanInputFolder, ...
     'deleteCompressedAfterUnzip', true, ...
@@ -126,16 +155,6 @@ else
     reconstructConfig = [reconstructConfig {'dispersionQuadraticTerm', in.dispersionQuadraticTerm}];
     reconstructConfig = [reconstructConfig {'n', json.tissueRefractiveIndex}];
 end
-
-focusPositionInImageZpix = in.focusPositionInImageZpix;
-% If the focus position is the same for all volumes, create a vector that
-% stores the focus position for each volume. This is mainly to enable
-% compatbility with the upgraded yOCTFindFocus which returns a focus value
-% for each volume 
-if length(in.focusPositionInImageZpix) == 1 %#ok<ISCL>
-    focusPositionInImageZpix = in.focusPositionInImageZpix * ones(1, length(json.zDepths));
-end
-focusSigma = in.focusSigma;
 
 % Read OCT system name
 if isfield(json, 'octSystem')
@@ -167,6 +186,17 @@ zDepths = json.zDepths;
 
 %% Create dimensions structure for the entire tiled volume
 [dimOneTile_mm, dimOutput_mm] = yOCTProcessTiledScan_createDimStructure(tiledScanInputFolder, focusPositionInImageZpix);
+
+% Now that the tile's z size is known, finish validating the focus vector
+% (the >= 1 check ran above, before any data was loaded):
+nZOneTile = length(dimOneTile_mm.z.values);
+badFocusI = find(~isnan(focusPositionInImageZpix) & round(focusPositionInImageZpix) > nZOneTile, 1);
+if ~isempty(badFocusI)
+    error('yOCTProcessTiledScan:invalidFocusVector', ...
+        ['focusPositionInImageZpix(%d) = %.1f (zDepth %.3f mm) is beyond the %d z pixels ' ...
+        'of one tile. Re-run the focus measurement (yOCTMeasureFocusDrift).'], ...
+        badFocusI, focusPositionInImageZpix(badFocusI), json.zDepths(badFocusI), nZOneTile);
+end
 
 % Adjust output pixel size if needed
 if ~isempty(in.outputFilePixelSize_um)
@@ -342,7 +372,7 @@ parfor yI=1:length(dimOutput_mm.y.values)
                     tn = [tempname '.tif'];
                     im = mag2db(scan1);
                     if ~isnan(focusPositionInImageZpix(zzI))
-                        im(focusPositionInImageZpix(zzI),1:20:end) = min(im(:)); % Mark focus position on sample
+                        im(round(focusPositionInImageZpix(zzI)),1:20:end) = min(im(:)); % Mark focus position on sample
                     end
                     yOCT2Tif(im,tn);
                     awsCopyFile_MW1(tn, ...
