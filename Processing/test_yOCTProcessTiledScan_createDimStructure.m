@@ -88,20 +88,19 @@ classdef test_yOCTProcessTiledScan_createDimStructure < matlab.unittest.TestCase
 
         function testCorrectShiftAtLowResolution(testCase)
             % At low resolution the galvo lag in microns is large. This
-            % test uses the real calibrated value for the 20x OCTG probe:
-            % N = 15.5 samples at 20 um/pixel => shift = 15.5*(20-1)*1e-3
-            % = 0.2945 mm. New scans are centered at acquisition:
+            % test uses the calibrated value of the 20x OCTG probe, read
+            % back from ScanInfo.json. New scans are centered at acquisition:
             % yOCTScanTile moves the commanded center by the shift and
             % records it in ScanInfo.json, so processing must NOT shift
             % x.values again. Legacy scans (no correction field in
             % ScanInfo.json) must still get the old post-processing shift.
 
             pixelSize_um = 20;
-            N = 15.5;
-            testCase.simulateScan(24, pixelSize_um, N);
+            testCase.simulateScan(24, pixelSize_um, 0);
             testCase.addTeardown(@() testCase.cleanup());
 
             json = awsReadJSON([testCase.TestFolder 'ScanInfo.json']);
+            N = json.octProbe.GalvoPhaseDelay_Asamples;
             calibrationPixelSize_um = 1;
             expectedShift_mm = N * (pixelSize_um - calibrationPixelSize_um) * 1e-3;
             uncorrected = testCase.uncorrectedXFromJson(json);
