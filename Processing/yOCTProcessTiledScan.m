@@ -85,7 +85,7 @@ in = p.Results;
 v = in.v;
 
 % Fix input path
-tiledScanInputFolder = awsModifyPathForCompetability([fileparts(in.tiledScanInputFolder) '/']);
+tiledScanInputFolder = awsModifyPathForCompetability([in.tiledScanInputFolder '/']);
 
 % Fix output path
 outputPath = in.outputPath;
