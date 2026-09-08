@@ -32,11 +32,19 @@ focusSigma = 10; % When stitching along Z axis (multiple focus points), what is 
 tissueRefractiveIndex = 1.33; % Use either 1.33 or 1.4 depending on the results. Use 1.4 for brain.
 nBScanAvg = 1; % Number of B-scans to average at each position (1 = no averaging). >1 only on Gan632 and Ganymede.
 
+% Set to true to also create an OCT angiography (speckle variance) volume (requires nBScanAvg > 1)
+createAngiographyVolume = false;
+
 % Where to save scan files
 output_folder = '\';
 
 % Set to true if you would like to process existing scan rather than scan a new one.
 skipScanning = false;
+
+%% Check inputs
+if createAngiographyVolume && nBScanAvg < 2
+    error('Angiography (createAngiographyVolume) requires nBScanAvg > 1.');
+end
 
 %% Load hardware
 yOCTHardware('init', 'OCTSystem', octSystem, 'skipHardware', skipScanning, ...
@@ -104,14 +112,28 @@ yOCTHardware('teardown');
 fprintf('%s Processing\n',datestr(datetime));
 outputTiffFile = [output_folder '/Image.tiff'];
 
+% Angiography output is same as outputTiffFile with an '_Angiography' suffix
+if createAngiographyVolume
+    [angioFolder, angioName, angioExt] = fileparts(outputTiffFile);
+    angiographyOutputTiffFile = fullfile(angioFolder, [angioName '_Angiography' angioExt]);
+else
+    angiographyOutputTiffFile = '';
+end
+
 % If a previous output exists, rename it to <name>_old_<date> before processing.
-if exist(outputTiffFile, 'file')
-    [backupFolder, backupName, backupExt] = fileparts(outputTiffFile);
-    backupPath = fullfile(backupFolder, sprintf('%s_old_%s%s', ...
-        backupName, datestr(now,'yyyy-mm-dd_HH-MM-SS'), backupExt));
-    movefile(outputTiffFile, backupPath);
-    fprintf('%s Output %s already exists, old one renamed to %s\n', ...
-        datestr(datetime), outputTiffFile, backupPath);
+filesToBackup = {outputTiffFile};
+if createAngiographyVolume
+    filesToBackup{end+1} = angiographyOutputTiffFile;
+end
+for backupI = 1:length(filesToBackup)
+    if exist(filesToBackup{backupI}, 'file')
+        [backupFolder, backupName, backupExt] = fileparts(filesToBackup{backupI});
+        backupPath = fullfile(backupFolder, sprintf('%s_old_%s%s', ...
+            backupName, datestr(now,'yyyy-mm-dd_HH-MM-SS'), backupExt));
+        movefile(filesToBackup{backupI}, backupPath);
+        fprintf('%s Output %s already exists, old one renamed to %s\n', ...
+            datestr(datetime), filesToBackup{backupI}, backupPath);
+    end
 end
 
 yOCTProcessTiledScan(...
@@ -123,4 +145,5 @@ yOCTProcessTiledScan(...
     'dispersionQuadraticTerm',dispersionQuadraticTerm,... Use default
     'outputFilePixelSize_um', pixelSize_um,...
     'interpMethod','sinc5', ...
+    'speckleVarianceOutputPath', angiographyOutputTiffFile, ...
     'v',true);
