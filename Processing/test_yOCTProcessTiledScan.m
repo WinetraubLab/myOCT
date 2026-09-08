@@ -9,6 +9,10 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
     properties (Access = private)
         CropTestFolder
         CropTestCommonParams
+        SvTestFolder
+        SvProcessingParams
+        SvVesselColumns
+        SvStaticTissueColumns
     end
     
     methods (Access = private)
@@ -46,6 +50,64 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
         function cleanupCropTest(testCase)
             if exist(testCase.CropTestFolder, 'dir')
                 rmdir(testCase.CropTestFolder, 's');
+            end
+        end
+
+        function setupSpeckleVarianceTestData(testCase)
+            % Create simulated OCT data for speckle-variance tests.
+            % Each Y position contains 5 repeated Bscans.
+            % Vessel columns change strongly between repeats to simulate flow,
+            % while static tissue columns remain nearly unchanged.
+            testCase.SvTestFolder = 'tmp_sv_test/';
+
+            if exist(testCase.SvTestFolder, 'dir')
+                rmdir(testCase.SvTestFolder, 's');
+            end
+
+            dummyData = ones(512, 100, 4);
+            dummyData([100, 200, 300], :, :) = 100;
+            octProbePath = yOCTGetProbeIniPath('40x', 'OCTP900', 'SUMMER');
+            focusPositionInImageZpix = 256;
+            focusSigma = 1000;
+            nReps = 5;
+            testCase.SvVesselColumns = 40:60;
+            testCase.SvStaticTissueColumns = [10:30, 70:90];
+
+            yOCTSimulateTileScan(dummyData, testCase.SvTestFolder, ...
+                'pixelSize_um', 1, ...
+                'zDepths', 0, ...
+                'focusPositionInImageZpix', focusPositionInImageZpix, ...
+                'focusSigma', focusSigma, ...
+                'octProbePath', octProbePath);
+
+            % Add 5 repeated B-scans with simulated motion.
+            % Static tissue changes by only 0.5% between repeats,
+            % while vessel columns change by 60% to simulate blood flow:
+            d = load(fullfile(testCase.SvTestFolder, 'Data01', 'data.mat'));
+            interf = repmat(d.interf, [1 1 1 1 nReps]); % (lambda,x,y,AScanAvg,BScanAvg)
+            rng(1);
+            fluctAmp = 0.005*ones(1, size(interf,2));
+            fluctAmp(testCase.SvVesselColumns) = 0.6;
+            interf = interf .* (1 + fluctAmp .* ...
+                randn([1, size(interf,2), size(interf,3), 1, nReps], 'like', interf));
+            dim = d.dim;
+            dim.BScanAvg.order = 4; % lambda=1, x=2, y=3, BScanAvg=4
+            dim.BScanAvg.index = 1:nReps;
+            dim.BScanAvg.indexMax = nReps;
+            save(fullfile(testCase.SvTestFolder, 'Data01', 'data.mat'), 'interf', 'dim');
+
+            testCase.SvProcessingParams = { ...
+                'focusPositionInImageZpix', focusPositionInImageZpix, ...
+                'focusSigma', focusSigma, ...
+                'dispersionQuadraticTerm', 0, ...
+                'v', false};
+
+            testCase.addTeardown(@() testCase.cleanupSvTest()); % cleanup guard: this runs after test ends whether it passes or fails
+        end
+
+        function cleanupSvTest(testCase)
+            if exist(testCase.SvTestFolder, 'dir')
+                rmdir(testCase.SvTestFolder, 's');
             end
         end
     end
@@ -362,6 +424,75 @@ classdef test_yOCTProcessTiledScan < matlab.unittest.TestCase
             testCase.verifyEqual(dimNoSlash.z.values, dimWithSlash.z.values, ...
                 'AbsTol', 1e-9, ...
                 'Z values should not depend on a trailing slash');
+        end
+
+        function testSpeckleVarianceOutput(testCase)
+            % Verify that speckleVarianceOutputPath produces an angiography
+            % volume where simulated blood-flow regions appear bright,
+            % while the structural output remains unchanged.
+            testCase.setupSpeckleVarianceTestData();
+
+            % Process with both structural and speckle variance outputs
+            yOCTProcessTiledScan(testCase.SvTestFolder, {'sv_struct.tif'}, ...
+                testCase.SvProcessingParams{:}, ...
+                'speckleVarianceOutputPath', 'sv_angio.tif');
+            testCase.addTeardown(@() delete('sv_struct.tif'));
+            testCase.addTeardown(@() delete('sv_angio.tif'));
+            structuralVolume = yOCTFromTif('sv_struct.tif');
+            angioVolume = yOCTFromTif('sv_angio.tif');
+
+            testCase.verifyEqual(size(angioVolume), size(structuralVolume), ...
+                'Angiography and structural volumes should have the same size');
+            testCase.verifyTrue(any(~isnan(angioVolume(:))), ...
+                'Angiography output should not be all NaN');
+
+            % Compare the simulated vessel region with static tissue.
+            % The vessel should be much brighter in the angiography volume,
+            % but should have little contrast in the structural volume.
+            vesselColumns = testCase.SvVesselColumns;
+            staticTissueColumns = testCase.SvStaticTissueColumns;
+            angioContrast_dB = mean(angioVolume(:,vesselColumns,:), 'all', 'omitnan') ...
+                - mean(angioVolume(:,staticTissueColumns,:), 'all', 'omitnan');
+            structuralContrast_dB = mean(structuralVolume(:,vesselColumns,:), 'all', 'omitnan') ...
+                - mean(structuralVolume(:,staticTissueColumns,:), 'all', 'omitnan');
+            testCase.verifyGreaterThan(angioContrast_dB, 20, ...
+                'Vessel columns should be >20dB brighter in the angiography volume');
+            testCase.verifyLessThan(abs(structuralContrast_dB), 3, ...
+                'Structural volume should barely change in vessel columns');
+
+            % Structural output must not change when the option is enabled
+            yOCTProcessTiledScan(testCase.SvTestFolder, {'sv_struct_only.tif'}, ...
+                testCase.SvProcessingParams{:});
+            testCase.addTeardown(@() delete('sv_struct_only.tif'));
+            structuralOnlyVolume = yOCTFromTif('sv_struct_only.tif');
+            testCase.verifyEqual(structuralVolume, structuralOnlyVolume, 'AbsTol', 1e-6, ...
+                'Structural output should be identical with and without speckleVarianceOutputPath');
+        end
+
+        function testSpeckleVarianceRequiresRepeatedBScans(testCase)
+            % Verify that requesting angiography without repeated B-scans
+            % (nBScanAvg = 1) produces a clear error.
+            testCase.setupCropSimulation(); % Scan with no repeated B-scans
+
+            testCase.verifyError(@() yOCTProcessTiledScan( ...
+                testCase.CropTestFolder, {'should_fail.tif'}, ...
+                testCase.CropTestCommonParams{:}, ...
+                'speckleVarianceOutputPath', 'should_fail_angio.tif'), ...
+                'yOCTProcessTiledScan:SpeckleVarianceRequiresRepeats', ...
+                'Angiography should require repeated B-scans');
+        end
+
+        function testSpeckleVarianceSameOutputPathError(testCase)
+            % Verify that using the same path for structural and angiography
+            % outputs produces an error.
+            testCase.setupSpeckleVarianceTestData();
+
+            testCase.verifyError(@() yOCTProcessTiledScan( ...
+                testCase.SvTestFolder, {'sv_struct.tif'}, ...
+                testCase.SvProcessingParams{:}, ...
+                'speckleVarianceOutputPath', 'sv_struct.tif'), ...
+                'yOCTProcessTiledScan:SameOutputPath', ...
+                'Structural and angiography outputs should require different paths');
         end
     end
 end

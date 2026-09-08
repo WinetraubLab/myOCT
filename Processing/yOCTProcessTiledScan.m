@@ -28,6 +28,9 @@ function yOCTProcessTiledScan(varargin)
 %   yPlanesOutputFolder         ''      If set will save some y planes for debug purpose in that folder
 %   howManyYPlanes              3       How many y planes to save (if yPlanesOutput folder is set)
 % Other parameters:
+%   speckleVarianceOutputPath   ''      Optional path to save an OCT angiography (speckle-variance)
+%                                       volume. Requires repeated B-scans (nBScanAvg > 1).
+%                                       Leave as '' (default) to disable.
 %   applyPathLengthCorrection   true    Apply path link correction, if probe ini has the information.
 %   outputFilePixelSize_um      1       Output file pixel size (isotropic).
 %                                       Set to [] to keep input file
@@ -61,6 +64,9 @@ addParameter(p,'cropZRange_mm',[],@(x)(isempty(x) || (isnumeric(x) && numel(x)==
 addParameter(p,'yPlanesOutputFolder','',@isstr);
 addParameter(p,'howManyYPlanes',3,@isnumeric);
 
+% Speckle variance (angiography) output, '' means disabled
+addParameter(p,'speckleVarianceOutputPath','');
+
 % Debug
 addParameter(p,'v',true,@islogical);
 addParameter(p,'applyPathLengthCorrection',true); %TODO(yonatan) shift this parameter to ProcessScanFunction
@@ -93,8 +99,30 @@ if ischar(outputPath)
     outputPath = {outputPath};
 end
 
+% Fix speckle variance (angiography) output path
+speckleVarianceOutputPath = in.speckleVarianceOutputPath;
+if ischar(speckleVarianceOutputPath)
+    if isempty(speckleVarianceOutputPath)
+        speckleVarianceOutputPath = {};
+    else
+        speckleVarianceOutputPath = {speckleVarianceOutputPath};
+    end
+end
+isComputeSpeckleVariance = ~isempty(speckleVarianceOutputPath);
+
+% Angiography output must not overwrite the structural output
+if isComputeSpeckleVariance
+    normalizePath = @(x)(lower(awsModifyPathForCompetability(x)));
+    if any(ismember( ...
+            cellfun(normalizePath, speckleVarianceOutputPath, 'UniformOutput', false), ...
+            cellfun(normalizePath, outputPath, 'UniformOutput', false)))
+        error('yOCTProcessTiledScan:SameOutputPath', ...
+            'speckleVarianceOutputPath must be different from outputPath, otherwise the structural output would be overwritten.');
+    end
+end
+
 % Set credentials
-if any(cellfun(@(x)(awsIsAWSPath(x)),outputPath))
+if any(cellfun(@(x)(awsIsAWSPath(x)),[outputPath(:); speckleVarianceOutputPath(:)]))
     % Any of the output folders is on the cloud
     awsSetCredentials(1);
 elseif awsIsAWSPath(in.tiledScanInputFolder)
@@ -192,6 +220,13 @@ if ~isempty(badFocusI)
         badFocusI, focusPositionInImageZpix(badFocusI), json.zDepths(badFocusI), nZOneTile);
 end
 
+% Speckle variance requires repeated B-scans in the data
+if isComputeSpeckleVariance && ~isfield(dimOneTile_mm, 'BScanAvg')
+    error('yOCTProcessTiledScan:SpeckleVarianceRequiresRepeats', ...
+        ['speckleVarianceOutputPath is set, but this scan has no repeated B-scans ' ...
+        '(BScanAvg dimension). Acquire with nBScanAvg > 1.']);
+end
+
 % Adjust output pixel size if needed
 if ~isempty(in.outputFilePixelSize_um)
     pixelSizeX_um = round(mean(diff(dimOutput_mm.x.values))*1e3*100)/100;
@@ -282,11 +317,15 @@ if(v)
     fprintf('%s Stitching ...\n',datestr(datetime)); tt=tic();
 end
 whereAreMyFiles = yOCT2Tif([], outputPath, 'partialFileMode', 1); %Init
+if isComputeSpeckleVariance
+    yOCT2Tif([], speckleVarianceOutputPath, 'partialFileMode', 1); %Init angiography output
+end
 parfor yI=1:length(dimOutput_mm.y.values) 
     try
         % Create a container for all data
         stack = zeros(imOutSize(1:2)); %z,x,zStach
         totalWeights = zeros(imOutSize(1:2)); %z,x
+        svStack = zeros(imOutSize(1:2)); %z,x speckle variance (angiography) accumulator
         
         % Relevant OCT tiles for this y, and what is the local y in the file
         [fps, yIInFile] = ...
@@ -310,12 +349,29 @@ parfor yI=1:length(dimOutput_mm.y.values)
                 [scan1,~] = yOCTInterfToScanCpx([{intFrame} {dimFrame} reconstructConfig]);
                 intFrame = []; %#ok<NASGU> %Freeup some memory
                 scan1 = abs(scan1);
+
+                if isComputeSpeckleVariance
+                    % Speckle variance (angiography): temporal variance across
+                    % repeated B-scans, computed before averaging collapses
+                    % them. Same math as yOCTProcessScan's 'speckleVariance'.
+                    sv1 = movvar(scan1, 3, [], dimFrame.BScanAvg.order);
+                    sv1 = sqrt(mean(sv1, dimFrame.BScanAvg.order));
+                    for i=length(size(sv1)):-1:3 %Average remaining avg dimensions
+                        sv1 = squeeze(mean(sv1,i));
+                    end
+                else
+                    sv1 = [];
+                end
+
                 for i=length(size(scan1)):-1:3 %Average BScan Averages, A Scan etc
                     scan1 = squeeze(mean(scan1,i));
                 end
-                
+
                 if (in.applyPathLengthCorrection && isfield(json.octProbe,'OpticalPathCorrectionPolynomial'))
                     [scan1, opticalPathCorrectionValidDataMap] = yOCTOpticalPathCorrection(scan1, dimFrame, json);
+                    if isComputeSpeckleVariance
+                        sv1 = yOCTOpticalPathCorrection(sv1, dimFrame, json);
+                    end
                 else
                     % Optical path correction not applied, hence all pixels are "valud"
                     opticalPathCorrectionValidDataMap = logical(ones(size(scan1)));
@@ -359,6 +415,9 @@ parfor yI=1:length(dimOutput_mm.y.values)
                 [xxAll,zzAll] = meshgrid(dimOutput_mm.x.values,dimOutput_mm.z.values);
                 stack = stack + interp2(x,z,scan1.*factor,xxAll,zzAll,'linear',0);
                 totalWeights = totalWeights + interp2(x,z,factor,xxAll,zzAll,'linear',0);
+                if isComputeSpeckleVariance
+                    svStack = svStack + interp2(x,z,sv1.*factor,xxAll,zzAll,'linear',0);
+                end
                 
                 % Save Stack, some files for future (debug)
                 if (isSaveSomeYPlanes && sum(yI == yToSaveI)>0)
@@ -396,7 +455,11 @@ parfor yI=1:length(dimOutput_mm.y.values)
         
         % Save
         yOCT2Tif(mag2db(stackmean), outputPath, ...
-            'partialFileMode', 2, 'partialFileModeIndex', yI); 
+            'partialFileMode', 2, 'partialFileModeIndex', yI);
+        if isComputeSpeckleVariance
+            yOCT2Tif(mag2db(svStack./totalWeights), speckleVarianceOutputPath, ...
+                'partialFileMode', 2, 'partialFileModeIndex', yI);
+        end
         
         % Is it time to print statistics?
         if mod(yI,printStatsEveryyI)==0 && v
@@ -464,6 +527,9 @@ end
 
 % Get the main data out
 yOCT2Tif([], outputPath, 'metadata', dimOutput_mm, 'partialFileMode', 3);
+if isComputeSpeckleVariance
+    yOCT2Tif([], speckleVarianceOutputPath, 'metadata', dimOutput_mm, 'partialFileMode', 3);
+end
 
 % Get saved y planes out
 if isSaveSomeYPlanes
