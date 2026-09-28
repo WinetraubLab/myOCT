@@ -43,7 +43,7 @@ function json = yOCTPhotobleachTile(varargin)
 %   enableZone              ones evrywhere  a function handle returning 1 if we can photobleach in that coordinate, 0 otherwise.
 %                                           For example, this function will allow photobleaching only in a circle:
 %                                           @(x,y)(x^2+y^2 < 2^2). enableZone accuracy see enableZoneAccyracy_mum.
-%   bufferZoneWidth         10e-3           To prevent line overlap between near by tiles we use a buffer zone [mm].
+%   bufferZoneWidth         10e-3           To prevent line overlap between near by tiles we use a buffer zone [mm]. Applied in y only.
 %   enableZoneAccuracy      5e-3            Defines the evaluation step size of enable zone [mm].
 %   minLineLength           10e-3           Minimal line length to photobleach, shorter lines are skipped [mm].
 % Debug parameters:

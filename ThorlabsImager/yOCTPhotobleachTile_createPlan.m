@@ -14,7 +14,7 @@ function photobleachPlan = yOCTPhotobleachTile_createPlan(...
 %   minLineLength_mm: minimal length of a photobleach line, see 
 %       yOCTPhotobleachTile.
 %   bufferZoneWidth_mm: don't allow photobleaching at the very end of an
-%       FOV to prevent lines overlap. See yOCTPhotobleachTile.
+%       FOV (in y only) to prevent lines overlap. See yOCTPhotobleachTile.
 %   enableZoneAccuracy: see yOCTPhotobleachTile.
 %   enableZone: see yOCTPhotobleachTile.
 
@@ -123,7 +123,7 @@ function [xcc, ycc, ptStartcc, ptEndcc, lineLengths] = assignToGrid()
     for ii=1:length(ptStartcc)    
         [ptStartInFOV,ptEndInFOV] = yOCTApplyEnableZone(ptStart_mm, ptEnd_mm, ...
             @(x,y,z)( ...
-                abs(x-xcc(ii))<FOV_mm(1)/2-bufferZoneWidth_mm/2 & ...
+                x-xcc(ii)>=-FOV_mm(1)/2 & x-xcc(ii)<FOV_mm(1)/2 & ... No x buffer, stage moves to line's x
                 abs(y-ycc(ii))<FOV_mm(2)/2-bufferZoneWidth_mm/2 ) ...
             , enableZoneAccuracy_mm);
     
@@ -134,7 +134,8 @@ function [xcc, ycc, ptStartcc, ptEndcc, lineLengths] = assignToGrid()
         % Remove lines that are too short to photobleach
         ptStartInFOV(:,d<minLineLength_mm) = [];
         ptEndInFOV(:,d<minLineLength_mm) = [];
-     
+        d(d<minLineLength_mm) = [];
+
         % Double check we don't have lines that are too long
         if ~isempty(dPerAxis)
             if any( abs(dPerAxis(1,:))>FOV_mm(1) | abs(dPerAxis(2,:))>FOV_mm(2) )
@@ -164,26 +165,34 @@ for i=1:length(xcc)
         continue; % No photobleach lines
     end
 
-    % Define the XY center of the step
-    ppStep.stageCenterX_mm = xcc(i);
-    ppStep.stageCenterY_mm = ycc(i);
+    % Stage XY moves to the middle of each line, so galvo is centered
+    % around 0 (vertical lines are drawn with galvo x = 0 exactly,
+    % horizontal lines with galvo y = 0 exactly).
+    midXY = (ptStartcc{i}(1:2,:) + ptEndcc{i}(1:2,:))/2;
 
     % For each XY, find how many z positions for lines are
     z = ptStartcc{i}(3,:);
     uniqueZ = unique(z);
     for zI=1:length(uniqueZ)
         ppStep.stageCenterZ_mm = uniqueZ(zI);
-        linesInThisDepthI = ptStartcc{i}(3,:)==uniqueZ(zI);
 
-        ppStep.ptStartInFOV_mm = ptStartcc{i}(1:2,linesInThisDepthI) - [xcc(i);ycc(i)];
-        ppStep.ptEndInFOV_mm = ptEndcc{i}(1:2,linesInThisDepthI) - [xcc(i);ycc(i)];
-        ppStep.lineLength_mm = lineLengths{i}(linesInThisDepthI);
-        ppStep.performTilePhotobleaching = true;
+        % Lines sharing the same middle point are photobleached in one step
+        uniqueMidXY = unique(midXY(:,z==uniqueZ(zI))','rows')';
+        for xyI=1:size(uniqueMidXY,2)
+            ppStep.stageCenterX_mm = uniqueMidXY(1,xyI);
+            ppStep.stageCenterY_mm = uniqueMidXY(2,xyI);
+            linesInThisStepI = z==uniqueZ(zI) & all(midXY==uniqueMidXY(:,xyI),1);
 
-        if ~exist('photobleachPlan','var')
-            photobleachPlan = ppStep;
-        else
-            photobleachPlan(end+1) = ppStep; %#ok<AGROW>
+            ppStep.ptStartInFOV_mm = ptStartcc{i}(1:2,linesInThisStepI) - uniqueMidXY(:,xyI);
+            ppStep.ptEndInFOV_mm = ptEndcc{i}(1:2,linesInThisStepI) - uniqueMidXY(:,xyI);
+            ppStep.lineLength_mm = lineLengths{i}(linesInThisStepI);
+            ppStep.performTilePhotobleaching = true;
+
+            if ~exist('photobleachPlan','var')
+                photobleachPlan = ppStep;
+            else
+                photobleachPlan(end+1) = ppStep; %#ok<AGROW>
+            end
         end
     end
 end
