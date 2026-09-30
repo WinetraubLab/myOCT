@@ -126,7 +126,19 @@ function [xcc, ycc, ptStartcc, ptEndcc, lineLengths] = assignToGrid()
                 x-xcc(ii)>=-FOV_mm(1)/2 & x-xcc(ii)<FOV_mm(1)/2 & ... No x buffer, stage moves to line's x
                 abs(y-ycc(ii))<FOV_mm(2)/2-bufferZoneWidth_mm/2 ) ...
             , enableZoneAccuracy_mm);
-    
+
+        % End points can overshoot the tile's x edge by one enable zone
+        % sample (there is no x buffer to absorb it), move them back to
+        % the edge along the line
+        if ~isempty(ptStartInFOV)
+            xEnd = min(max(ptEndInFOV(1,:), xcc(ii)-FOV_mm(1)/2), xcc(ii)+FOV_mm(1)/2);
+            isOver = xEnd ~= ptEndInFOV(1,:);
+            t = (xEnd(isOver) - ptStartInFOV(1,isOver)) ./ ...
+                (ptEndInFOV(1,isOver) - ptStartInFOV(1,isOver));
+            ptEndInFOV(:,isOver) = ptStartInFOV(:,isOver) + ...
+                t.*(ptEndInFOV(:,isOver) - ptStartInFOV(:,isOver));
+        end
+
         % Compute line length
         dPerAxis = ptStartInFOV - ptEndInFOV;
         d = sqrt(sum((dPerAxis).^2,1));
@@ -138,7 +150,7 @@ function [xcc, ycc, ptStartcc, ptEndcc, lineLengths] = assignToGrid()
 
         % Double check we don't have lines that are too long
         if ~isempty(dPerAxis)
-            if any( abs(dPerAxis(1,:))>FOV_mm(1) | abs(dPerAxis(2,:))>FOV_mm(2) )
+            if any( abs(dPerAxis(1,:))>FOV_mm(1)+1e-9 | abs(dPerAxis(2,:))>FOV_mm(2) ) % 1e-9 for floating point rounding at x edges
                 error('One (or more) of the photobleach lines is longer than the allowed size by lens, this might cause photobleaching errors!');
             end
         end
