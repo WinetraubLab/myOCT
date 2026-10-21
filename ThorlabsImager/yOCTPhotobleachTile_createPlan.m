@@ -130,13 +130,17 @@ function [xcc, ycc, ptStartcc, ptEndcc, lineLengths] = assignToGrid()
         % End points can overshoot the tile's x edge by one enable zone
         % sample (there is no x buffer to absorb it), move them back to
         % the edge along the line
-        if ~isempty(ptStartInFOV)
-            xEnd = min(max(ptEndInFOV(1,:), xcc(ii)-FOV_mm(1)/2), xcc(ii)+FOV_mm(1)/2);
-            isOver = xEnd ~= ptEndInFOV(1,:);
-            t = (xEnd(isOver) - ptStartInFOV(1,isOver)) ./ ...
-                (ptEndInFOV(1,isOver) - ptStartInFOV(1,isOver));
-            ptEndInFOV(:,isOver) = ptStartInFOV(:,isOver) + ...
-                t.*(ptEndInFOV(:,isOver) - ptStartInFOV(:,isOver));
+        for k=1:size(ptStartInFOV,2)
+            dx = ptEndInFOV(1,k) - ptStartInFOV(1,k);
+            if dx == 0
+                continue; % Vertical line, cannot overshoot in x
+            end
+            xEnd = min(max(ptEndInFOV(1,k), xcc(ii)-FOV_mm(1)/2), xcc(ii)+FOV_mm(1)/2);
+            if xEnd == ptEndInFOV(1,k)
+                continue; % Inside tile, nothing to fix
+            end
+            t =(xEnd - ptStartInFOV(1,k)) / dx;
+            ptEndInFOV(:,k) = ptStartInFOV(:,k) + t*(ptEndInFOV(:,k) - ptStartInFOV(:,k));
         end
 
         % Compute line length
