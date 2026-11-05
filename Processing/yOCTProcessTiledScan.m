@@ -277,6 +277,8 @@ imOutSize = [...
     length(dimOutput_mm.x.values) ...
     length(dimOutput_mm.y.values)];
 printStatsEveryyI = max(floor(length(dimOutput_mm.y.values)/20),1);
+% EFFICIENCY: output grid is the same for every y and every tile, compute it once
+[xxAll,zzAll] = meshgrid(dimOutput_mm.x.values,dimOutput_mm.z.values);
 ticBytes(gcp);
 if(v)
     fprintf('%s Stitching ...\n',datestr(datetime)); tt=tic();
@@ -290,7 +292,8 @@ parfor yI=1:length(dimOutput_mm.y.values)
         
         % Relevant OCT tiles for this y, and what is the local y in the file
         [fps, yIInFile] = ...
-            yOCTProcessTiledScan_getScansFromYFrame(yI, tiledScanInputFolder, focusPositionInImageZpix);
+            yOCTProcessTiledScan_getScansFromYFrame(yI, tiledScanInputFolder, focusPositionInImageZpix, ...
+            json, dimOneTile_mm, dimOutput_mm); % EFFICIENCY: pass precomputed structures, avoid re-parsing Header.xml for each y
         
         % Loop over all x stacks
         fileI = 1;
@@ -355,8 +358,7 @@ parfor yI=1:length(dimOutput_mm.y.values)
                 z(end) = z(end) + 1e-10; 
 
               
-                % Add to stack
-                [xxAll,zzAll] = meshgrid(dimOutput_mm.x.values,dimOutput_mm.z.values);
+                % Add to stack (xxAll, zzAll are computed once, before the main loop)
                 stack = stack + interp2(x,z,scan1.*factor,xxAll,zzAll,'linear',0);
                 totalWeights = totalWeights + interp2(x,z,factor,xxAll,zzAll,'linear',0);
                 

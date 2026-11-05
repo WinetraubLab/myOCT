@@ -45,8 +45,18 @@ end
 
 % Check 2: Create datastore and attempt read with error handling
 try
-    ds = imageDatastore(filePath, 'ReadFcn', readFunction, 'FileExtensions', fileExtension);
-    data = ds.read();
+    if awsIsAWSPath(filePath)
+        % Cloud path: datastore is needed to read from S3
+        ds = imageDatastore(filePath, 'ReadFcn', readFunction, 'FileExtensions', fileExtension);
+        data = ds.read();
+    else
+        % Local / network path: call the read function directly.
+        % EFFICIENCY: creating an imageDatastore per file costs tens of ms,
+        % and a tiled scan reads one file per B-scan (e.g. 37 depths x 5000
+        % B-scans = 185k files), so skipping it saves a lot of time.
+        % The data returned is identical (same readFunction).
+        data = readFunction(filePath);
+    end
 catch ME
     % Datastore creation failed or read error (binary corruption, file locks, format errors, etc.)
     warning(['yOCTLoadInterfFromFile_' callerName ':ReadError'], ...

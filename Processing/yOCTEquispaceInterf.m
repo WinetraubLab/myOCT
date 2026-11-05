@@ -65,18 +65,44 @@ elseif (strcmpi(interpMethod(1:4),'sinc'))
     
     %Measure mean
     mv = mean(v,1);
-    
+
     %Preform interpolation
-    out = zeros(length(xq),size(v,2));
-    for i = 1:length(xq)
-         
-        filt = sinc(nq(i)-n);
-        ii = abs(nq(i)-n) < nSamples; %Samples to use
-       
-        out(i,:) = sum((v(ii,:) - mv).*repmat(filt(ii),[1 size(v,2)]),1);
-    end
-    
+    % EFFICIENCY: The original implementation looped over every output
+    % sample i and computed out(i,:) = sum_j sinc(nq(i)-n(j))*(v(j,:)-mv)
+    % for |nq(i)-n(j)|<nSamples. This is a fixed linear operator that only
+    % depends on the wavelength grid, so we build it once as a sparse matrix
+    % W and apply it with one matrix multiply: out = W*(v-mv).
+    % Same math, much faster. W is cached between calls (the wavelength grid
+    % is the same for every B-scan of a scan).
+    W = getSincInterpMatrix(nq, n, nSamples);
+    out = W*double(v - mv); % sparse * full requires double
+
     %Reinstate the mean
     out = out + mv;
 end
+
+function W = getSincInterpMatrix(nq, n, nSamples)
+% Build (or fetch from cache) the sparse sinc interpolation matrix
+persistent cacheKey cacheW
+key = [nq(:); n(:); nSamples];
+if ~isempty(cacheKey) && isequal(size(cacheKey),size(key)) && isequal(cacheKey,key)
+    W = cacheW;
+    return;
+end
+
+nq = nq(:); n = n(:);
+rows = cell(length(nq),1);
+cols = cell(length(nq),1);
+vals = cell(length(nq),1);
+for i = 1:length(nq)
+    d = nq(i)-n;
+    ii = find(abs(d) < nSamples); %Samples to use
+    rows{i} = i*ones(size(ii));
+    cols{i} = ii;
+    vals{i} = sinc(d(ii));
+end
+W = sparse(vertcat(rows{:}), vertcat(cols{:}), vertcat(vals{:}), length(nq), length(n));
+
+cacheKey = key;
+cacheW = W;
 

@@ -121,9 +121,11 @@ end
 dispersionComp = exp(1i*dispersionPhase);
 
 %% Overall filter
-filterAll = repmat(dispersionComp.*filter,[1 size(interf,2)]);
+% EFFICIENCY: use implicit expansion instead of repmat, this avoids
+% allocating a full (lambda x nAScans) complex matrix just for the filter.
+filterAll = dispersionComp.*filter; % (lambda x 1)
 
-%% Generate Cpx 
+%% Generate Cpx
 ft = ifft((interf.*filterAll));
 scanCpx = ft(1:(size(interf,1)/2),:);
 

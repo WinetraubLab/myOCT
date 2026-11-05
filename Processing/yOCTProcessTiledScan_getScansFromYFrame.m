@@ -1,12 +1,17 @@
 function [scanPaths, yIInFile] = ...
     yOCTProcessTiledScan_getScansFromYFrame(...
-    yFrameIndexInOutputVolume, tiledScanInputFolder, focusPositionInImageZpix)
+    yFrameIndexInOutputVolume, tiledScanInputFolder, focusPositionInImageZpix, ...
+    json, dimOneTile, dimOutput)
 % This is an auxilary function of yOCTProcessTiledScan designed to get a y
 % frame index in the overall tiled scan and return the exact tiles which
 % contain the data corresponding to that y frame.
 % INPUTS:
 %   yFrameIndexInOutputVolume - frame index in the output coordinates
 %   tiledScanInputFolder - all tile folder path
+%   json, dimOneTile, dimOutput - optional. If provided (already computed
+%       by the caller), they are used directly instead of being re-loaded.
+%       EFFICIENCY: computing dimOneTile requires parsing Header.xml of the
+%       first tile (~1 MB xml), doing it once per y frame is slow.
 % OUTPUTS:
 %   scanPaths - a cell array containing volume paths to the tiles that
 %       contain yFrameIndexInOutputVolume. File paths are organized by x
@@ -14,8 +19,12 @@ function [scanPaths, yIInFile] = ...
 %   yIInFile - The y frame index in the tile (1 base index)
 
 %% Load json and gather information
-json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
-[dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(tiledScanInputFolder, focusPositionInImageZpix);
+if ~exist('json','var') || isempty(json)
+    json = awsReadJSON([tiledScanInputFolder 'ScanInfo.json']);
+end
+if ~exist('dimOneTile','var') || isempty(dimOneTile) || ~exist('dimOutput','var') || isempty(dimOutput)
+    [dimOneTile, dimOutput] = yOCTProcessTiledScan_createDimStructure(tiledScanInputFolder, focusPositionInImageZpix);
+end
 
 % Parse all scan paths
 scanPaths = cellfun(@(x)(awsModifyPathForCompetability([tiledScanInputFolder '\' x '\'])),json.octFolders,'UniformOutput',false);

@@ -207,12 +207,12 @@ if isFileValid
                 error('No Apodization Data, Cannot Correct. Please set ''ApodizationCorrection'' to ''None''');
             else
                 % Perform apodization correction
-                [~, sizeX, sizeY, AScanAvgN, BScanAvgN] = yOCTLoadInterfFromFile_DataSizing(dimensions);   
                 apod = mean(apodization,2); %Mean across x axis
-                s = size(apod);
-                s = [s 1 1 1 1 1]; %Pad with ones
 
-                interferogram = interferogram - repmat(apod,[1 sizeX sizeY/s(3) AScanAvgN BScanAvgN/s(5)]);
+                % EFFICIENCY: implicit expansion instead of repmat (same
+                % result, singleton dimensions of apod are broadcast),
+                % avoids allocating a copy the size of the interferogram.
+                interferogram = interferogram - apod;
             end
         case 'none'
             %No correction required
